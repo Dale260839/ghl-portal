@@ -1,0 +1,21 @@
+{
+  "name": "@buildsuite/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Verbatim contracts from ARCHITECTURE.md v1.0 — shared key, enums, the §9.1 gate, the §9.3 deny-list, and the §8.2 handoff payload.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test src/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}
