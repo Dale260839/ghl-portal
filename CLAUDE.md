@@ -1,5 +1,20 @@
 # Working in this repo
 
+## 🛑 Live-system guardrails — read before touching anything
+
+These are standing rules from the project owner (decision D-003), not
+suggestions. They apply to every session.
+
+1. **Supabase is PRODUCTION. Never change any table.** No schema changes, no
+   migrations, no `ALTER` / `DROP` / `TRUNCATE`, no destructive `UPDATE` or
+   `DELETE`. Treat it as read-only unless you are explicitly told to make one
+   specific, named write.
+2. **Ask before acting on any live system.** Direct GHL API access is approved,
+   but every write, state change, or run against live data gets confirmed first.
+   Reads are fine.
+3. **Never invent a fallback that writes.** If a read fails, report it. Do not
+   "repair" live data to make a task complete.
+
 ## The rule that overrides everything else
 
 **`docs/ARCHITECTURE.md` v1.0 is canonical.** When code, a prompt, another doc,

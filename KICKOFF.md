@@ -230,10 +230,10 @@ are ordered by when they start costing us.
 
 | # | What | Blocks | Needed by |
 |---|---|---|---|
-| **F1** | **Front-end stack for the [CODE] surfaces.** Is the Contractor Dashboard / Client Portal *entirely* GHL AI Studio (I write no UI, only the data layer feeding it), or is AI Studio the prototype and we build a real front-end against the GHL API? This is the single largest scope fork in the plan — it is the difference between ~3 days of work in Week 2 and ~8. | Phases 3–4 | **Day 2** |
-| **F2** | **Where WF1–WF8 actually get built.** ARCHITECTURE §11 describes them as GHL-native workflows, but there's an n8n instance wired up on this machine. GHL-native survives the Phase 6 snapshot; n8n does not — it becomes a per-account setup step. | Phase 2, Phase 6 | **Day 3** |
-| **F3** | **GHL integration token + API base URL** for the build sub-account (D3, Sing owns), and whether I'm allowed to hit it directly. Without it I can write the sync-back job but not run it against anything. | Sync-back job | **Day 3** |
-| **F4** | **Where the sync-back job runs and what it writes into.** §8.3 says it updates BuildSuite's "My Projects" view — is that a BuildSuite API endpoint Sing exposes, a Supabase table, or a direct DB write? And does it deploy as a cron, a Supabase edge function, or a GHL-side schedule? | Sync-back job | **Day 3** |
+| ~~F1~~ | ✅ **RESOLVED 2026-07-31 — we build the front-end in this repo.** AI Studio is out; its limitations don't carry the three experiences. See §6 for what this changes. | — | — |
+| ~~F2~~ | ✅ **RESOLVED 2026-07-31 — workflows are application code in this repo.** Not GHL-native, not n8n. See D-002. | — | — |
+| ~~F3~~ | ✅ **RESOLVED 2026-07-31 — direct GHL API access approved, with guardrails.** See D-003. Still need the token + base URL to actually run anything. | — | — |
+| ~~F4~~ | ✅ **RESOLVED 2026-07-31 — sync-back writes through Sing's existing BuildSuite API.** See D-004. Need the endpoint list. | — | — |
 | **D4 → D1** | The four architecture decisions in §3 above, on the dates listed there. | See §3 | Day 1 / Day 2 / Day 9 |
 
 ### Useful, not blocking
@@ -260,8 +260,108 @@ are ordered by when they start costing us.
   currently ungated beyond the §9.1 gate itself. Probably wants to cover the Dates
   group — but that's a guess, so it isn't encoded.
 
-### What I'm doing next, unblocked
+### What I'm doing next
 
-Nothing until F1/F2 land. Building a front-end or a workflow against the wrong
-answer to either is the most expensive mistake available this week — which is why
-they're Day 2–3 questions and not Week 2 questions.
+F1 is resolved (§6). The front-end shell, the server-side data layer, and the
+gate enforcement are all buildable now behind a GHL client interface, with F3/F4
+filling in the transport later. F2 still blocks workflow work.
+
+---
+
+## 6. Decision log
+
+### D-001 · Front-end is built in this repo, not GHL AI Studio
+**Decided:** 2026-07-31 · **Resolves:** F1
+
+AI Studio's limitations don't carry three permission-controlled experiences. All
+three surfaces — Contractor Dashboard, Field Interface, Client Portal — are built
+here as a real application against the GHL API.
+
+**This does not change §12.3's native-vs-custom split.** Contracts, estimates,
+invoices, receipts, payments, and document uploads still route through GHL's
+**native** Client Portal. We are replacing the AI Studio *tracking* layer, not
+the native financial/document layer. `Pay Now` still hits native GHL invoices.
+
+**What it changes:**
+
+| | |
+|---|---|
+| **Week 2 effort** | ~3 days → ~8. This is the compression the risk register warned about; Week 3's V1 remainder absorbs it. |
+| **Now ours to build** | Auth + session handling, a GHL API client with retry/backoff, server-side rendering of every client-facing read, hosting + deploy, and the project switcher. None of these existed as line items when AI Studio was assumed. |
+| **Now easier** | §9.1 gate and §9.3 deny-list enforcement. They stop being "hope the AI Studio binding respects them" and become server-side code with tests — which is what §13 required in the first place. |
+| **Phase 6 impact** | The snapshot no longer carries the front-end. It ships custom objects, fields, pipeline, workflows, and portal settings; the app is deployed separately and pointed at each sub-account. **This is a real change to the distribution model** and needs saying out loud to Chris + Pat before Phase 6. |
+
+**Kills Phase 0 Test B as written.** Test B exists to prove AI Studio can bind
+live per-client data. We aren't using AI Studio, so that test proves nothing.
+Replaced — see `docs/PHASE-0.md` §3.
+
+---
+
+### D-002 · Workflows are application code in this repo
+**Decided:** 2026-07-31 · **Resolves:** F2
+
+WF1–WF8 are built here, not as GHL-native workflows and not in n8n. GHL,
+BuildSuite, and Supabase are treated as integrated systems over a shared
+database rather than as a chain of hand-offs between separate automation tools.
+
+**⚠ This departs from ARCHITECTURE.md and the doc needs amending (§0).** Three
+specific conflicts, none of them fatal, all of them worth Chris's and Sing's
+sign-off before Phase 2:
+
+1. **§11 defines WF1–WF8 as GHL workflows** triggered by GHL events. As code,
+   the triggers become webhooks or polling — GHL still fires the event, but the
+   logic and the retry semantics move here. Behaviour must stay identical to
+   §11; that section is still the specification even though it is no longer the
+   implementation.
+2. **§1.2 says GHL owns all operational records after handoff.** That still
+   holds — we *write through* GHL rather than owning a parallel copy. Anything
+   that would create a second source of truth for milestones, tasks, updates,
+   change orders, or invoices is out of scope for this decision.
+3. **§1.1 says the portals MUST NOT call BuildSuite directly.** A shared
+   database materially weakens that boundary. It stays enforced as a rule: the
+   client-facing surfaces read the project record, never BuildSuite's estimating
+   internals. The §9.3 deny-list becomes *more* important here, not less,
+   because a shared DB puts internal cost fields within reach of a careless
+   query.
+
+**Phase 6 impact, compounding D-001.** Workflows now leave the snapshot too.
+What ships in the snapshot: custom objects, fields, pipeline, forms, templates,
+roles, portal settings. What deploys separately and is pointed at each
+sub-account: the app, the workflows, the sync-back job. **The "build once,
+snapshot everywhere" multiplier is materially smaller than the plan assumed.**
+Chris and Pat need to hear this before Phase 6, not during it.
+
+---
+
+### D-003 · Direct GHL API access approved — with standing guardrails
+**Decided:** 2026-07-31 · **Resolves:** F3
+
+Hitting the GHL API directly is approved. Two standing rules, which apply to
+every session and every agent working in this repo:
+
+> **1. Ask before acting.** Any write, any state change, any run against a live
+> system gets confirmed first. Reads are fine.
+>
+> **2. Supabase is PRODUCTION. Never change any table.** No schema changes, no
+> migrations, no `ALTER`, no `DROP`, no destructive `UPDATE`/`DELETE`. Treat it
+> as read-only unless explicitly told otherwise for a specific, named write.
+
+Mirrored into `CLAUDE.md` so it survives context loss.
+
+**Still needed to run anything:** the integration token and API base URL for the
+build sub-account, plus Supabase connection details (read credentials).
+
+---
+
+### D-004 · Sync-back writes through Sing's existing BuildSuite API
+**Decided:** 2026-07-31 · **Resolves:** F4
+
+Sing already exposes a BuildSuite API; the hourly stage sync-back (§8.3) uses
+those endpoints rather than a direct database write. Correct call — it keeps the
+§8.3 "read-only against GHL, no direct writes into another system's storage"
+posture intact and leaves BuildSuite owning its own invariants.
+
+**Still needed:** the endpoint list and auth method. Specifically — which
+endpoint accepts a stage update keyed by `buildsuite_project_id`, what it
+returns, and whether it is idempotent under retry. The sync-back runs hourly
+across every project, so a non-idempotent endpoint changes the job's design.

@@ -22,11 +22,56 @@ settings) and is tracked in [KICKOFF.md](KICKOFF.md) alongside it.
 ## Layout
 
 ```
+apps/web/               Next.js app — all three experiences (decision D-001)
 packages/contracts/     Verbatim contracts from ARCHITECTURE.md — zero decisions
 ```
 
-Everything else is deliberately absent until its phase arrives (§3.7, ship
-slices) and until the stack question in KICKOFF.md §5 is answered.
+## Running the demo
+
+```bash
+npm install
+npm run dev          # http://localhost:3000
+```
+
+Sign in as any of three identities — no password, it's a demo build:
+
+| Experience | Email | Sees |
+|---|---|---|
+| Contractor Dashboard | `marcus@allianceproservices.com` | Everything — portfolio, projects, financials, review queue |
+| Field Interface | `tony@allianceproservices.com` | Assigned projects, today's tasks, the daily update form |
+| Client Portal | `dana@example.com` | Two projects, approved content only |
+
+**The demo runs on fixtures**, and every screen says so in a banner. The GHL data
+source drops in behind `ProjectDataSource` in `apps/web/src/lib/data/source.ts`
+once the integration token lands — no screen changes.
+
+### The loop worth showing
+
+1. Sign in as **Tony** (field), submit a daily update. Note the form has two
+   separate note fields and no publish button anywhere on it.
+2. Sign in as **Marcus** (contractor) → **Field Updates**. The update is
+   `Pending`. His internal notes are visible and flagged; the client summary is
+   editable.
+3. Hit **Approve and Publish**.
+4. Sign in as **Dana** (client). The update is there — the edited summary only.
+   The internal notes are not, and never were: they aren't hidden by the
+   template, they are never read by the query.
+
+On the contractor's project page, **"See what the client sees →"** renders the
+portal through the same gate, so the difference is visible side by side.
+
+## Enforcement, verified
+
+Client-facing reads go through `apps/web/src/lib/client-view.ts`, which imports
+`server-only` — if it is ever pulled into a client component, the build fails.
+It applies the §9.1 gate, then projects onto an explicit **allow-list** rather
+than filtering a deny-list, so a newly added internal field cannot reach a
+client by default. `assertNoInternalFields` runs as a backstop on top.
+
+Smoke-tested against the running app: original estimate, markup, margin, internal
+notes, and delay reasons appear **zero** times in the client portal HTML;
+un-published updates do not appear; and requesting another contact's project by
+URL returns the requester's own project rather than the target.
 
 ## `packages/contracts`
 
