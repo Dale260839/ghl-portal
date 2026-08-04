@@ -179,6 +179,31 @@ selection automation, design versioning.
 
 ---
 
+## 1b. Revised remaining plan (from 2026-08-05)
+
+The original week-by-week shape assumed AI Studio and GHL-native workflows.
+D-001 and D-002 changed both, and the demoable UI landed in week 1 — so the
+remaining work re-phases around **what each credential unlocks** rather than
+around calendar weeks.
+
+| Phase | Days | Ships | Gated on |
+|---|---|---|---|
+| **A — Live data** | Aug 5–7 | `GhlDataSource` replaces fixtures behind the existing seam. Every screen already built runs on real GHL records. Read-only. | GHL keys (§8 group 1) + Phase 0 results |
+| **B — The chain** | Aug 10–14 | WF1 + WF2 as application code · Send-to-CRM handoff (Sing) · hourly stage sync-back. A signed proposal becomes a live project that stays in sync. | Group 1 + 3, `GHL_WEBHOOK_SECRET` |
+| **C — Real auth + close-out** | Aug 17–21 | GHL portal auth replaces the demo session · field loop end-to-end · V1 remainder · deploy to a real URL | Group 4 + how contact identity resolves server-side (Phase 0 Test B) |
+
+**Phase A is the whole ballgame.** Once the screens run on live records, every
+subsequent phase is additive rather than speculative. It is also the cheapest
+phase, because the seam already exists — `ProjectDataSource` in
+`apps/web/src/lib/data/source.ts` is one interface with one implementation to
+add. No screen changes.
+
+**What stays out of scope for the window:** design versioning, material
+selections, digital approvals, detailed budgets, advanced scheduling, field time
+tracking (V2 per §14), and the whole V3 list.
+
+---
+
 ## 2. Standing invariants — violating one is a defect regardless of tests
 
 1. One record, three views. Visibility is per-item, never per-system.
