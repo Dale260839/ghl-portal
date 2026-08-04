@@ -73,12 +73,17 @@ not in week three.
 
 ---
 
-## 3. Test B — AI Studio live data
+## 3. Test B — live data reachable from our own front-end
 
-**Effort:** ~1 hour · **Proves:** the only piece of the plan nobody has tested
+> **Revised 2026-07-31 (decision D-001).** The original Test B proved AI Studio
+> could bind live per-client data. We are no longer using AI Studio, so that
+> version of the test proves nothing. What still needs proving is the same
+> underlying risk — *can a client-facing surface read live, per-contact project
+> data out of GHL* — just through the API instead of through AI Studio.
 
-This is the difference between a visual demo and a real portal. Every
-client-facing screen in Weeks 2–3 assumes this works.
+**Effort:** ~1 hour · **Proves:** the data chain our front-end depends on
+
+Every client-facing screen in Weeks 2–3 assumes this works.
 
 ### Steps
 
@@ -92,30 +97,40 @@ client-facing screen in Weeks 2–3 assumes this works.
    | Project Stage | `In Progress` |
    | Client Visible | Yes |
 
-2. Wire **`Progress Percentage`** — one field, nothing else — into the AI Studio
-   prototype dashboard.
-3. Confirm the prototype displays **62**.
-4. Change the record to **70**.
-5. Confirm the dashboard reflects **70**.
+2. Using the build sub-account's integration token, **read that record back over
+   the GHL API** — a custom-object record fetch, looked up by
+   `BuildSuite Project ID`. curl or Postman is fine; no app needed.
+3. Confirm the response contains **`Progress Percentage` = 62**.
+4. Change the record to **70** in the GHL UI.
+5. Re-run the same call and confirm it returns **70**.
 
 ### Record while you're in there
 
-These aren't pass/fail, but they decide open question **F1** in KICKOFF.md §5
-and answering them now saves a day later:
+Not pass/fail, but each one is a Week 2 design decision that costs a day if it's
+discovered late:
 
-- [ ] How did the value get in — native data binding, an API call, or something
-      manual?
-- [ ] Did step 5 need a refresh, or did it update on its own?
-- [ ] Can the binding **filter by the signed-in contact**, or does it just fetch
-      the record? (Phase 4 needs filtering, and this is where you'd find out it
-      can't.)
+- [ ] **Can records be queried by a custom field** (`BuildSuite Project ID`), or
+      only by GHL's internal record ID? The whole model assumes the former (§3.6).
+- [ ] **Can records be filtered by associated contact** in one call, or does it
+      take a fetch-then-filter round trip? Phase 4 needs per-contact filtering,
+      and this decides whether that's one query or N.
+- [ ] **What are the rate limits** on the custom-object endpoints? The Portfolio
+      Overview lists many projects at once.
+- [ ] **How is a portal-authenticated contact identified server-side?** Can our
+      app verify who is signed in to GHL's native portal, or do we run our own
+      session against a GHL identity? This is the largest remaining unknown in
+      Phase 4 and it should not wait until week 2.
+
+**Paste the raw JSON response somewhere I can see it.** It's the fastest way to
+pin the actual field shapes, and it saves a round of guessing at the API client.
 
 ### Result
 
 - **Pass →** proceed to Phase 1.
-- **Fail → STOP.** Do not build any client-facing screen. Re-plan the live-data
-  layer first; this is the schedule-killer, and the fallback (a custom front-end
-  against the GHL API) re-prices Weeks 2–3.
+- **Fail → STOP.** Do not build any client-facing screen. If project data can't
+  be read out of GHL by shared ID and filtered per contact, the whole
+  one-record-three-views model needs rethinking, and no amount of front-end work
+  helps. This is the schedule-killer.
 
 ---
 
@@ -130,7 +145,7 @@ and answering them now saves a day later:
 | P5 Test sub-account provisioned | | | |
 | P6 Integration token issued | | | |
 | **Test A** snapshot transfer | | | |
-| **Test B** AI Studio live data | | | |
+| **Test B** live data over the GHL API | | | |
 
 **Gate:** both tests pass → Phase 1 begins (Day 2). Otherwise apply the fallback
 above and update KICKOFF.md before any building starts.
