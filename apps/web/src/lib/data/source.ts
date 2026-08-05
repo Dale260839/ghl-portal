@@ -1,5 +1,7 @@
-import { CONTACTS, DAILY_UPDATES, MILESTONES, PROJECTS, TASKS } from './fixtures';
-import type { Contact, DailyUpdate, Milestone, Project, Task } from './types';
+import { readGhlConfig } from '../ghl/config.ts';
+import { CONTACTS, DAILY_UPDATES, MILESTONES, PROJECTS, TASKS } from './fixtures.ts';
+import { GhlDataSource } from './ghl-source.ts';
+import type { Contact, DailyUpdate, Milestone, Project, Task } from './types.ts';
 
 /**
  * The seam between the app and wherever project data actually lives.
@@ -58,9 +60,27 @@ class FixtureDataSource implements ProjectDataSource {
 
 let cached: ProjectDataSource | null = null;
 
+/**
+ * Live GHL when it is fully configured, fixtures otherwise.
+ *
+ * Deliberately all-or-nothing: a half-configured environment falls back to
+ * fixtures with a warning rather than half-working. A screen showing three real
+ * projects and two invented ones is worse than a screen that is clearly a demo.
+ */
 export function getDataSource(): ProjectDataSource {
-  if (cached === null) {
-    // When GHL_API_TOKEN and GHL_API_BASE_URL are present, swap in GhlDataSource here.
+  if (cached !== null) return cached;
+
+  const result = readGhlConfig();
+  if (result.configured) {
+    cached = new GhlDataSource(result.config);
+  } else {
+    if (process.env.NODE_ENV !== 'test' && process.env.GHL_API_BASE_URL !== undefined) {
+      // Partially configured — worth saying out loud, since someone clearly
+      // intended live data and is about to demo fixtures instead.
+      console.warn(
+        `[data] Falling back to fixtures. Missing: ${result.missing.join(', ')}`,
+      );
+    }
     cached = new FixtureDataSource();
   }
   return cached;
