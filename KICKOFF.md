@@ -285,6 +285,23 @@ are ordered by when they start costing us.
   currently ungated beyond the §9.1 gate itself. Probably wants to cover the Dates
   group — but that's a guess, so it isn't encoded.
 
+### Surfaced by building WF1 / WF2 — three gaps in §11
+
+All three are isolated in `apps/web/src/lib/workflows/defaults.ts`, marked
+PROVISIONAL, and read from tables rather than hard-coded — so each is a one-table
+edit once Chris confirms. None of them blocked the build.
+
+| # | Gap | What's there now |
+|---|---|---|
+| **W1** | §11 WF2 says "update Progress Percentage" on stage change but gives **no stage → progress mapping**. | A straight-line table anchored on the two figures §11 does state: 10% at creation (WF1) and 100% at Completed (WF8). |
+| **W2** | §11 WF1 says "create default milestones" and "create default tasks" — **neither list is given anywhere**. | Seven generic milestones and two tasks. Kept deliberately thin: a wrong default task on every new project is noise a PM clears by hand. |
+| **W3** | §11 WF2 says notify the client "**only when appropriate**" — appropriate is never defined. | Six stages, biased toward silence. Over-notifying gets a portal muted, after which the notifications that matter are missed too. |
+
+One behaviour worth confirming rather than assuming: **On Hold and Canceled do
+not move the progress bar.** A project paused at 65% has not regressed to 0, and
+showing that to a client would be alarming and wrong — so the planner skips the
+progress effect entirely for the two non-linear stages.
+
 ### What I'm doing next
 
 F1 is resolved (§6). The front-end shell, the server-side data layer, and the
