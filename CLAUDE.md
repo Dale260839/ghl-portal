@@ -30,6 +30,9 @@ Four are already open and tracked in `KICKOFF.md` §3 and §5.
 
 ## Before writing code
 
+0. `docs/kb/session-context.md` — full project state in one file: what exists,
+   what's guessed, what's left, what's blocked. Start here if you're new to this
+   repo.
 1. `docs/ARCHITECTURE.md` — the contract.
 2. `KICKOFF.md` — what phase we're in and what's blocked. Do not build a later
    phase's surface area before its prerequisite data and workflows exist (§0).
