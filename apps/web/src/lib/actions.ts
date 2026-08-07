@@ -4,12 +4,16 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { accountForEmail, clearSession, getSession, homeFor, setSession } from './session';
 import {
-  approveAndPublish,
   approveInternally,
+  createDraftUpdate,
   returnForRevision,
   saveClientSummary,
-  submitToPm,
 } from './data/mutations';
+import { getDataSource } from './data/source';
+import { execute, describe } from './workflows/executor';
+import { fixturePorts } from './workflows/fixture-ports';
+import { planFieldUpdateSubmitted } from './workflows/wf3-update-submitted';
+import { planFieldUpdateApproved } from './workflows/wf4-update-approved';
 
 export async function signIn(_prev: { error?: string } | undefined, formData: FormData) {
   const email = String(formData.get('email') ?? '');
@@ -35,9 +39,17 @@ export async function signOut() {
   redirect('/');
 }
 
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 /**
  * Field Update Review actions (§12.1), mapped onto the §10 state machine.
- * Contractor-only — a field user reaching these would be a §3.2 violation, so
+ *
+ * "Approve and Publish" runs **WF4** rather than reimplementing it. The other
+ * three are state changes no §11 workflow covers.
+ *
+ * Contractor-only — a field user reaching this would be a §3.2 violation, so
  * the role is checked server-side rather than by hiding the buttons.
  */
 export async function reviewUpdate(formData: FormData) {
@@ -50,19 +62,37 @@ export async function reviewUpdate(formData: FormData) {
   const clientSummary = String(formData.get('clientSummary') ?? '');
   const action = String(formData.get('action') ?? '');
 
-  switch (action) {
-    case 'publish':
-      approveAndPublish(id, clientSummary);
-      break;
-    case 'internal':
-      approveInternally(id, clientSummary);
-      break;
-    case 'return':
-      returnForRevision(id);
-      break;
-    case 'save':
-      saveClientSummary(id, clientSummary);
-      break;
+  if (action === 'publish') {
+    const db = getDataSource();
+    const updates = await db.listDailyUpdates();
+    const row = updates.find((u) => u.id === id);
+    if (row === undefined) throw new Error(`update ${id} not found`);
+    const project = await db.getProject(row.projectId);
+
+    // The PM's edit is what gets published — not what the field wrote.
+    saveClientSummary(id, clientSummary);
+
+    const result = await execute(
+      planFieldUpdateApproved({
+        buildsuiteProjectId: row.projectId,
+        updateId: id,
+        managerApprovalStatus: 'Approved & Published',
+        clientSummary,
+        contactId: project?.primaryContactId ?? null,
+        projectName: project?.projectName ?? row.projectId,
+        today: today(),
+        clientPortalEnabled: project?.clientPortalEnabled ?? false,
+      }),
+      fixturePorts,
+    );
+    // eslint-disable-next-line no-console
+    console.log(describe(result));
+  } else if (action === 'internal') {
+    approveInternally(id, clientSummary);
+  } else if (action === 'return') {
+    returnForRevision(id);
+  } else if (action === 'save') {
+    saveClientSummary(id, clientSummary);
   }
 
   revalidatePath('/dashboard/updates');
@@ -70,25 +100,48 @@ export async function reviewUpdate(formData: FormData) {
   revalidatePath('/portal');
 }
 
-/** WF3 — field submits to the PM. Never notifies the client. */
+/** Field submits to the PM. Runs **WF3**, which never notifies the client. */
 export async function submitFieldUpdate(formData: FormData) {
   const session = await getSession();
   if (session?.role !== 'field' && session?.role !== 'contractor') {
     throw new Error('Only field users may submit daily updates');
   }
 
-  submitToPm({
-    projectId: String(formData.get('projectId') ?? ''),
-    submittedBy: session.name,
-    workCompleted: String(formData.get('workCompleted') ?? ''),
-    internalNotes: String(formData.get('internalNotes') ?? ''),
-    clientSummary: String(formData.get('clientSummary') ?? ''),
-    crewOnsite: Number(formData.get('crewOnsite') ?? 0),
-    hoursWorked: Number(formData.get('hoursWorked') ?? 0),
-    weather: String(formData.get('weather') ?? ''),
-  });
+  const projectId = String(formData.get('projectId') ?? '');
+  const blocker = String(formData.get('blocker') ?? '');
+
+  const updateId = createDraftUpdate(
+    {
+      projectId,
+      submittedBy: session.name,
+      workCompleted: String(formData.get('workCompleted') ?? ''),
+      internalNotes: String(formData.get('internalNotes') ?? ''),
+      clientSummary: String(formData.get('clientSummary') ?? ''),
+      crewOnsite: Number(formData.get('crewOnsite') ?? 0),
+      hoursWorked: Number(formData.get('hoursWorked') ?? 0),
+      weather: String(formData.get('weather') ?? ''),
+    },
+    today(),
+  );
+
+  const project = await getDataSource().getProject(projectId);
+
+  const result = await execute(
+    planFieldUpdateSubmitted({
+      buildsuiteProjectId: projectId,
+      updateId,
+      submittedBy: session.name,
+      projectName: project?.projectName ?? projectId,
+      blocker,
+      clientDecisionNeeded: formData.get('clientDecisionNeeded') === 'on',
+    }),
+    fixturePorts,
+  );
+  // eslint-disable-next-line no-console
+  console.log(describe(result));
 
   revalidatePath('/field');
   revalidatePath('/dashboard/updates');
+  revalidatePath('/dashboard');
   redirect('/field?submitted=1');
 }

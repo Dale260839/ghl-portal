@@ -156,6 +156,27 @@ export default async function FieldToday({
             </div>
           </div>
 
+          <div>
+            <label htmlFor="blocker" className="text-xs font-medium text-navy-600">
+              Blocker <span className="text-navy-400">(optional — raises an issue for your PM)</span>
+            </label>
+            <input
+              id="blocker"
+              name="blocker"
+              placeholder="Anything stopping work?"
+              className="mt-1.5 w-full rounded-lg border border-navy-200 px-3 py-2.5 text-sm"
+            />
+          </div>
+
+          <label className="flex items-center gap-2.5 text-sm text-navy-700">
+            <input
+              type="checkbox"
+              name="clientDecisionNeeded"
+              className="h-4 w-4 accent-navy-600"
+            />
+            Client needs to decide something
+          </label>
+
           {/* §12.2 — two separate areas. Only the second is a publish candidate. */}
           <div className="rounded-lg bg-red-50 px-3 py-3">
             <label htmlFor="internalNotes" className="text-xs font-semibold text-red-700">
