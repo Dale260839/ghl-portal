@@ -1,37 +1,38 @@
 import { DAILY_UPDATES } from './fixtures';
-import type { ManagerApprovalStatus } from '@buildsuite/contracts';
 
 /**
- * In-memory state transitions for the demo, so the review → publish loop is
- * clickable rather than described. Backed by the fixture arrays, which means
- * changes live for the lifetime of the server process and reset on restart.
+ * Fixture-backed state changes that are NOT workflow effects.
  *
- * The transitions themselves mirror §10 and WF4 exactly — when this is wired to
- * GHL, the effects below become the workflow's actions and the state machine in
- * `@buildsuite/contracts` stays the source of truth.
+ * The publishing transitions used to live here. They now go through WF3 and
+ * WF4 (`lib/workflows/`), applied via `fixturePorts` — so the demo's buttons
+ * run the real workflows rather than a parallel code path that happens to look
+ * similar. What's left here is only what a workflow doesn't own: creating the
+ * draft record, and the PM editing a summary without changing state.
+ *
+ * Backed by the fixture arrays, so changes live for the lifetime of the server
+ * process and reset on restart.
  */
 
 function find(id: string) {
   return DAILY_UPDATES.find((u) => u.id === id);
 }
 
-function setStatus(id: string, status: ManagerApprovalStatus): void {
+/** §12.1 "Edit Client Summary" — a save with no state transition. */
+export function saveClientSummary(id: string, clientSummary: string): void {
   const update = find(id);
   if (update === undefined) return;
-  update.managerApprovalStatus = status;
+  update.clientSummary = clientSummary;
 }
 
-/** WF4 — the only path that makes an update client-visible. */
-export function approveAndPublish(id: string, clientSummary?: string): void {
+/** §10 "Return for Revision" — no §11 workflow covers this transition. */
+export function returnForRevision(id: string): void {
   const update = find(id);
   if (update === undefined) return;
-  if (clientSummary !== undefined) update.clientSummary = clientSummary;
-  update.managerApprovalStatus = 'Approved & Published';
-  update.clientVisible = true;
-  update.publishDate = new Date().toISOString().slice(0, 10);
+  update.managerApprovalStatus = 'Returned';
+  update.clientVisible = false;
 }
 
-/** §10 — internal approval explicitly leaves Client Visible = No. */
+/** §10 "Approve Internally" — Client Visible stays No, by definition. */
 export function approveInternally(id: string, clientSummary?: string): void {
   const update = find(id);
   if (update === undefined) return;
@@ -40,21 +41,7 @@ export function approveInternally(id: string, clientSummary?: string): void {
   update.clientVisible = false;
 }
 
-export function returnForRevision(id: string): void {
-  const update = find(id);
-  if (update === undefined) return;
-  setStatus(id, 'Returned');
-  update.clientVisible = false;
-}
-
-export function saveClientSummary(id: string, clientSummary: string): void {
-  const update = find(id);
-  if (update === undefined) return;
-  update.clientSummary = clientSummary;
-}
-
-/** Field submission — WF3. Sets Pending and notifies the PM; never the client. */
-export function submitToPm(input: {
+export interface DraftUpdateInput {
   projectId: string;
   submittedBy: string;
   workCompleted: string;
@@ -63,11 +50,19 @@ export function submitToPm(input: {
   crewOnsite: number;
   hoursWorked: number;
   weather: string;
-}): void {
+}
+
+/**
+ * Creates the draft record and returns its id. Deliberately does NOT set an
+ * approval status — WF3 owns that, and having two places that decide "a new
+ * submission is Pending" is how the two drift apart.
+ */
+export function createDraftUpdate(input: DraftUpdateInput, today: string): string {
+  const id = `du-${DAILY_UPDATES.length + 1}-${Date.now().toString(36)}`;
   DAILY_UPDATES.unshift({
-    id: `du-${DAILY_UPDATES.length + 1}-${DAILY_UPDATES.length}`,
+    id,
     projectId: input.projectId,
-    updateDate: new Date().toISOString().slice(0, 10),
+    updateDate: today,
     submittedBy: input.submittedBy,
     workCompleted: input.workCompleted,
     crewOnsite: input.crewOnsite,
@@ -79,4 +74,5 @@ export function submitToPm(input: {
     managerApprovalStatus: 'Pending',
     publishDate: null,
   });
+  return id;
 }

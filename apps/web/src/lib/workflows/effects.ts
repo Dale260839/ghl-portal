@@ -1,4 +1,4 @@
-import type { ProjectStage } from '@buildsuite/contracts';
+import type { ManagerApprovalStatus, ProjectStage } from '@buildsuite/contracts';
 
 /**
  * Workflows are planners, not doers.
@@ -29,6 +29,16 @@ export type Effect =
   | { type: 'SetProgress'; buildsuiteProjectId: string; percentage: number }
   | { type: 'SetCurrentMilestone'; buildsuiteProjectId: string; milestoneName: string }
   | { type: 'SetNextMilestone'; buildsuiteProjectId: string; milestoneName: string }
+  // ── WF3 ────────────────────────────────────────────────────────────────────
+  | { type: 'SetManagerApprovalStatus'; buildsuiteProjectId: string; updateId: string; status: ManagerApprovalStatus }
+  | { type: 'AddToReviewQueue'; buildsuiteProjectId: string; updateId: string }
+  | { type: 'CreateIssue'; buildsuiteProjectId: string; issueTitle: string; category: string; description: string; priority: 'Normal' | 'Urgent' }
+  | { type: 'SetClientActionRequired'; buildsuiteProjectId: string; required: boolean }
+  // ── WF4 ────────────────────────────────────────────────────────────────────
+  | { type: 'SetClientVisible'; buildsuiteProjectId: string; updateId: string; visible: boolean }
+  | { type: 'PublishClientSummary'; buildsuiteProjectId: string; updateId: string; clientSummary: string; publishDate: string }
+  | { type: 'SetProjectLastUpdated'; buildsuiteProjectId: string; date: string }
+  | { type: 'AddToPortalFeed'; buildsuiteProjectId: string; updateId: string }
   // ── Shared ─────────────────────────────────────────────────────────────────
   | { type: 'NotifyInternal'; buildsuiteProjectId: string; message: string }
   | { type: 'NotifyTeam'; buildsuiteProjectId: string; message: string }
