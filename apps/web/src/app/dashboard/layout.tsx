@@ -9,6 +9,7 @@ const NAV = [
   { href: '/dashboard', label: 'Overview' },
   { href: '/dashboard/projects', label: 'Projects' },
   { href: '/dashboard/updates', label: 'Field Updates' },
+  { href: '/dashboard/buildsuite', label: 'From BuildSuite' },
 ];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --test src/lib/*.test.ts src/lib/ghl/*.test.ts src/lib/workflows/*.test.ts"
+    "test": "node --test src/lib/*.test.ts src/lib/ghl/*.test.ts src/lib/workflows/*.test.ts src/lib/buildsuite/*.test.ts"
   },
   "dependencies": {
     "@buildsuite/contracts": "*",
