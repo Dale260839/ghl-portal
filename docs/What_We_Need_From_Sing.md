@@ -29,6 +29,19 @@ Nothing here is urgent-as-in-panic. It's urgent-as-in-everything-downstream-wait
 ARCHITECTURE §2 has you owning this. Without it the app can't read a single real
 record.
 
+> **Updated 2026-08-06.** Since BuildSuite already uses a GHL private integration
+> key, this may be quicker than we thought — you've done it before. Two asks
+> rather than one, though:
+>
+> **Please mint a separate key for the hub rather than sharing BuildSuite's.**
+> Not distrust — lifecycle. If we share one and you rotate it, the hub breaks
+> silently and neither of us connects the two events. Five extra minutes now.
+>
+> **Tell us if yours is agency-level or per-sub-account.** ARCHITECTURE §2 wants
+> per-sub-account. If the practical path is an agency-level key, that's workable,
+> but it's a wider blast radius than the architecture assumes and Chris should
+> know before we build on it.
+
 | What | Notes |
 |---|---|
 | `GHL_API_BASE_URL` | Presumably `https://services.leadconnectorhq.com` — confirm |
@@ -42,6 +55,26 @@ read on opportunities. Write only if you want us running WF1/WF2 against live
 records rather than dry-running them — say the word either way.
 
 Send them however you normally would — please **not** in a chat thread.
+
+### 1.2a A proposal that might delete this workstream
+
+You already hold a **GHL private integration key** — BuildSuite talks to GHL
+server-to-server today. If that's right, **the stage sync-back should probably run
+on your side, not ours.**
+
+The job exists to move a project's GHL pipeline stage into BuildSuite's My Projects
+view. You can already read that from GHL directly. Running it there removes three
+problems in one go: no scoped service token needed (saving you the half-day to
+day), no unattended job calling an API that has no machine auth, and the id
+mismatch below stops mattering — you'd query GHL by whatever key you stamped at
+handoff and you already know your own `projects.id`.
+
+It also keeps the architecture's one-way boundary cleaner: BuildSuite → GHL at
+handoff, BuildSuite reading GHL for status. Nothing calls back into BuildSuite from
+outside at all.
+
+**If you agree, §1.2 below goes away** and the only thing we need from you on this
+front is confirmation. If you'd rather we own it, §1.2 stands as written.
 
 ### 1.2 The sync-back — **we need option B, and the id question answered**
 

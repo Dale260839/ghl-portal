@@ -453,6 +453,46 @@ never matches.
 
 ---
 
+### D-007 · BuildSuite holds a GHL private integration key — the sync-back may not be ours to build
+**Found:** 2026-08-06 · **Supersedes the framing of D-005**
+
+BuildSuite authenticates to GoHighLevel with a **GHL private integration key**
+(and, per its API reference, agency-level OAuth tokens from the marketplace
+callback). Its server can already talk to GHL server-to-server.
+
+**That inverts §8.3.** The stage sync-back exists to move GHL's pipeline stage
+into BuildSuite's "My Projects" view. If BuildSuite can query GHL directly, the
+job belongs **on Sing's side**, and three problems disappear together:
+
+| Problem from D-005 | Status if BuildSuite runs it |
+|---|---|
+| No machine auth on BuildSuite's API | Irrelevant — nothing calls it from outside |
+| A scoped service token, ~1 day of Sing's time | Not needed |
+| `buildsuite_project_id` missing from BuildSuite's API | Dissolves — BuildSuite queries GHL by whatever key it stamped at handoff, and it already knows its own `projects.id` |
+
+**Recommendation: propose it to Sing before either side builds anything.** He owns
+both ends of that path already. Our side keeps the one-way boundary §1.1
+describes, and we delete a workstream rather than working around a missing token.
+
+**The second implication — our GHL access may already exist.** If BuildSuite holds
+a private integration key for the contractor sub-accounts, the hub might not need
+Chris to provision a new one. Three things to settle before assuming that:
+
+1. **Is the key agency-level or per-sub-account?** ARCHITECTURE §2 requires each
+   sub-account to use its own token. An agency-level key spanning every contractor
+   is a much larger blast radius than the architecture asks for.
+2. **What scopes does it carry?** Ours needs custom objects, contacts, and
+   opportunities. Reusing a key scoped for something else either over-grants or
+   under-delivers.
+3. **Lifecycle coupling.** Sharing one key means BuildSuite rotating it silently
+   breaks the hub. A separate key for the hub, even minted from the same place, is
+   worth the five extra minutes.
+
+**Recommendation:** ask to *mint a separate key the same way*, not to share the
+existing one.
+
+---
+
 ### D-006 · The project hub uses the same authentication as BuildSuite
 **Decided:** 2026-08-06
 
