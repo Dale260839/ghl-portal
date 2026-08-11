@@ -453,6 +453,47 @@ never matches.
 
 ---
 
+### D-009 · Data access is Supabase-direct. BuildSuite's API is out of scope.
+**Decided:** 2026-08-06 · **Closes D-004 and D-005**
+
+BuildSuite uses Supabase as its database. The Hub reads that Supabase directly.
+**We do not call BuildSuite's backend at all.**
+
+Everything the cookie-only API problem was blocking is now moot:
+
+| Was | Now |
+|---|---|
+| D-004 — sync-back writes through Sing's API | **Dead.** No API call. |
+| D-005 — no machine auth, `PUT /projects/{id}` broken, four id spaces | **Moot.** We never reach those endpoints. |
+| A scoped service token, ~1 day of Sing's time | **Not needed.** |
+| `BUILDSUITE_API_BASE_URL` / `BUILDSUITE_API_KEY` | **Removed from `.env.example`.** |
+
+`docs/reference/buildsuite-api-reference.md` stays as reference — it documents
+behaviour the *shared data* still exhibits (UPPERCASE status values, the four id
+spaces, which columns mean what) — but no code targets it.
+
+**Two consequences that are not simplifications:**
+
+**1. The read-only guardrail now binds the sync-back.** D-003 is absolute:
+Supabase is production, never alter a table. Writing a stage back into
+BuildSuite's Supabase would break that rule, so §8.3 cannot be satisfied by
+writing there. It has to be either **D-007** (BuildSuite reads GHL itself — still
+the recommendation) or an explicit, named, approved write that Sing signs off on.
+**Nobody should write to that database because it happens to be reachable.**
+
+**2. We now need the schema, not the endpoints.** Reading someone else's database
+directly trades an API contract for a coupling to their table layout. Two things
+follow: we need the schema documented (below), and **a Supabase migration on
+Sing's side can break the Hub silently** — no deprecation, no version header, no
+404. Worth agreeing a heads-up convention.
+
+**The id question gets easier.** `BSP-YYYY-NNNNNN` was missing from the API
+reference; now we can look for it in the actual tables. Either it's a column on
+the project row or it isn't, and that's a five-minute answer rather than a design
+debate.
+
+---
+
 ### D-008 · The Project Hub is a distinct system, with its own two keys
 **Decided:** 2026-08-06
 

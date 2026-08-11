@@ -56,6 +56,47 @@ records rather than dry-running them — say the word either way.
 
 Send them however you normally would — please **not** in a chat thread.
 
+### 1.2-NEW · Supabase read access + the schema — **this replaces everything below about your API**
+
+> **Superseded 2026-08-06 (D-009).** The Hub reads BuildSuite's Supabase directly
+> and doesn't call your API at all. §1.2, §1.2a and §1.2b below are kept only for
+> the reasoning; **the ask is now this section.** Your API reference was still
+> worth writing — it documents the id spaces and the UPPERCASE status values,
+> which the shared data still exhibits.
+
+**What we need:**
+
+| What | Notes |
+|---|---|
+| `SUPABASE_URL` | |
+| A **read-only** key | Restricted or anon — explicitly **not** `service_role`. We won't write, and we'd rather the key make that impossible than rely on discipline. |
+| **The schema for the tables we'd read** | Names, columns, and how they relate — see below |
+
+**Tables we think we need**, though you'll know better: `projects`, `deals`,
+`contractors`, `proposals`, and whatever links a project to a GHL contact.
+
+**The three questions that matter more than the credentials:**
+
+1. **Where does `BSP-YYYY-NNNNNN` live?** It doesn't appear in your API reference.
+   Is it a column on the project row, is it minted at handoff and stored back, or
+   does it not exist on your side at all? Our whole join model assumes it's yours
+   and travels with the project. **This is still the single most important
+   question** — it's just answerable in five minutes now that we're looking at
+   tables rather than endpoints.
+2. **Row-level security.** Does RLS apply to the key you give us, and if so, as
+   whom? A read key that returns nothing because RLS scopes to a session is a
+   confusing afternoon for both of us.
+3. **Will you tell us before a migration?** Reading your database directly trades
+   an API contract for a coupling to your table layout. A rename that would have
+   been a deprecation notice on an API is a silent break here — no 404, no version
+   header, just empty columns. A heads-up convention is all we need.
+
+**And one guardrail from our side, stated so you don't have to wonder:** we treat
+that database as production and read-only. We will not write to it, run a
+migration, or alter a table — including for the stage sync-back. If §8.3 ends up
+needing a write, we'll ask you first and you can decide whether it's your job or
+an approved exception.
+
 ### 1.2a A proposal that might delete this workstream
 
 You already hold a **GHL private integration key** — BuildSuite talks to GHL
