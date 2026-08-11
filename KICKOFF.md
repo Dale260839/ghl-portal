@@ -453,6 +453,46 @@ never matches.
 
 ---
 
+### D-008 · The Project Hub is a distinct system, with its own two keys
+**Decided:** 2026-08-06
+
+The Project Hub is a **distinct project-management system**, not a feature of
+BuildSuite. It receives two credentials of its own:
+
+1. **A GHL private integration key** — the same kind BuildSuite uses. This
+   unblocks live project data and closes F3.
+2. **The API key for the backend BuildSuite uses.** ⚠️ *Pending confirmation of
+   which backend this means — see the open question below.*
+
+**This makes BuildSuite's cookie-only API a non-problem.** D-005 was blocked
+because BuildSuite's FastAPI has no machine authentication. If the Hub reads
+BuildSuite's data from the shared backend directly, it never calls that API and
+the blocker is routed around rather than solved. **The Supabase guardrail applies
+in full: read-only, never alter a table (D-003).**
+
+**⚠️ Open — and it changes the auth design, so resolve before building:**
+
+D-006 said the Hub authenticates via `bs_session`, which only works if the Hub is
+served from a `.buildsuite.ai` subdomain — that is the cookie's domain. But a
+**distinct** system implies its own host, and ARCHITECTURE §2 routes the
+contractor surfaces at `projects.<contractordomain>`. **A cookie scoped to
+`.buildsuite.ai` will not be sent to `projects.<contractordomain>`.** The two
+statements can't both hold as written.
+
+Three ways out, and they are not equivalent:
+
+| Option | What it means |
+|---|---|
+| **Hub on a `.buildsuite.ai` subdomain** | D-006 stands unchanged, cookie rides along, cheapest to build. But the Hub then lives under BuildSuite's domain, which sits oddly with "distinct system" and with the §2 per-contractor routing. |
+| **Hub on its own domain, GHL as the identity provider** | The Hub does its own GHL login/OAuth rather than borrowing BuildSuite's cookie. Same identity, same users, independent session. More work, and it needs a GHL app/OAuth client — but it matches "distinct system" and the §2 routes. |
+| **Hub on its own domain, shared-secret JWT** | Sing issues a token the Hub verifies. Workable, but invents an auth path neither system has today. |
+
+**Recommendation: option 2.** A distinct system should own its own session. Option
+1 is faster but couples the Hub's URL to BuildSuite's domain permanently, and
+un-picking that later means re-authenticating every user.
+
+---
+
 ### D-007 · BuildSuite holds a GHL private integration key — the sync-back may not be ours to build
 **Found:** 2026-08-06 · **Supersedes the framing of D-005**
 
