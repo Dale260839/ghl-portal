@@ -69,7 +69,9 @@ listed in §6 below.
 | **D-001** | Front-end built in this repo, **not GHL AI Studio** | AI Studio couldn't carry three permission-controlled experiences. The §12.3 split still holds — contracts, invoices, receipts, payments route through GHL's **native** Client Portal; we are the tracking layer. |
 | **D-002** | WF1–WF8 are **application code here**, not GHL-native, not n8n | §11 is still the *specification*; only the implementation moved. GHL/BuildSuite/Supabase treated as integrated systems over a shared DB. |
 | **D-003** | Direct GHL API access approved, with the guardrails above | |
-| **D-004** | Stage sync-back writes through **Sing's existing BuildSuite API**, not a direct DB write | |
+| **D-004** | Stage sync-back writes through **Sing's existing BuildSuite API** | **⚠️ INVALIDATED by D-005.** |
+| **D-005** | Sync-back is **blocked on a design decision, not a key** | BuildSuite's API has **no machine auth** — every endpoint needs a `bs_session` cookie from the GHL login flow. `BUILDSUITE_API_KEY` doesn't exist. A scheduled server-to-server job cannot call it. Also: `PUT /projects/{id}` is documented broken, and **`buildsuite_project_id` appears nowhere in that API** — which puts the whole shared-key premise in question. Do not build the sync-back until resolved. |
+| **D-006** | The hub uses **the same authentication as BuildSuite** — GHL login issuing `bs_session` | No separate identity system. Requires the hub on a `.buildsuite.ai` subdomain (cookie domain), which **constrains hosting**. Does *not* solve the scheduled sync-back, and it's unconfirmed whether client-portal homeowners get a `bs_session` at all. |
 
 **D-001 + D-002 shrink the Phase 6 snapshot.** It ships objects, fields, pipeline,
 forms, templates, roles, portal settings. The app, workflows, and sync-back job

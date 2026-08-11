@@ -397,6 +397,7 @@ build sub-account, plus Supabase connection details (read credentials).
 
 ### D-004 · Sync-back writes through Sing's existing BuildSuite API
 **Decided:** 2026-07-31 · **Resolves:** F4
+**⚠️ INVALIDATED 2026-08-06 — see D-005.**
 
 Sing already exposes a BuildSuite API; the hourly stage sync-back (§8.3) uses
 those endpoints rather than a direct database write. Correct call — it keeps the
@@ -407,3 +408,84 @@ posture intact and leaves BuildSuite owning its own invariants.
 endpoint accepts a stage update keyed by `buildsuite_project_id`, what it
 returns, and whether it is idempotent under retry. The sync-back runs hourly
 across every project, so a non-idempotent endpoint changes the job's design.
+
+---
+
+### D-005 · The sync-back is BLOCKED on a design decision, not a key
+**Found:** 2026-08-06, from Sing's `BuildSuite_API_Integration_Docs.md`
+
+Reading the actual API reference invalidated the assumptions D-004 rested on.
+**Do not build the sync-back job until this is resolved.**
+
+**1. There is no machine authentication.** Every authenticated endpoint requires
+an HTTP-only `bs_session` JWT cookie, issued *only* through the GoHighLevel login
+flow. No API key, no bearer token, no service account, no client-credentials
+flow. `BUILDSUITE_API_KEY` does not exist. A server-to-server hourly job — which
+is exactly what §8.3 specifies — **cannot call this API today.**
+
+Sing gives two options, and they change the shape of everything downstream:
+
+| Option | Cost | Consequence |
+|---|---|---|
+| **A · Proxy the user's session.** Our portal runs on a `.buildsuite.ai` subdomain, the cookie rides along, we call the API as that user. | No backend work for Sing | Kills the *scheduled* sync-back — it only runs while a user is browsing. Also constrains our hosting: CORS is restricted to `buildsuite.ai` origins. |
+| **B · A scoped service token.** Sing adds a header token with an explicit endpoint allowlist. | ~0.5–1 day on his side | Preserves §8.3 as designed. **Recommended.** He asks for the exact endpoint list, which is in `What_We_Need_From_Sing.md`. |
+
+**2. The write endpoint we need is documented as broken.**
+`PUT /projects/{project_id}` compares a GHL contact id against a UUID column and
+returns **403 for every non-admin caller**. `POST /projects/{project_id}/delete`
+has the same defect. The closest working candidate is
+`PATCH /projects/my-projects/{project_id}/status` — contractor-only, with
+state-machine validation — but it is keyed on `projects.id` (a UUID).
+
+**3. `buildsuite_project_id` does not appear anywhere in the API.** There are four
+non-interchangeable id spaces — `contractors.id`, the GHL contact id,
+`auth_profiles.id`, and `projects.id`/`deals.id` — and none of them is
+`BSP-YYYY-NNNNNN`. **Our entire join-key model (§5, §3.6) assumes BuildSuite owns
+that ID natively.** Either it is minted at handoff and stored somewhere this doc
+doesn't cover, or the shared-key premise needs revisiting. This is the single most
+important question outstanding, above the credentials.
+
+**4. Two traps worth recording** even though they don't affect us yet:
+`GET /projects/` **has a write side effect** — it increments plan usage on every
+call, so polling it burns a contractor's quota. And deal/proposal status values
+serialize **UPPERCASE** (`PROCESSING`, `COMPLETED`), so branching on lowercase
+never matches.
+
+---
+
+### D-006 · The project hub uses the same authentication as BuildSuite
+**Decided:** 2026-08-06
+
+The hub authenticates the same way the BuildSuite app does — the GoHighLevel login
+flow issuing the HTTP-only `bs_session` JWT. We do not run a separate identity
+system.
+
+**What this settles.** Our demo cookie gets replaced by real `bs_session`
+verification, and because the hub sits on a `.buildsuite.ai` subdomain
+(`COOKIE_DOMAIN=.buildsuite.ai`), the cookie rides along automatically — so the
+hub can call BuildSuite's API **as the signed-in user**, with that user's own
+permissions, and no token handling on either side. It also satisfies the CORS
+restriction to `buildsuite.ai` origins for free, and answers Phase 0's "how is a
+portal-authenticated contact identified server-side" for contractor and field users.
+
+**Three things it does NOT settle — flagging rather than assuming:**
+
+1. **The scheduled sync-back still needs option B.** A user session cannot run an
+   unattended hourly job. Either Sing adds the scoped service token, or §8.3 stops
+   being scheduled and becomes refresh-on-visit — which is a real product change,
+   not an implementation detail, because a stage would then only reach BuildSuite
+   when somebody happens to open the hub.
+2. **Client-portal users are a different population.** Homeowners sign in to GHL's
+   *native* Client Portal (§12.3); it is not established that they receive a
+   `bs_session` at all. If they don't, the hub needs two verification paths — one
+   for staff, one for clients — and the §9.1 gate must resolve the requesting
+   contact from whichever is present. Needs confirming before the client portal
+   goes live.
+3. **Hosting is now constrained, not open.** The hub must be served from a
+   `.buildsuite.ai` subdomain for the cookie to be sent. That removes the free
+   choice of hosting target and makes the subdomain a dependency on Sing's DNS.
+
+**Consequence for the build:** session verification stays behind the same
+interface the demo cookie uses (`lib/session.ts`), so swapping it is one file. What
+it needs from Sing is the JWT verification material — see
+`What_We_Need_From_Sing.md` §1.5.

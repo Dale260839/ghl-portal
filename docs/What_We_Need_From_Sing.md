@@ -43,27 +43,63 @@ records rather than dry-running them — say the word either way.
 
 Send them however you normally would — please **not** in a chat thread.
 
-### 1.2 The BuildSuite API for the hourly stage sync-back — **blocks §8.3**
+### 1.2 The sync-back — **we need option B, and the id question answered**
 
-We decided (D-004) the sync-back writes through your existing API rather than
-touching a database directly. We need:
+> **Revised 2026-08-06** after reading `BuildSuite_API_Integration_Docs.md`. That
+> document answered most of what was here and replaced it with two harder
+> questions. Thank you for writing it from source — it saved us building against
+> an endpoint that turns out to be broken.
 
-| What | Notes |
+**We need option B: the scoped service token.** §8.3 specifies a scheduled hourly
+job, and option A (proxying the user's session) can't do that — it only runs while
+someone is browsing, and the CORS restriction to `buildsuite.ai` origins would also
+dictate our hosting. Option B keeps the design intact for the half-day to day you
+quoted.
+
+**The endpoint allowlist you asked for.** You said *"tell me exactly which
+endpoints you need and I scope it to those."* Minimum viable set:
+
+| Endpoint | Why |
 |---|---|
-| `BUILDSUITE_API_BASE_URL` | |
-| `BUILDSUITE_API_KEY` | And which header carries it |
-| Endpoint list | Just the ones relevant to project stage |
+| `GET /auth/me` | Resolve identity and confirm the token works |
+| `GET /projects/my-projects` | Read the contractor's projects — the list the sync-back walks |
+| **A stage-write endpoint** | See below. We don't think one currently works for us. |
 
-**The specific question:** which endpoint accepts a stage update keyed by
-`buildsuite_project_id`, and **is it idempotent under retry?**
+**On the write, three problems your doc surfaced:**
 
-That last part isn't pedantry. The job runs hourly across every project and will
-retry on 5xx. If calling it twice with the same stage does something other than
-nothing, we design it differently — dedupe keys, a run log, conditional writes.
-Cheaper to know now.
+1. `PUT /projects/{project_id}` is listed as **broken** — the GHL-contact-id vs
+   UUID comparison, 403 for every non-admin caller. So the obvious candidate is out.
+2. `PATCH /projects/my-projects/{project_id}/status` looks like the closest
+   working thing, but it's keyed on `projects.id` and has state-machine
+   validation. **Will it accept the 19 stage names from our GHL pipeline**
+   (`New Project` → `Warranty`), or does it enforce BuildSuite's own status
+   vocabulary? If the latter, we need a mapping and should agree it now.
+3. **Is it idempotent under retry?** The job runs hourly across every project and
+   retries on 5xx. If calling it twice with the same status does anything other
+   than nothing, we design differently — dedupe keys, a run log, conditional writes.
 
-Also useful: rate limits, and whether there's a staging environment we can point
-at while testing, so we're not hammering production on an hourly loop.
+### 1.2b The id question — **bigger than the credentials**
+
+`buildsuite_project_id` does not appear anywhere in your API reference. Your doc
+lists four id spaces — `contractors.id`, the GHL contact id, `auth_profiles.id`,
+and `projects.id`/`deals.id` — and none of them is `BSP-YYYY-NNNNNN`.
+
+Our whole model assumes that ID is BuildSuite's and travels with the project
+(§5, §3.6: never match on name, address, or email). So:
+
+- **Does `BSP-YYYY-NNNNNN` exist in BuildSuite at all**, or is it minted at
+  handoff purely for GHL's benefit?
+- If it's minted at handoff, **is it stored back on the BuildSuite project row?**
+  If not, the sync-back has no way to find the project it needs to update, and
+  we'd need to carry `projects.id` through the handoff as well.
+- If it doesn't exist at all, the shared-key premise needs revisiting — and that
+  affects the GHL schema, not just this job.
+
+This is the one question we'd most like answered first. Everything else can be
+worked around; this one changes the data model.
+
+Also useful when you have a moment: rate limits, and whether there's a staging
+environment, so we're not exercising an hourly job against production.
 
 ### 1.3 The Send-to-CRM handoff extension — **blocks the end-to-end chain**
 
@@ -84,6 +120,34 @@ validates against the contract below.
    does it write the same `buildsuite_project_id` again? Our WF1 is idempotent
    and treats a repeat as "already exists, skip seeding" — confirm that's the
    right read.
+
+### 1.5 `bs_session` verification — the hub uses your auth, not its own
+
+**Decision on our side (D-006): the project hub authenticates exactly the way
+BuildSuite does** — the GHL login flow issuing `bs_session`. We're not standing up
+a second identity system. That means the hub can call your API as the signed-in
+user with their own permissions, and it satisfies your CORS restriction for free.
+
+To verify the cookie server-side we need:
+
+| What | Notes |
+|---|---|
+| JWT signing secret or public key | However you'd rather share it |
+| Algorithm + expected claims | Which claim carries `auth_profile_id`, which carries the GHL contact id |
+| Token lifetime / refresh behaviour | What we do when it expires mid-session |
+| **A `.buildsuite.ai` subdomain** for the hub | Required — `COOKIE_DOMAIN=.buildsuite.ai` means the cookie only rides along on that domain. This is now a DNS dependency on you. |
+
+**One question we can't answer ourselves:** do **client-portal users** (homeowners)
+get a `bs_session`? They sign in to GHL's *native* Client Portal, which may be a
+different path entirely. If they don't, the hub needs two verification paths — one
+for contractor/field staff, one for clients — and we'd rather know now than
+discover it when the client portal goes live.
+
+**And note this doesn't remove the need for §1.2's service token.** A user session
+can't run an unattended hourly job. Without it, the stage sync-back stops being
+scheduled and becomes refresh-on-visit — meaning a stage change only reaches
+BuildSuite when somebody happens to open the hub. That's a product decision, not
+an implementation detail, so flagging it rather than quietly picking.
 
 ### 1.4 The BuildSuite Project ID — **confirm, don't assume**
 
