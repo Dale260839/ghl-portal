@@ -453,6 +453,60 @@ never matches.
 
 ---
 
+### D-010 · `BSP-YYYY-NNNNNN` does not exist. The join key is already GHL-native.
+**Verified:** 2026-08-06, by reading BuildSuite's Supabase directly (read-only)
+
+The question that has been open since kickoff is answered. **It's not a design
+debate; it's a fact about the database.**
+
+`projects` has **53 columns and none of them is a BuildSuite Project ID.** No
+`bsp_*`, no `buildsuite_project_id`, no `BSP-` value anywhere in sampled rows.
+
+**What does exist, on every project row:**
+
+| Column | Meaning |
+|---|---|
+| `id` | uuid — BuildSuite's own primary key |
+| `ghl_contact_id` | the GHL contact |
+| `ghl_opportunity_id` | the GHL opportunity |
+
+**BuildSuite already links to GHL, and it does so with GHL's own identifiers.**
+The shared key we specified doesn't need inventing — a working one is already in
+place on both sides.
+
+**This contradicts ARCHITECTURE §5 and §3.6**, which make
+`BuildSuite Project ID` the master identifier "across BuildSuite, GHL, and
+Supabase". Two ways forward:
+
+| Option | Cost |
+|---|---|
+| **A · Adopt the existing pair.** `ghl_opportunity_id` as the cross-system key, `projects.id` as BuildSuite's local handle. | Amend §5/§3.6; rework `ids.ts` and the handoff contract, which currently **reject** anything not matching `BSP-YYYY-NNNNNN`. Roughly a morning. |
+| **B · Sing adds a column** and backfills it. | A production schema change on someone else's database, plus a backfill, to introduce a key that duplicates one already working. |
+
+**Recommendation: A.** §5's actual requirement is "one immutable shared key, never
+match on name or address." `ghl_opportunity_id` satisfies that requirement. The
+specific *format* was a preference, and it is not worth a prod migration to
+preserve. Needs Chris's sign-off since it amends the architecture.
+
+**Second finding: BuildSuite's status vocabulary is not the §7 pipeline.**
+Observed values are lowercase and its own: `active` · `matched` · `new` ·
+`draft` · `completed` — not the 19 GHL lifecycle stages. So any stage sync needs
+an explicit mapping table, and it will be lossy in both directions. Another
+reason D-007 (BuildSuite reads GHL itself) is the right home for §8.3 — the
+mapping belongs with whoever owns the vocabulary.
+
+**Live shape, for reference:** 43 projects at `status=active`. `source`
+distinguishes `contractor` · `client-application-webhook` ·
+`ghl_project_quote_survey` · `slack-seed`.
+
+**⚠️ Security observation for Sing — not our finding to sit on.** The
+**publishable** key reads `contractors` including `full_name` and `phone`.
+Publishable keys are designed to be embedded in browsers, so any table readable
+with one is effectively public. Either RLS should restrict these tables or the
+Hub needs a differently-scoped key. Raised in `What_We_Need_From_Sing.md`.
+
+---
+
 ### D-009 · Data access is Supabase-direct. BuildSuite's API is out of scope.
 **Decided:** 2026-08-06 · **Closes D-004 and D-005**
 

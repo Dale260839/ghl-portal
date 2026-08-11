@@ -223,7 +223,41 @@ scheduled and becomes refresh-on-visit — meaning a stage change only reaches
 BuildSuite when somebody happens to open the hub. That's a product decision, not
 an implementation detail, so flagging it rather than quietly picking.
 
-### 1.4 The BuildSuite Project ID — **confirm, don't assume**
+### 1.0 Two things from reading the database — one needs your attention today
+
+Thanks for the Supabase access. It answered the id question in five minutes, and
+turned up one thing you'll want to know about.
+
+**1 · There is no BuildSuite Project ID, and we don't think you should add one.**
+
+`projects` has 53 columns and none of them is a `BSP-` anything. What every row
+*does* have is `ghl_contact_id` and `ghl_opportunity_id` — you already link to GHL
+using GHL's own identifiers.
+
+So the shared key we specified doesn't need creating; a working one exists. We'd
+rather **adopt `ghl_opportunity_id`** than ask you to add a column and backfill
+production for a key that duplicates one already in place. That amends our
+architecture rather than your schema, which is the right way round. Chris needs to
+sign it off, but nothing is needed from you unless you disagree.
+
+**2 · ⚠️ The publishable key reads contractor PII.**
+
+`GET /rest/v1/contractors` with the publishable key returns `full_name` and
+`phone` — we saw a real contractor's mobile number on the first row. Publishable
+keys are *designed* to be embedded in browser bundles, so in practice **that table
+is public to anyone who has ever loaded your front-end.**
+
+We're not using that table and we'll leave it alone. But it's the kind of thing
+that's much cheaper to fix before someone notices than after. Either RLS should
+scope these tables, or the Hub should get a differently-scoped key and the
+publishable one locked down. Your call on which — flagging it, not asking for
+anything.
+
+*(One consequence for us: we'd assumed the read key was RLS-restricted. It isn't,
+for these tables. We'll read only `projects` and treat everything else as
+off-limits regardless of what the key permits.)*
+
+### 1.4 The BuildSuite Project ID — ~~confirm, don't assume~~ **answered, see §1.0**
 
 Everything keys off this (§5, §3.6). Four things to confirm:
 
