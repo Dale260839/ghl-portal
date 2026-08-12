@@ -1,4 +1,5 @@
-import { DAILY_UPDATES } from './fixtures';
+import { DAILY_UPDATES, PROJECTS } from './fixtures.ts';
+import type { Project } from './types.ts';
 
 /**
  * Fixture-backed state changes that are NOT workflow effects.
@@ -39,6 +40,68 @@ export function approveInternally(id: string, clientSummary?: string): void {
   if (clientSummary !== undefined) update.clientSummary = clientSummary;
   update.managerApprovalStatus = 'Approved Internally';
   update.clientVisible = false;
+}
+
+/**
+ * §6.1 client-visibility switches, as a named set.
+ *
+ * Exported so the settings screen, the server action, and the tests all work
+ * from one list. A switch that exists on `Project` but is missing here would be
+ * silently un-editable, which is the failure mode where a contractor thinks
+ * they've hidden something and hasn't.
+ */
+export const VISIBILITY_SWITCHES = [
+  'clientPortalEnabled',
+  'showBudgetToClient',
+  'showDetailedPricing',
+  'showScheduleToClient',
+  'showAssignedTeam',
+] as const satisfies readonly (keyof Project)[];
+
+export type VisibilitySwitch = (typeof VISIBILITY_SWITCHES)[number];
+
+/** Display names, matching §6.1 verbatim. */
+export const VISIBILITY_LABELS: Record<VisibilitySwitch, { label: string; help: string }> = {
+  clientPortalEnabled: {
+    label: 'Client Portal Enabled',
+    help: 'Master switch. Off means the client sees nothing at all, whatever else is set.',
+  },
+  showBudgetToClient: {
+    label: 'Show Budget to Client',
+    help: 'Contract amount, change orders, invoiced, paid, remaining balance.',
+  },
+  showDetailedPricing: {
+    label: 'Show Detailed Pricing',
+    help: 'Line-level pricing. Never includes your cost, markup, or margin.',
+  },
+  showScheduleToClient: {
+    label: 'Show Schedule to Client',
+    help: 'Milestone dates and the estimated completion date.',
+  },
+  showAssignedTeam: {
+    label: 'Show Assigned Team',
+    help: 'Project manager and superintendent names.',
+  },
+};
+
+/**
+ * Applies visibility switches to a project.
+ *
+ * Takes the full set every time rather than a partial patch: an HTML form omits
+ * unchecked boxes entirely, so a patch-shaped API would make "unchecked" and
+ * "not submitted" indistinguishable — and the safe reading of that ambiguity
+ * (leave it as it was) is exactly wrong when someone is trying to turn something
+ * off.
+ */
+export function setVisibility(
+  buildsuiteProjectId: string,
+  switches: Record<VisibilitySwitch, boolean>,
+): void {
+  const project = PROJECTS.find((p) => p.buildsuiteProjectId === buildsuiteProjectId);
+  if (project === undefined) return;
+  for (const key of VISIBILITY_SWITCHES) {
+    project[key] = switches[key];
+  }
 }
 
 export interface DraftUpdateInput {

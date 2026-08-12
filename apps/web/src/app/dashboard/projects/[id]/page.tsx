@@ -196,7 +196,13 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
                 </li>
               ))}
             </ul>
-            <div className="border-t border-navy-100 px-5 py-3">
+            <div className="flex flex-wrap gap-4 border-t border-navy-100 px-5 py-3">
+              <Link
+                href={`/dashboard/projects/${project.buildsuiteProjectId}/visibility`}
+                className="text-xs font-medium text-navy-600 hover:underline"
+              >
+                Edit visibility →
+              </Link>
               <Link
                 href={`/portal?preview=${project.buildsuiteProjectId}`}
                 className="text-xs font-medium text-navy-600 hover:underline"

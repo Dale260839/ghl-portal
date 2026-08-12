@@ -8,6 +8,8 @@ import {
   createDraftUpdate,
   returnForRevision,
   saveClientSummary,
+  setVisibility,
+  VISIBILITY_SWITCHES,
 } from './data/mutations';
 import { getDataSource } from './data/source';
 import { execute, describe } from './workflows/executor';
@@ -97,6 +99,32 @@ export async function reviewUpdate(formData: FormData) {
 
   revalidatePath('/dashboard/updates');
   revalidatePath('/dashboard');
+  revalidatePath('/portal');
+}
+
+/**
+ * Client Visibility Settings (§12.1). Contractor-only — these switches are
+ * clauses of the §9.1 gate, so who may change them is a security question, not
+ * a UI one.
+ */
+export async function updateVisibility(formData: FormData) {
+  const session = await getSession();
+  if (session?.role !== 'contractor') {
+    throw new Error('§9.1: only a contractor may change client visibility');
+  }
+
+  const projectId = String(formData.get('projectId') ?? '');
+
+  // Unchecked boxes are absent from the payload, so read every switch explicitly
+  // rather than iterating what was submitted.
+  const switches = Object.fromEntries(
+    VISIBILITY_SWITCHES.map((key) => [key, formData.get(key) === 'on']),
+  ) as Record<(typeof VISIBILITY_SWITCHES)[number], boolean>;
+
+  setVisibility(projectId, switches);
+
+  revalidatePath(`/dashboard/projects/${projectId}`);
+  revalidatePath(`/dashboard/projects/${projectId}/visibility`);
   revalidatePath('/portal');
 }
 
