@@ -1,4 +1,4 @@
-import type { Contact, DailyUpdate, Milestone, Project, Task } from './types';
+import type { Contact, DailyUpdate, Issue, Milestone, Project, Task } from './types';
 
 /**
  * Demo fixtures. Stands in for the GHL API until the integration token lands
@@ -12,6 +12,8 @@ import type { Contact, DailyUpdate, Milestone, Project, Task } from './types';
 
 export const PROJECTS: Project[] = [
   {
+    ownerAuthProfileId: '7726102a-8e13-4006-889d-d68bc1cccd40',
+    ghlLocationId: 'loc_alliance_pro',
     buildsuiteProjectId: 'BSP-2026-000184',
     projectName: 'Johnson Kitchen Remodel',
     projectAddress: '1400 Broadway, San Antonio, TX 78215',
@@ -51,6 +53,8 @@ export const PROJECTS: Project[] = [
     showAssignedTeam: true,
   },
   {
+    ownerAuthProfileId: '7726102a-8e13-4006-889d-d68bc1cccd40',
+    ghlLocationId: 'loc_alliance_pro',
     buildsuiteProjectId: 'BSP-2026-000191',
     projectName: 'Johnson Guest Bath',
     projectAddress: '1400 Broadway, San Antonio, TX 78215',
@@ -90,6 +94,8 @@ export const PROJECTS: Project[] = [
     showAssignedTeam: true,
   },
   {
+    ownerAuthProfileId: '7726102a-8e13-4006-889d-d68bc1cccd40',
+    ghlLocationId: 'loc_alliance_pro',
     buildsuiteProjectId: 'BSP-2026-000177',
     projectName: 'Whitfield Master Suite Addition',
     projectAddress: '882 Alamo Heights Blvd, San Antonio, TX 78209',
@@ -129,6 +135,8 @@ export const PROJECTS: Project[] = [
     showAssignedTeam: false,
   },
   {
+    ownerAuthProfileId: 'a4502e38-bb67-420b-a7fc-3e1bc3d99c01',
+    ghlLocationId: 'loc_bexar_builders',
     buildsuiteProjectId: 'BSP-2026-000203',
     projectName: 'Castillo Roof Replacement',
     projectAddress: '77 Rio Vista Dr, New Braunfels, TX 78130',
@@ -168,6 +176,8 @@ export const PROJECTS: Project[] = [
     showAssignedTeam: true,
   },
   {
+    ownerAuthProfileId: 'a4502e38-bb67-420b-a7fc-3e1bc3d99c01',
+    ghlLocationId: 'loc_bexar_builders',
     buildsuiteProjectId: 'BSP-2026-000168',
     projectName: 'Ortega Deck & Pergola',
     projectAddress: '215 Grayson St, San Antonio, TX 78208',
@@ -207,6 +217,8 @@ export const PROJECTS: Project[] = [
     showAssignedTeam: true,
   },
   {
+    ownerAuthProfileId: 'a4502e38-bb67-420b-a7fc-3e1bc3d99c01',
+    ghlLocationId: 'loc_bexar_builders',
     buildsuiteProjectId: 'BSP-2026-000212',
     projectName: 'Bexar Retail Buildout',
     projectAddress: '4400 Fredericksburg Rd, San Antonio, TX 78201',
@@ -366,5 +378,73 @@ export const DAILY_UPDATES: DailyUpdate[] = [
     clientVisible: false,
     managerApprovalStatus: 'Approved Internally',
     publishDate: null,
+  },
+];
+
+/**
+ * §6.7 issues. Two open, one resolved — enough for the screen to show its states
+ * and for WF7's numbering to have something to continue from.
+ *
+ * Note `internalNotes` is populated on every one. That's deliberate: the issues
+ * screen is contractor-facing, so it displays them; anything client-facing has to
+ * go through `clientUpdate` instead.
+ */
+export const ISSUES: Issue[] = [
+  {
+    id: 'issue-1',
+    projectId: 'BSP-2026-000177',
+    issueNumber: 'ISS-000177-001',
+    issueTitle: 'Framing inspection slipped twice',
+    category: 'Inspection Problem',
+    description: 'City inspector rescheduled on 30 Jul and again on 3 Aug. Framing sign-off blocked.',
+    projectArea: 'Master suite addition',
+    priority: 'Urgent',
+    reportedBy: 'Dee Nguyen',
+    assignedTo: 'Marcus Reyes',
+    submittedDate: '2026-08-03',
+    targetResolutionDate: '2026-08-14',
+    status: 'In Progress',
+    internalNotes: 'Do not tell Ray it was the city. Marcus is calling him directly.',
+    clientUpdate: 'We are coordinating with the city on inspection scheduling and will confirm a date shortly.',
+    resolution: '',
+    clientConfirmation: false,
+  },
+  {
+    id: 'issue-2',
+    projectId: 'BSP-2026-000184',
+    issueNumber: 'ISS-000184-001',
+    issueTitle: 'Two cabinet doors arrived scratched',
+    category: 'Damage',
+    description: 'Upper doors 3 and 7 have surface scratches. Replacements ordered from the supplier.',
+    projectArea: 'Kitchen — north wall',
+    priority: 'Normal',
+    reportedBy: 'Tony Alvarez',
+    assignedTo: 'Marcus Reyes',
+    submittedDate: '2026-07-29',
+    targetResolutionDate: '2026-08-19',
+    status: 'Assigned',
+    internalNotes: 'Absorbing the cost rather than billing it — supplier goodwill is worth more than $180.',
+    clientUpdate: 'Two cabinet doors arrived with minor surface damage. Replacements are on order at no cost to you.',
+    resolution: '',
+    clientConfirmation: false,
+  },
+  {
+    id: 'issue-3',
+    projectId: 'BSP-2026-000184',
+    issueNumber: 'ISS-000184-002',
+    issueTitle: 'Sink base cut needed rework',
+    category: 'Incorrect Material',
+    description: 'Initial plumbing cut-out was 40mm short. Recut on site.',
+    projectArea: 'Kitchen — sink run',
+    priority: 'Normal',
+    reportedBy: 'Tony Alvarez',
+    assignedTo: 'Tony Alvarez',
+    submittedDate: '2026-08-01',
+    targetResolutionDate: '2026-08-04',
+    status: 'Resolved',
+    internalNotes: 'Our measurement error, not the supplier. Absorbed.',
+    clientUpdate: 'A minor adjustment was made to the sink cabinet to fit the plumbing correctly.',
+    resolution: 'Recut on site same day. No schedule impact.',
+    clientConfirmation: false,
   },
 ];

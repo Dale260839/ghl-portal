@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { getDataSource } from '@/lib/data/source';
+import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, HealthBadge, ProgressBar, currency, shortDate } from '@/components/ui';
 
 export default async function ProjectsList() {
-  const projects = await getDataSource().listProjects();
+  const scope = await requireTenantScope();
+  const projects = await getDataSource(scope).listProjects(scope);
 
   return (
     <div className="space-y-6">

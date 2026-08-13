@@ -1,5 +1,6 @@
 import { reviewUpdate } from '@/lib/actions';
 import { getDataSource } from '@/lib/data/source';
+import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, CardHeader, InternalOnly, shortDate } from '@/components/ui';
 
 /**
@@ -8,8 +9,9 @@ import { Badge, Card, CardHeader, InternalOnly, shortDate } from '@/components/u
  * only the second is ever a publish candidate (§10, §12.2).
  */
 export default async function ReviewQueue() {
-  const db = getDataSource();
-  const [updates, projects] = await Promise.all([db.listDailyUpdates(), db.listProjects()]);
+  const scope = await requireTenantScope();
+  const db = getDataSource(scope);
+  const [updates, projects] = await Promise.all([db.listDailyUpdates(scope), db.listProjects(scope)]);
 
   const queue = updates.filter(
     (u) => u.managerApprovalStatus === 'Pending' || u.managerApprovalStatus === 'Approved Internally',

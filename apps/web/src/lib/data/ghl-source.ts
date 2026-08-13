@@ -3,7 +3,8 @@ import type { GhlConfig } from '../ghl/config.ts';
 import { GhlNotFoundError } from '../ghl/errors.ts';
 import { mapProject, type GhlRecord } from '../ghl/mapper.ts';
 import type { ProjectDataSource } from './source.ts';
-import type { Contact, DailyUpdate, Milestone, Project, Task } from './types.ts';
+import type { TenantScope } from '../tenancy.ts';
+import type { Contact, DailyUpdate, Issue, Milestone, Project, Task } from './types.ts';
 
 /**
  * Live GHL implementation of `ProjectDataSource`.
@@ -48,11 +49,11 @@ export class GhlDataSource implements ProjectDataSource {
     return response.records ?? [];
   }
 
-  async listProjects(): Promise<Project[]> {
+  async listProjects(_scope: TenantScope): Promise<Project[]> {
     return (await this.searchRecords()).map(mapProject);
   }
 
-  async getProject(buildsuiteProjectId: string): Promise<Project | null> {
+  async getProject(_scope: TenantScope, buildsuiteProjectId: string): Promise<Project | null> {
     // §3.6 — looked up by the shared key, never by name or address.
     try {
       const records = await this.searchRecords({ buildsuite_project_id: buildsuiteProjectId });
@@ -92,7 +93,7 @@ export class GhlDataSource implements ProjectDataSource {
 
   /** §1.4 — a contact may have many projects. */
   private async listProjectsForContactId(contactId: string): Promise<Project[]> {
-    const all = await this.listProjects();
+    const all = await this.listProjects({ authProfileId: contactId });
     return all.filter((p) => p.primaryContactId === contactId);
   }
 
@@ -104,15 +105,19 @@ export class GhlDataSource implements ProjectDataSource {
   // Returning empty is the honest failure mode: the screens show their empty
   // states, and nothing silently fabricates a milestone that doesn't exist.
 
-  async listMilestones(_buildsuiteProjectId: string): Promise<Milestone[]> {
+  async listMilestones(_scope: TenantScope, _buildsuiteProjectId: string): Promise<Milestone[]> {
     return [];
   }
 
-  async listTasks(_buildsuiteProjectId?: string): Promise<Task[]> {
+  async listTasks(_scope: TenantScope, _buildsuiteProjectId?: string): Promise<Task[]> {
     return [];
   }
 
-  async listDailyUpdates(_buildsuiteProjectId?: string): Promise<DailyUpdate[]> {
+  async listDailyUpdates(_scope: TenantScope, _buildsuiteProjectId?: string): Promise<DailyUpdate[]> {
+    return [];
+  }
+
+  async listIssues(_scope: TenantScope, _buildsuiteProjectId?: string): Promise<Issue[]> {
     return [];
   }
 }

@@ -72,7 +72,7 @@ test('config treats blank strings as missing and trims the trailing slash', () =
     GHL_LOCATION_ID: 'loc_123',
     GHL_PRIVATE_INTEGRATION_TOKEN: '   ',
     GHL_PROJECT_OBJECT_KEY: 'custom_objects.projects',
-  } as NodeJS.ProcessEnv);
+  } as unknown as NodeJS.ProcessEnv);
   assert.equal(result.configured, false);
   assert.deepEqual(
     result.configured === false ? result.missing : [],

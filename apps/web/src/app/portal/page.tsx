@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getSession } from '@/lib/session';
 import { getDataSource } from '@/lib/data/source';
+import { scopeOfProject } from '@/lib/scope';
 import { toClientMilestones, toClientProject, toClientUpdates } from '@/lib/client-view';
 import { Badge, Card, CardHeader, ProgressBar, currency, shortDate } from '@/components/ui';
 import type { Contact } from '@/lib/data/types';
@@ -26,7 +27,7 @@ export default async function ClientPortal({
   if (session?.role === 'client' && session.contactId !== undefined) {
     contact = await db.getContact(session.contactId);
   } else if (session?.role === 'contractor' && params.preview !== undefined) {
-    const target = await db.getProject(params.preview);
+    const target = (await db.listProjects({ authProfileId: session.authProfileId ?? '', ghlLocationId: session.ghlLocationId }).catch(() => [])).find((p) => p.buildsuiteProjectId === params.preview) ?? null;
     contact = target === null ? null : await db.getContact(target.primaryContactId);
   }
 
@@ -65,8 +66,8 @@ export default async function ClientPortal({
 
   const view = gated.view;
   const [allUpdates, allMilestones] = await Promise.all([
-    db.listDailyUpdates(project.buildsuiteProjectId),
-    db.listMilestones(project.buildsuiteProjectId),
+    db.listDailyUpdates(scopeOfProject(project), project.buildsuiteProjectId),
+    db.listMilestones(scopeOfProject(project), project.buildsuiteProjectId),
   ]);
   const updates = toClientUpdates(allUpdates, project);
   const milestones = toClientMilestones(allMilestones, project);

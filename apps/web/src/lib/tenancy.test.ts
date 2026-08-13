@@ -114,14 +114,9 @@ test('the reader has no unscoped overload to reach for', () => {
 test('a reader call with a junk scope rejects rather than returning rows', async () => {
   const reader = getBuildSuiteReader();
   if (!reader.available) return;
+  await assert.rejects(() => reader.listActiveProjects({ authProfileId: '' }), TenancyError);
   await assert.rejects(
-    // @ts-expect-error — simulating a caller that lost the scope
-    () => reader.listActiveProjects({ authProfileId: '' }),
-    TenancyError,
-  );
-  await assert.rejects(
-    // @ts-expect-error — same, for counts
-    () => reader.countByStatus(null),
+    () => reader.countByStatus(null as unknown as { authProfileId: string }),
     TenancyError,
   );
 });

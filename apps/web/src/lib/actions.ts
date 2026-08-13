@@ -12,6 +12,7 @@ import {
   VISIBILITY_SWITCHES,
 } from './data/mutations';
 import { getDataSource } from './data/source';
+import type { TenantScope } from './tenancy';
 import { execute, describe } from './workflows/executor';
 import { fixturePorts } from './workflows/fixture-ports';
 import { planFieldUpdateSubmitted } from './workflows/wf3-update-submitted';
@@ -66,11 +67,12 @@ export async function reviewUpdate(formData: FormData) {
   const action = String(formData.get('action') ?? '');
 
   if (action === 'publish') {
-    const db = getDataSource();
-    const updates = await db.listDailyUpdates();
+    const scope: TenantScope = { authProfileId: session.authProfileId ?? '', ghlLocationId: session.ghlLocationId };
+    const db = getDataSource(scope);
+    const updates = await db.listDailyUpdates(scope);
     const row = updates.find((u) => u.id === id);
     if (row === undefined) throw new Error(`update ${id} not found`);
-    const project = await db.getProject(row.projectId);
+    const project = await db.getProject(scope, row.projectId);
 
     // The PM's edit is what gets published — not what the field wrote.
     saveClientSummary(id, clientSummary);
@@ -153,7 +155,8 @@ export async function submitFieldUpdate(formData: FormData) {
     today(),
   );
 
-  const project = await getDataSource().getProject(projectId);
+  const fieldScope: TenantScope = { authProfileId: session.authProfileId ?? '', ghlLocationId: session.ghlLocationId };
+  const project = await getDataSource(fieldScope).getProject(fieldScope, projectId);
 
   const result = await execute(
     planFieldUpdateSubmitted({

@@ -39,6 +39,11 @@ export type Effect =
   | { type: 'PublishClientSummary'; buildsuiteProjectId: string; updateId: string; clientSummary: string; publishDate: string }
   | { type: 'SetProjectLastUpdated'; buildsuiteProjectId: string; date: string }
   | { type: 'AddToPortalFeed'; buildsuiteProjectId: string; updateId: string }
+  // ── WF7 ────────────────────────────────────────────────────────────────────
+  | { type: 'AssignIssueNumber'; buildsuiteProjectId: string; issueId: string; issueNumber: string }
+  | { type: 'AssignIssue'; buildsuiteProjectId: string; issueId: string; assignTo: string }
+  | { type: 'ConfirmToReporter'; buildsuiteProjectId: string; issueId: string; reporter: string; message: string }
+  | { type: 'EscalateIssue'; buildsuiteProjectId: string; issueId: string; reason: string }
   // ── Shared ─────────────────────────────────────────────────────────────────
   | { type: 'NotifyInternal'; buildsuiteProjectId: string; message: string }
   | { type: 'NotifyTeam'; buildsuiteProjectId: string; message: string }

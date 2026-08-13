@@ -1,4 +1,4 @@
-import { DAILY_UPDATES, PROJECTS } from '../data/fixtures.ts';
+import { DAILY_UPDATES, ISSUES, PROJECTS } from '../data/fixtures.ts';
 import type { Effect } from './effects.ts';
 import type { EffectHandlers } from './ports.ts';
 
@@ -52,6 +52,21 @@ export const fixturePorts: EffectHandlers = {
     const row = project(e.buildsuiteProjectId);
     if (row !== undefined) row.clientActionRequired = e.required;
   },
+
+  // ── WF7 ───────────────────────────────────────────────────────────────────
+  AssignIssueNumber: (e) => {
+    const issue = ISSUES.find((i) => i.id === e.issueId);
+    if (issue !== undefined) issue.issueNumber = e.issueNumber;
+  },
+  AssignIssue: (e) => {
+    const issue = ISSUES.find((i) => i.id === e.issueId);
+    if (issue !== undefined) {
+      issue.assignedTo = e.assignTo;
+      issue.status = 'Assigned';
+    }
+  },
+  ConfirmToReporter: (e) => log(e, `${e.reporter}: ${e.message}`),
+  EscalateIssue: (e) => log(e, e.reason),
 
   // ── No fixture equivalent yet — logged, not dropped ────────────────────────
   AddToReviewQueue: (e) => log(e, e.updateId),

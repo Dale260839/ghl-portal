@@ -1,4 +1,9 @@
-import type { ProjectStage, TaskStatus, ManagerApprovalStatus } from '@buildsuite/contracts';
+import type {
+  IssueCategory,
+  ManagerApprovalStatus,
+  ProjectStage,
+  TaskStatus,
+} from '@buildsuite/contracts';
 
 /**
  * View models for the demo surfaces. Field names mirror ARCHITECTURE §6 — the
@@ -7,6 +12,15 @@ import type { ProjectStage, TaskStatus, ManagerApprovalStatus } from '@buildsuit
  */
 
 export interface Project {
+  // ── Tenancy (D-012, D-013) ────────────────────────────────────────────────
+  /**
+   * BuildSuite's `auth_profiles.id` — the contractor who owns this project.
+   * Every read filters on it; a project without one is visible to nobody.
+   */
+  ownerAuthProfileId: string;
+  /** The GHL sub-account this project belongs to. Scopes every GHL read. */
+  ghlLocationId: string;
+
   // Identity
   buildsuiteProjectId: string;
   projectName: string;
@@ -96,6 +110,30 @@ export interface DailyUpdate {
   clientVisible: boolean;
   managerApprovalStatus: ManagerApprovalStatus;
   publishDate: string | null;
+}
+
+/** §6.7 `Project Issue`. */
+export interface Issue {
+  id: string;
+  projectId: string;
+  /** Assigned by WF7 on creation — sequential per project. */
+  issueNumber: string;
+  issueTitle: string;
+  category: IssueCategory;
+  description: string;
+  projectArea: string;
+  priority: 'Normal' | 'Urgent';
+  reportedBy: string;
+  assignedTo: string | null;
+  submittedDate: string;
+  targetResolutionDate: string | null;
+  status: 'Open' | 'Assigned' | 'In Progress' | 'Resolved' | 'Closed';
+  /** §9.3 — never client-facing. */
+  internalNotes: string;
+  /** The client-safe counterpart, published deliberately. */
+  clientUpdate: string;
+  resolution: string;
+  clientConfirmation: boolean;
 }
 
 export interface Contact {

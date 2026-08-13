@@ -1,5 +1,6 @@
 import { submitFieldUpdate } from '@/lib/actions';
 import { getDataSource } from '@/lib/data/source';
+import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, CardHeader, shortDate } from '@/components/ui';
 
 /**
@@ -16,8 +17,9 @@ export default async function FieldToday({
   searchParams: Promise<{ submitted?: string }>;
 }) {
   const { submitted } = await searchParams;
-  const db = getDataSource();
-  const [projects, tasks] = await Promise.all([db.listProjects(), db.listTasks()]);
+  const scope = await requireTenantScope();
+  const db = getDataSource(scope);
+  const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
 
   // §12.2 / §9.4 — a field user sees only assigned projects. Fixtures assign by
   // superintendent; with live data this filters on the project's Field Team.

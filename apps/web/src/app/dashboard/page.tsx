@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getDataSource } from '@/lib/data/source';
+import { requireTenantScope } from '@/lib/scope';
 import {
   Card,
   CardHeader,
@@ -11,8 +12,9 @@ import {
 } from '@/components/ui';
 
 export default async function PortfolioOverview() {
-  const db = getDataSource();
-  const [projects, updates] = await Promise.all([db.listProjects(), db.listDailyUpdates()]);
+  const scope = await requireTenantScope();
+  const db = getDataSource(scope);
+  const [projects, updates] = await Promise.all([db.listProjects(scope), db.listDailyUpdates(scope)]);
 
   const active = projects.filter(
     (p) => p.projectStage !== 'Completed' && p.projectStage !== 'Canceled',

@@ -113,6 +113,10 @@ function stage(record: GhlRecord): ProjectStage {
 
 export function mapProject(record: GhlRecord): Project {
   return {
+    // Tenancy (D-012, D-013). Blank means the record is owned by nobody and is
+    // therefore visible to nobody — the correct fail-closed default.
+    ownerAuthProfileId: str(record, 'auth_profile_id'),
+    ghlLocationId: str(record, 'location_id'),
     buildsuiteProjectId: str(record, FIELD_KEYS.buildsuiteProjectId),
     projectName: str(record, FIELD_KEYS.projectName),
     projectAddress: str(record, FIELD_KEYS.projectAddress),

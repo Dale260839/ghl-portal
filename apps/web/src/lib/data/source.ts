@@ -1,50 +1,87 @@
 import { readGhlConfig } from '../ghl/config.ts';
-import { CONTACTS, DAILY_UPDATES, MILESTONES, PROJECTS, TASKS } from './fixtures.ts';
+import { assertScope, type TenantScope } from '../tenancy.ts';
+import { CONTACTS, DAILY_UPDATES, ISSUES, MILESTONES, PROJECTS, TASKS } from './fixtures.ts';
 import { GhlDataSource } from './ghl-source.ts';
-import type { Contact, DailyUpdate, Milestone, Project, Task } from './types.ts';
+import type { Contact, DailyUpdate, Issue, Milestone, Project, Task } from './types.ts';
 
 /**
- * The seam between the app and wherever project data actually lives.
+ * The seam between the app and wherever project data lives.
  *
- * Today: fixtures. Once the integration token lands (KICKOFF §5 F3) a
- * `GhlDataSource` implements the same interface and `getDataSource()` returns it
- * instead. No screen changes — that is the entire point of the seam existing
- * before the credentials do.
+ * Two rules shape this file, both learned the hard way:
+ *
+ * **Every staff read is scoped (D-012).** `TenantScope` is a required first
+ * argument. There is no unscoped overload, so forgetting to scope is a type error
+ * rather than a leak — the live database has 43 active projects across 5
+ * contractors, and an unscoped read returns all of them.
+ *
+ * **Nothing is cached globally (D-013).** The Hub is one deployment serving many
+ * GHL sub-accounts. A module-level singleton would let the first tenant's data
+ * source serve the second, so instances are keyed by location.
  */
 export interface ProjectDataSource {
   readonly kind: 'fixture' | 'ghl';
-  listProjects(): Promise<Project[]>;
-  getProject(buildsuiteProjectId: string): Promise<Project | null>;
-  listMilestones(buildsuiteProjectId: string): Promise<Milestone[]>;
-  listTasks(buildsuiteProjectId?: string): Promise<Task[]>;
-  listDailyUpdates(buildsuiteProjectId?: string): Promise<DailyUpdate[]>;
+  listProjects(scope: TenantScope): Promise<Project[]>;
+  getProject(scope: TenantScope, buildsuiteProjectId: string): Promise<Project | null>;
+  listMilestones(scope: TenantScope, buildsuiteProjectId: string): Promise<Milestone[]>;
+  listTasks(scope: TenantScope, buildsuiteProjectId?: string): Promise<Task[]>;
+  listDailyUpdates(scope: TenantScope, buildsuiteProjectId?: string): Promise<DailyUpdate[]>;
+  listIssues(scope: TenantScope, buildsuiteProjectId?: string): Promise<Issue[]>;
   getContact(contactId: string): Promise<Contact | null>;
-  /** §1.4 — a contact may have many projects. Never returns a single project. */
+  /**
+   * Client-side read: §1.4, a contact may have many projects. Deliberately NOT
+   * tenant-scoped — a homeowner's projects can sit with any contractor, and the
+   * §9.1 gate is what constrains this one.
+   */
   listProjectsForContact(contactId: string): Promise<Project[]>;
 }
 
 class FixtureDataSource implements ProjectDataSource {
   readonly kind = 'fixture' as const;
 
-  async listProjects(): Promise<Project[]> {
-    return PROJECTS;
+  /** The tenant predicate. Built here from the asserted scope, never passed in. */
+  private owns(scope: TenantScope, context: string): (p: Project) => boolean {
+    const safe = assertScope(scope, context);
+    return (p) => p.ownerAuthProfileId === safe.authProfileId;
   }
 
-  async getProject(id: string): Promise<Project | null> {
-    return PROJECTS.find((p) => p.buildsuiteProjectId === id) ?? null;
+  async listProjects(scope: TenantScope): Promise<Project[]> {
+    return PROJECTS.filter(this.owns(scope, 'projects'));
   }
 
-  async listMilestones(id: string): Promise<Milestone[]> {
+  async getProject(scope: TenantScope, id: string): Promise<Project | null> {
+    const owns = this.owns(scope, `project ${id}`);
+    // Filter before matching, not after — a found-then-rejected lookup is one
+    // refactor away from becoming found-then-returned.
+    return PROJECTS.filter(owns).find((p) => p.buildsuiteProjectId === id) ?? null;
+  }
+
+  private async ownedIds(scope: TenantScope, context: string): Promise<Set<string>> {
+    return new Set(PROJECTS.filter(this.owns(scope, context)).map((p) => p.buildsuiteProjectId));
+  }
+
+  async listMilestones(scope: TenantScope, id: string): Promise<Milestone[]> {
+    const owned = await this.ownedIds(scope, 'milestones');
+    if (!owned.has(id)) return [];
     return MILESTONES.filter((m) => m.projectId === id).sort((a, b) => a.sequence - b.sequence);
   }
 
-  async listTasks(id?: string): Promise<Task[]> {
-    return id === undefined ? TASKS : TASKS.filter((t) => t.projectId === id);
+  async listTasks(scope: TenantScope, id?: string): Promise<Task[]> {
+    const owned = await this.ownedIds(scope, 'tasks');
+    return TASKS.filter((t) => owned.has(t.projectId) && (id === undefined || t.projectId === id));
   }
 
-  async listDailyUpdates(id?: string): Promise<DailyUpdate[]> {
-    const rows = id === undefined ? DAILY_UPDATES : DAILY_UPDATES.filter((d) => d.projectId === id);
-    return [...rows].sort((a, b) => b.updateDate.localeCompare(a.updateDate));
+  async listDailyUpdates(scope: TenantScope, id?: string): Promise<DailyUpdate[]> {
+    const owned = await this.ownedIds(scope, 'daily updates');
+    return DAILY_UPDATES.filter(
+      (d) => owned.has(d.projectId) && (id === undefined || d.projectId === id),
+    ).sort((a, b) => b.updateDate.localeCompare(a.updateDate));
+  }
+
+  async listIssues(scope: TenantScope, id?: string): Promise<Issue[]> {
+    const owned = await this.ownedIds(scope, 'issues');
+    return ISSUES.filter(
+      (i) => owned.has(i.projectId) && (id === undefined || i.projectId === id),
+    ).sort((a, b) => b.submittedDate.localeCompare(a.submittedDate));
   }
 
   async getContact(contactId: string): Promise<Contact | null> {
@@ -58,35 +95,53 @@ class FixtureDataSource implements ProjectDataSource {
   }
 }
 
-let cached: ProjectDataSource | null = null;
-
 /**
- * Live GHL when it is fully configured, fixtures otherwise.
+ * One instance per location, never one for the process (D-013).
  *
- * Deliberately all-or-nothing: a half-configured environment falls back to
- * fixtures with a warning rather than half-working. A screen showing three real
- * projects and two invented ones is worse than a screen that is clearly a demo.
+ * The key is the location, so two sub-accounts cannot share a source. The
+ * fixture source is location-independent, but it uses the same map anyway —
+ * a cache that behaves differently in development is a cache that hides the
+ * bug it was meant to prevent.
  */
-export function getDataSource(): ProjectDataSource {
-  if (cached !== null) return cached;
+const sources = new Map<string, ProjectDataSource>();
 
+const FIXTURE_KEY = '__fixtures__';
+
+export function getDataSource(scope?: TenantScope): ProjectDataSource {
   const result = readGhlConfig();
-  if (result.configured) {
-    cached = new GhlDataSource(result.config);
-  } else {
-    if (process.env.NODE_ENV !== 'test' && process.env.GHL_API_BASE_URL !== undefined) {
-      // Partially configured — worth saying out loud, since someone clearly
-      // intended live data and is about to demo fixtures instead.
-      console.warn(
-        `[data] Falling back to fixtures. Missing: ${result.missing.join(', ')}`,
-      );
+
+  if (!result.configured) {
+    if (process.env.GHL_API_BASE_URL !== undefined) {
+      console.warn(`[data] Falling back to fixtures. Missing: ${result.missing.join(', ')}`);
     }
-    cached = new FixtureDataSource();
+    const existing = sources.get(FIXTURE_KEY);
+    if (existing !== undefined) return existing;
+    const created: ProjectDataSource = new FixtureDataSource();
+    sources.set(FIXTURE_KEY, created);
+    return created;
   }
-  return cached;
+
+  // Live GHL: the instance is bound to a location, so the location must be known.
+  const locationId = scope?.ghlLocationId;
+  if (locationId === undefined || locationId.trim() === '') {
+    throw new Error(
+      'GHL is configured but the request carries no locationId — refusing to guess which sub-account (D-013)',
+    );
+  }
+
+  const existing = sources.get(locationId);
+  if (existing !== undefined) return existing;
+  const created: ProjectDataSource = new GhlDataSource({ ...result.config, locationId });
+  sources.set(locationId, created);
+  return created;
 }
 
 /** Surfaced in the UI so nobody demos fixtures believing they are live data. */
 export function isLiveData(): boolean {
-  return getDataSource().kind === 'ghl';
+  return readGhlConfig().configured;
+}
+
+/** Test seam — the per-location cache must not leak between tests either. */
+export function resetDataSources(): void {
+  sources.clear();
 }

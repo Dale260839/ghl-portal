@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { INTERNAL_FIELD_DENY_LIST } from '@buildsuite/contracts';
 import { updateVisibility } from '@/lib/actions';
 import { getDataSource } from '@/lib/data/source';
+import { requireTenantScope } from '@/lib/scope';
 import { VISIBILITY_LABELS, VISIBILITY_SWITCHES } from '@/lib/data/mutations';
 import { toClientProject } from '@/lib/client-view';
 import { Badge, Card, CardHeader, currency } from '@/components/ui';
@@ -23,8 +24,9 @@ export default async function VisibilitySettings({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const db = getDataSource();
-  const project = await db.getProject(id);
+  const scope = await requireTenantScope();
+  const db = getDataSource(scope);
+  const project = await db.getProject(scope, id);
   if (project === null) notFound();
 
   const contact = await db.getContact(project.primaryContactId);
