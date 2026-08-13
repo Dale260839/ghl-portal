@@ -1,4 +1,5 @@
 import { getBuildSuiteReader } from '@/lib/buildsuite/projects';
+import { getSession } from '@/lib/session';
 import { Badge, Card, CardHeader, StatTile, shortDate } from '@/components/ui';
 
 /**
@@ -11,6 +12,29 @@ import { Badge, Card, CardHeader, StatTile, shortDate } from '@/components/ui';
  */
 export default async function BuildSuiteProjects() {
   const reader = getBuildSuiteReader();
+  const session = await getSession();
+
+  // Tenancy: a session with no auth profile can read nothing. Failing closed
+  // matters here — the fallback for a missing tenant filter is every
+  // contractor's projects, which is the bug this guard exists to prevent.
+  if (session?.authProfileId === undefined) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-xl font-semibold tracking-tight text-navy-900">
+          Incoming from BuildSuite
+        </h1>
+        <Card className="px-5 py-10 text-center">
+          <p className="text-sm text-navy-600">
+            This account isn&apos;t linked to a BuildSuite profile.
+          </p>
+          <p className="mt-1.5 text-xs text-navy-400">
+            Projects are scoped per contractor, so there is nothing to show.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+  const scope = { authProfileId: session.authProfileId };
 
   if (!reader.available) {
     return (
@@ -32,8 +56,8 @@ export default async function BuildSuiteProjects() {
   let counts: Record<string, number> = {};
   try {
     [projects, counts] = await Promise.all([
-      reader.listActiveProjects(50),
-      reader.countByStatus(),
+      reader.listActiveProjects(scope, 50),
+      reader.countByStatus(scope),
     ]);
   } catch (error) {
     // A read failure is reported, never papered over with fixtures — a screen

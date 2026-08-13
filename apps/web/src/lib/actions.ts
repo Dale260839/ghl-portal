@@ -31,6 +31,7 @@ export async function signIn(_prev: { error?: string } | undefined, formData: Fo
     name: account.name,
     email: account.email,
     contactId: account.contactId,
+    authProfileId: account.authProfileId,
   });
 
   redirect(homeFor(account.role));

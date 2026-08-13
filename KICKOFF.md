@@ -453,6 +453,79 @@ never matches.
 
 ---
 
+### D-012 · Every read is scoped to one contractor. No global data.
+**Decided:** 2026-08-12 · **Implemented same day**
+
+A contractor sees their own projects and nobody else's. This is the §9.1 gate's
+rule one level up: §9.1 scopes *client* reads to the signed-in contact's
+projects; this scopes *staff* reads to the signed-in contractor's.
+
+**It was a measured leak, not a hypothetical one.** The live database has 43
+active projects across **5 different contractors**, and the reader returned all
+43 to whoever was signed in.
+
+**Enforced the same way the gate is — structurally.** `TenantScope` is a
+*required first argument* on every BuildSuite read, so there is no unscoped
+overload to reach for and forgetting to scope is a type error rather than a leak.
+`assertScope` fails closed: an absent or blank scope raises, because the natural
+fallback for a missing tenant filter is the entire database.
+
+The tenant filter is built inside the reader from the asserted scope, never
+passed in by a caller — a caller that can supply its own filter can supply none.
+
+**Tenant key:** `projects.auth_profile_id`, verified as the owning column;
+`user_id` and `client_id` are unpopulated. Six active projects have no owner at
+all and are therefore visible to nobody, which is the correct fail-closed
+outcome.
+
+**Verified against production:** two contractors, 26 projects and 6 projects,
+**zero overlap**.
+
+**Not yet scoped, and it needs to be:** the fixture-backed contractor dashboard
+still lists all fixture projects, and the GHL side will need the equivalent
+filter — by `GHL_LOCATION_ID` — once connected. Neither leaks real data today,
+but both are the same rule and should land before go-live.
+
+---
+
+### D-011 · Auto-login from GHL — the Hub is a GHL Custom Menu Link
+**Decided:** 2026-08-12
+
+If a user is signed in to GoHighLevel, they are signed in to the Hub. No second
+login, no password.
+
+**Mechanism:** the Hub is registered as a **GHL Custom Menu Link**, the same
+pattern BuildSuite already uses (`GET /auth/ghl_auth_callback` is documented as
+its "Custom Menu Link landing point: validates the location, resolves or
+auto-creates…"). GHL hands us the location and user context on landing; we
+validate it and mint **our own** session cookie on **our own** domain.
+
+**This resolves the conflict D-008 flagged.** We do not need `bs_session`, so we
+do not need the Hub on a `.buildsuite.ai` subdomain, so it can live at
+`projects.<contractordomain>` exactly as ARCHITECTURE §2 specifies. Same identity
+provider as BuildSuite, independent session, no cross-domain cookie — the
+browser rule that made D-006 and §2 incompatible simply stops applying.
+
+**It also supplies the tenant key.** The landing context resolves to an
+`auth_profile_id`, which is precisely what D-012's scope requires — so
+auto-login and per-contractor scoping are the same piece of work, not two.
+
+**What's needed to build it:**
+
+| Need | From |
+|---|---|
+| A GHL Custom Menu Link registered against the sub-account, pointed at our callback | Chris |
+| How GHL signs/validates the landing request — the shared secret or SSO key | Chris / GHL docs |
+| The mapping from GHL user → `auth_profiles.id` | Readable from Supabase, but confirm the join with Sing |
+| `GHL_LOCATION_ID` | Still outstanding |
+
+**Open — clients are a separate population.** Homeowners don't have GHL logins;
+they use GHL's *native* Client Portal (§12.3). Auto-login covers contractor and
+field staff. The client path still needs its own answer, and it should not be
+assumed to work the same way.
+
+---
+
 ### D-010 · `BSP-YYYY-NNNNNN` does not exist. The join key is already GHL-native.
 **Verified:** 2026-08-06, by reading BuildSuite's Supabase directly (read-only)
 

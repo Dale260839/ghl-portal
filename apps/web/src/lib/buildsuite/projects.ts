@@ -1,4 +1,5 @@
 import { BuildSuiteClient, readBuildSuiteConfig } from './client.ts';
+import { assertScope, type TenantScope } from '../tenancy.ts';
 
 /**
  * Reading BuildSuite's live projects.
@@ -130,8 +131,9 @@ export function normalizeProject(row: BuildSuiteProjectRow): BuildSuiteProject {
 
 export interface BuildSuiteReader {
   readonly available: true;
-  listActiveProjects(limit?: number): Promise<BuildSuiteProject[]>;
-  countByStatus(): Promise<Record<string, number>>;
+  /** Scope is required — there is deliberately no unscoped overload. */
+  listActiveProjects(scope: TenantScope, limit?: number): Promise<BuildSuiteProject[]>;
+  countByStatus(scope: TenantScope): Promise<Record<string, number>>;
 }
 
 export interface BuildSuiteUnavailable {
@@ -147,25 +149,35 @@ class SupabaseReader implements BuildSuiteReader {
     this.client = client;
   }
 
-  async listActiveProjects(limit = 50): Promise<BuildSuiteProject[]> {
+  /**
+   * The tenant filter is built here, from the asserted scope — never passed in
+   * by a caller. A caller that could supply its own filter could supply none.
+   */
+  private tenantFilter(scope: TenantScope, context: string): Record<string, string> {
+    const safe = assertScope(scope, context);
+    return { auth_profile_id: `eq.${safe.authProfileId}` };
+  }
+
+  async listActiveProjects(scope: TenantScope, limit = 50): Promise<BuildSuiteProject[]> {
     const rows = await this.client.select<BuildSuiteProjectRow>({
       from: 'projects',
       columns: PROJECT_COLUMNS,
-      filters: { status: 'eq.active' },
+      filters: { ...this.tenantFilter(scope, 'active projects'), status: 'eq.active' },
       order: 'updated_at.desc',
       limit,
     });
     return rows.map(normalizeProject);
   }
 
-  async countByStatus(): Promise<Record<string, number>> {
+  async countByStatus(scope: TenantScope): Promise<Record<string, number>> {
+    const tenant = this.tenantFilter(scope, 'project counts');
     // One count request per status rather than pulling every row to tally
     // client-side. Cheap, and it never transfers project data.
     const statuses = ['active', 'matched', 'new', 'draft', 'completed'] as const;
     const counts = await Promise.all(
       statuses.map(async (status) => [
         status,
-        await this.client.count('projects', { status: `eq.${status}` }),
+        await this.client.count('projects', { ...tenant, status: `eq.${status}` }),
       ] as const),
     );
     return Object.fromEntries(counts);

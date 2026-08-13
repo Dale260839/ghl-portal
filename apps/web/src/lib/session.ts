@@ -25,6 +25,16 @@ export interface Session {
   email: string;
   /** Client sessions only — the contact whose projects they may see. */
   contactId?: string;
+  /**
+   * BuildSuite's `auth_profiles.id` — the tenant key for contractor/field
+   * sessions. Every BuildSuite read is scoped to it; a session without one can
+   * read nothing (see `lib/tenancy.ts`).
+   *
+   * Real sessions will carry this from the GHL login (D-011). The demo accounts
+   * below use real ids from the live database so the scoping is genuinely
+   * demonstrated rather than simulated.
+   */
+  authProfileId?: string;
 }
 
 const COOKIE = 'bs_demo_session';
@@ -40,13 +50,26 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     role: 'contractor',
     name: 'Marcus Reyes',
     email: 'marcus@allianceproservices.com',
+    // A real auth_profiles.id from the live database — 26 active projects.
+    authProfileId: '7726102a-8e13-4006-889d-d68bc1cccd40',
     label: 'Contractor Dashboard',
     description: 'Project manager — creates and controls everything the other two views display',
+  },
+  {
+    role: 'contractor',
+    name: 'Priya Shah',
+    email: 'priya@allianceproservices.com',
+    // A different real owner — 6 active projects. Signing in as each in turn
+    // shows the tenancy scoping working against live data.
+    authProfileId: 'a4502e38-bb67-420b-a7fc-3e1bc3d99c01',
+    label: 'Contractor Dashboard (second tenant)',
+    description: 'A different contractor — proves the data is scoped, not global',
   },
   {
     role: 'field',
     name: 'Tony Alvarez',
     email: 'tony@allianceproservices.com',
+    authProfileId: '7726102a-8e13-4006-889d-d68bc1cccd40',
     label: 'Field Interface',
     description: 'Superintendent — submits updates and tasks, never publishes to the client',
   },
