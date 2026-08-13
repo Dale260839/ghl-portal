@@ -453,6 +453,63 @@ never matches.
 
 ---
 
+### D-013 · The Hub is multi-tenant across sub-accounts. Location is per-request.
+**Decided:** 2026-08-12
+
+The Hub serves premium clients who each have their own GHL sub-account, and a
+user must be able to move between sub-accounts. **One deployment, many
+locations.**
+
+**What this invalidates:** `GHL_LOCATION_ID` as a single environment variable.
+That models one deployment per sub-account, which is wrong in a way that would
+have been expensive to unpick — every read, every token lookup and every cache
+key assumes it. Location becomes **per-request context**, resolved from the
+session, exactly like the contractor scope in D-012.
+
+**Tenancy is now two-dimensional**, and both dimensions have to hold:
+
+| Dimension | Key | Scopes |
+|---|---|---|
+| GHL sub-account | `locationId` | Every GHL read — custom objects, contacts, opportunities |
+| BuildSuite contractor | `auth_profile_id` | Every Supabase read (D-012) |
+
+A request carrying one but not the other is not a valid request. Neither should
+ever fall back to "all".
+
+**Token strategy — this is the real decision.** ARCHITECTURE §2 says each
+sub-account uses its own integration token, which is fine for one build
+sub-account and doesn't survive contact with N premium clients:
+
+| Option | Reality |
+|---|---|
+| **A · A private integration token per sub-account** | Someone creates a token by hand for every client during onboarding, and we store N long-lived secrets that never rotate. Workable for 2–3 clients, unpleasant at 20, and a breach surface that grows linearly. |
+| **B · A GHL Marketplace app with OAuth** ✅ | Install once per sub-account through a proper flow; GHL issues and refreshes per-location tokens. This is the pattern GHL provides *for exactly this case*. An agency-level install can cover every sub-account under it. More setup once, then onboarding is a click. |
+
+**Recommendation: B.** A is genuinely faster to a first working sub-account and
+we can keep the current private integration token for the build account while
+developing — but the multi-tenant model should be B before the second client, or
+we'll be hand-managing secrets forever.
+
+**How switching works.** Contractors already switch sub-accounts inside GHL. With
+the Hub as an agency-level Custom Menu Link (D-011), each landing carries its own
+`{{location.id}}`, so switching in GHL and clicking through lands them in the Hub
+for *that* location. We don't need to build a switcher — we need to not cache
+across locations, which is a narrower and more testable requirement.
+
+**Consequences to carry:**
+
+1. **Nothing may be cached globally.** The data source is currently a module-level
+   singleton; it must become per-location or the first tenant's data serves the
+   second. This is the highest-risk item on the list.
+2. **Phase 6 shifts again.** The snapshot still distributes objects, fields,
+   pipeline and portal settings per sub-account, but the app is now genuinely
+   *one deployment* serving all of them — better than the per-sub-account
+   deployment D-002 implied.
+3. `GHL_LOCATION_ID` stays in `.env.example` only as a **development default**
+   for working against the build sub-account, clearly labelled as such.
+
+---
+
 ### D-012 · Every read is scoped to one contractor. No global data.
 **Decided:** 2026-08-12 · **Implemented same day**
 
