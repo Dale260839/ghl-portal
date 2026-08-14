@@ -2,6 +2,8 @@ import 'server-only';
 
 import { cookies } from 'next/headers';
 
+import { resolveSessionSecret, sign, verify } from './auth/session-crypto.ts';
+
 /**
  * DEMO AUTHENTICATION — placeholder, not a security boundary.
  *
@@ -39,7 +41,8 @@ export interface Session {
   ghlLocationId?: string;
 }
 
-const COOKIE = 'bs_demo_session';
+const COOKIE = 'bs_session_hub';
+const SESSION_TTL_SECONDS = 60 * 60 * 8;
 
 export interface DemoAccount extends Session {
   label: string;
@@ -95,24 +98,25 @@ export function accountForEmail(email: string): DemoAccount | undefined {
 
 export async function getSession(): Promise<Session | null> {
   const raw = (await cookies()).get(COOKIE)?.value;
-  if (raw === undefined) return null;
-  try {
-    const parsed = JSON.parse(raw) as Session;
-    if (parsed.role !== 'contractor' && parsed.role !== 'field' && parsed.role !== 'client') {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
+  const result = verify<Session>(raw, resolveSessionSecret());
+  if (!result.valid) return null;
+
+  const { role } = result.payload;
+  if (role !== 'contractor' && role !== 'field' && role !== 'client') return null;
+  return result.payload;
 }
 
 export async function setSession(session: Session): Promise<void> {
-  (await cookies()).set(COOKIE, JSON.stringify(session), {
+  const token = sign({ ...session }, resolveSessionSecret(), { ttlSeconds: SESSION_TTL_SECONDS });
+  (await cookies()).set(COOKIE, token, {
+    // Signed, so tampering is detectable — but still httpOnly and, in
+    // production, Secure. Defence in depth: the signature is the guarantee,
+    // these reduce how often it has to be relied on.
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
-    maxAge: 60 * 60 * 8,
+    maxAge: SESSION_TTL_SECONDS,
   });
 }
 

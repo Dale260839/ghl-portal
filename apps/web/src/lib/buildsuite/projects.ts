@@ -134,6 +134,15 @@ export interface BuildSuiteReader {
   /** Scope is required — there is deliberately no unscoped overload. */
   listActiveProjects(scope: TenantScope, limit?: number): Promise<BuildSuiteProject[]>;
   countByStatus(scope: TenantScope): Promise<Record<string, number>>;
+  /**
+   * Resolves the tenant key for a signed-in GHL user (D-011).
+   *
+   * Deliberately NOT tenant-scoped — it runs *before* a scope exists, at the
+   * moment of establishing one. That makes it the one read in the system that
+   * can look across contractors, so it returns a single id and nothing else:
+   * no names, no projects, no rows a caller could enumerate.
+   */
+  findAuthProfileId(identity: { email: string; locationId?: string }): Promise<string | null>;
 }
 
 export interface BuildSuiteUnavailable {
@@ -167,6 +176,35 @@ class SupabaseReader implements BuildSuiteReader {
       limit,
     });
     return rows.map(normalizeProject);
+  }
+
+  async findAuthProfileId(identity: { email: string; locationId?: string }): Promise<string | null> {
+    const email = identity.email.trim().toLowerCase();
+    if (email === '') return null;
+
+    // `auth_profiles` carries `location_id`, so the match is scoped to the
+    // sub-account the landing came from — not email alone. The same person
+    // legitimately having a profile in two sub-accounts would otherwise be
+    // ambiguous, and ambiguity here means the wrong tenant.
+    const filters: Record<string, string> = { email: `eq.${email}` };
+    if (identity.locationId !== undefined && identity.locationId.trim() !== '') {
+      filters.location_id = `eq.${identity.locationId.trim()}`;
+    }
+
+    const rows = await this.client.select<{ id: string }>({
+      from: 'auth_profiles',
+      // Only the id. This read crosses tenants by necessity, so it returns the
+      // minimum that establishes one and nothing that could be harvested.
+      columns: ['id'],
+      filters,
+      limit: 2,
+    });
+
+    // Two matches means the join isn't unique. Picking one would silently put
+    // someone in the wrong tenant — the worst outcome available here, and a
+    // silent one. Refusing produces a support ticket instead of a breach.
+    if (rows.length !== 1) return null;
+    return rows[0]?.id ?? null;
   }
 
   async countByStatus(scope: TenantScope): Promise<Record<string, number>> {
