@@ -51,6 +51,9 @@ export const PROJECTS: Project[] = [
     showDetailedPricing: false,
     showScheduleToClient: true,
     showAssignedTeam: true,
+    allowClientMessaging: true,
+    allowIssueSubmission: true,
+    allowFileUploads: false,
   },
   {
     ownerAuthProfileId: '7726102a-8e13-4006-889d-d68bc1cccd40',
@@ -92,6 +95,9 @@ export const PROJECTS: Project[] = [
     showDetailedPricing: false,
     showScheduleToClient: true,
     showAssignedTeam: true,
+    allowClientMessaging: true,
+    allowIssueSubmission: true,
+    allowFileUploads: false,
   },
   {
     ownerAuthProfileId: '7726102a-8e13-4006-889d-d68bc1cccd40',
@@ -133,6 +139,9 @@ export const PROJECTS: Project[] = [
     showDetailedPricing: true,
     showScheduleToClient: true,
     showAssignedTeam: false,
+    allowClientMessaging: true,
+    allowIssueSubmission: true,
+    allowFileUploads: false,
   },
   {
     ownerAuthProfileId: 'a4502e38-bb67-420b-a7fc-3e1bc3d99c01',
@@ -174,6 +183,9 @@ export const PROJECTS: Project[] = [
     showDetailedPricing: false,
     showScheduleToClient: true,
     showAssignedTeam: true,
+    allowClientMessaging: true,
+    allowIssueSubmission: true,
+    allowFileUploads: false,
   },
   {
     ownerAuthProfileId: 'a4502e38-bb67-420b-a7fc-3e1bc3d99c01',
@@ -215,6 +227,9 @@ export const PROJECTS: Project[] = [
     showDetailedPricing: false,
     showScheduleToClient: true,
     showAssignedTeam: true,
+    allowClientMessaging: true,
+    allowIssueSubmission: true,
+    allowFileUploads: false,
   },
   {
     ownerAuthProfileId: 'a4502e38-bb67-420b-a7fc-3e1bc3d99c01',
@@ -256,6 +271,9 @@ export const PROJECTS: Project[] = [
     showDetailedPricing: false,
     showScheduleToClient: false,
     showAssignedTeam: false,
+    allowClientMessaging: true,
+    allowIssueSubmission: true,
+    allowFileUploads: false,
   },
 ];
 

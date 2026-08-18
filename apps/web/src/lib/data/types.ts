@@ -69,6 +69,9 @@ export interface Project {
   showDetailedPricing: boolean;
   showScheduleToClient: boolean;
   showAssignedTeam: boolean;
+  allowClientMessaging: boolean;
+  allowIssueSubmission: boolean;
+  allowFileUploads: boolean;
 }
 
 export interface Milestone {
@@ -142,4 +145,68 @@ export interface Contact {
   email: string;
   /** A contact MAY have many projects (§1.4). */
   projectIds: string[];
+}
+
+// ── Client-portal entities (Phase A, from the client demo) ──────────────────
+
+/** §6.8 `Project Message`. Threaded, and relatable to a specific item. */
+export interface Message {
+  id: string;
+  projectId: string;
+  threadId: string;
+  threadCategory: string;
+  sender: string;
+  senderRole: string;
+  /** True when the client wrote it. */
+  fromClient: boolean;
+  message: string;
+  sentDate: string;
+  clientVisible: boolean;
+  /** §6.8 relations — what "Ask Question" attaches a message to. */
+  relatedTaskId?: string;
+  relatedChangeOrderId?: string;
+  relatedIssueId?: string;
+}
+
+/** Documents surfaced to the client. §12.3 routing decision still open. */
+export interface ProjectDocument {
+  id: string;
+  projectId: string;
+  name: string;
+  category: 'Contracts' | 'Permits' | 'Plans' | 'Warranties' | 'Change Orders' | 'Other';
+  uploadedDate: string;
+  url: string;
+  clientVisible: boolean;
+}
+
+/** Photos from the field. Sourced from daily updates and completed tasks. */
+export interface ProjectPhoto {
+  id: string;
+  projectId: string;
+  caption: string;
+  url: string;
+  takenDate: string;
+  /** Which update or task it came from — photos are never orphaned. */
+  sourceLabel: string;
+  clientVisible: boolean;
+}
+
+/**
+ * A scheduled appointment as the client sees it. Derived from §6.3 tasks, but
+ * with the two things the demo adds: access confirmation and a location.
+ */
+export interface ScheduleItem {
+  id: string;
+  projectId: string;
+  title: string;
+  scheduledDate: string;
+  timeWindow: string;
+  crew: string;
+  location: string;
+  status: 'Confirmed' | 'Scheduled' | 'Tentative';
+  /** Client-facing note — "please keep the driveway clear". */
+  clientNote: string;
+  /** PROVISIONAL (new in the demo, not in the architecture). */
+  accessConfirmed: boolean;
+  clientVisible: boolean;
 }

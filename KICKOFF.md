@@ -453,6 +453,39 @@ never matches.
 
 ---
 
+### D-014 · The Hub owns its own tables in Supabase
+**Decided:** 2026-08-14
+
+The Hub stores its operational records — milestones, schedule, daily updates,
+messages, documents, photos — in **new tables it creates**, prefixed `hub_`.
+
+**Rules, non-negotiable:** create only. No `ALTER`, no `DROP`, no change to any
+BuildSuite table. The `hub_` prefix makes ownership obvious and prevents any
+collision with a future BuildSuite table.
+
+**Why this is a departure.** §1.2 has GoHighLevel owning these records after
+handoff. GHL custom objects are still unreachable — we hold a private
+integration key but no object key — and the client needs these screens now.
+Storing them here removes that dependency. If GHL later becomes the system of
+record, these tables are the migration source rather than wasted work.
+
+**Two things this migration gets right that the existing schema does not:**
+
+1. **RLS enabled, deny-by-default, on every table.** The publishable key can
+   already read `contractors` including names and phone numbers because those
+   tables have no RLS. We are not repeating that. The Hub reaches its own tables
+   through the service role from its own server, where the §9.1 gate and tenant
+   scoping are enforced in tested application code.
+2. **Both tenancy keys on every row** — `auth_profile_id` and `project_id` — so
+   a row cannot be read without knowing whose it is.
+
+**Cannot be run by the app.** The publishable key cannot execute DDL, which is
+correct: a running application should never be able to change its own schema.
+`supabase/migrations/0001_hub_tables.sql` needs the service-role key or the SQL
+editor, and it needs Sing's sign-off — it is his database.
+
+---
+
 ### D-013 · The Hub is multi-tenant across sub-accounts. Location is per-request.
 **Decided:** 2026-08-12
 

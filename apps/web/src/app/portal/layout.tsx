@@ -1,8 +1,24 @@
 import { redirect } from 'next/navigation';
-import { signOut } from '@/lib/actions';
+import { headers } from 'next/headers';
 import { getSession } from '@/lib/session';
-import { isLiveData } from '@/lib/data/source';
+import { getDataSource, isLiveData } from '@/lib/data/source';
+import { AppShell, type NavItem } from '@/components/app-shell';
 import { DataModeBanner } from '@/components/ui';
+import {
+  IconBudget,
+  IconChangeOrders,
+  IconCompletion,
+  IconDashboard,
+  IconDesigns,
+  IconDocuments,
+  IconIssues,
+  IconMessages,
+  IconPayments,
+  IconPhotos,
+  IconSchedule,
+  IconTimeline,
+  IconUpdates,
+} from '@/components/nav-icons';
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -11,39 +27,60 @@ export default async function PortalLayout({ children }: { children: React.React
   // project's own contact, so previewing proves the rule rather than skipping it.
   if (session.role !== 'client' && session.role !== 'contractor') redirect('/');
 
+  // The context bar names the project the client is looking at — the demo puts
+  // it top-left and it's the fastest orientation cue on the page.
+  const db = getDataSource();
+  let contextTitle = 'Your project';
+  let contextSubtitle: string | undefined;
+
+  if (session.role === 'client' && session.contactId !== undefined) {
+    const projects = await db.listProjectsForContact(session.contactId);
+    const first = projects[0];
+    if (first !== undefined) {
+      contextTitle = first.projectName;
+      contextSubtitle = first.projectAddress;
+    }
+  }
+
+  const nav: NavItem[] = [
+    { href: '/portal', label: 'Dashboard', icon: IconDashboard },
+    { href: '/portal/timeline', label: 'Project Timeline', icon: IconTimeline },
+    { href: '/portal/schedule', label: 'Schedule', icon: IconSchedule },
+    { href: '/portal/updates', label: 'Daily Updates', icon: IconUpdates },
+    { href: '/portal/designs', label: 'Designs & Selections', icon: IconDesigns },
+    { href: '/portal/budget', label: 'Budget & Pricing', icon: IconBudget },
+    { href: '/portal/change-orders', label: 'Change Orders', icon: IconChangeOrders },
+    { href: '/portal/documents', label: 'Documents', icon: IconDocuments },
+    { href: '/portal/photos', label: 'Photos & Videos', icon: IconPhotos },
+    { href: '/portal/messages', label: 'Messages', icon: IconMessages },
+    { href: '/portal/issues', label: 'Issues & Requests', icon: IconIssues },
+    { href: '/portal/payments', label: 'Payments', icon: IconPayments },
+    { href: '/portal/completion', label: 'Completion & Warranty', icon: IconCompletion },
+  ];
+
+  const activeHref = (await headers()).get('x-pathname') ?? '/portal';
+
   return (
-    <div className="min-h-dvh bg-white">
-      <DataModeBanner live={isLiveData()} />
-
-      {session.role === 'contractor' && (
-        <div className="bg-navy-900 px-4 py-1.5 text-center text-xs text-navy-100">
-          Contractor preview — showing exactly what the client is served, through the same gate.
-        </div>
-      )}
-
-      <header className="border-b border-navy-100">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
-          <div>
-            <div className="text-sm font-semibold tracking-tight text-navy-900">
-              Alliance Pro Services
+    <AppShell
+      brand="BuildSuite"
+      brandSuffix="Client Portal"
+      contextTitle={contextTitle}
+      contextSubtitle={contextSubtitle}
+      nav={nav}
+      activeHref={activeHref}
+      userName={session.name}
+      banner={
+        <>
+          <DataModeBanner live={isLiveData()} />
+          {session.role === 'contractor' && (
+            <div className="bg-navy-900 px-4 py-1.5 text-center text-xs text-navy-100">
+              Contractor preview — showing exactly what the client is served, through the same gate.
             </div>
-            <div className="text-xs text-navy-400">Project Portal</div>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden text-xs text-navy-400 sm:block">{session.name}</span>
-            <form action={signOut}>
-              <button
-                type="submit"
-                className="rounded-md border border-navy-100 px-2.5 py-1.5 text-xs font-medium text-navy-600 transition hover:bg-navy-50"
-              >
-                Sign out
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-4xl px-4 py-7 sm:px-6">{children}</main>
-    </div>
+          )}
+        </>
+      }
+    >
+      {children}
+    </AppShell>
   );
 }

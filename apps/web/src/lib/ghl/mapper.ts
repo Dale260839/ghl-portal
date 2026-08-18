@@ -159,5 +159,8 @@ export function mapProject(record: GhlRecord): Project {
     showDetailedPricing: bool(record, FIELD_KEYS.showDetailedPricing),
     showScheduleToClient: bool(record, FIELD_KEYS.showScheduleToClient),
     showAssignedTeam: bool(record, FIELD_KEYS.showAssignedTeam),
+    allowClientMessaging: bool(record, 'allow_client_messaging'),
+    allowIssueSubmission: bool(record, 'allow_issue_submission'),
+    allowFileUploads: bool(record, 'allow_file_uploads'),
   };
 }
