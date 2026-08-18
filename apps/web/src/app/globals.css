@@ -1,0 +1,36 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-navy-50: #f1f5fb;
+  --color-navy-100: #dde7f5;
+  --color-navy-200: #c0d2ec;
+  --color-navy-400: #5b7fb8;
+  --color-navy-600: #24467f;
+  --color-navy-700: #1b3563;
+  --color-navy-800: #142a4f;
+  --color-navy-900: #0a1f44;
+  --color-navy-950: #061530;
+
+  --color-amber-accent: #f0870f;
+  --color-amber-soft: #fff4e4;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-navy-50);
+  color: var(--color-navy-900);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular figures keep currency columns from jittering between rows. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

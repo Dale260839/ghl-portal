@@ -1,0 +1,73 @@
+﻿BuildSuite Three-Experience Architecture
+Technical Review and Build Plan
+Prepared by Sing  |  July 17, 2026
+1. Summary
+This is the right architecture and I recommend we build it. Keeping BuildSuite focused on scopes, proposals, takeoffs, and profit, then handing the signed project to a GHL-native tracking system, is cleaner than building tracking into BuildSuite. The data foundation comes first, the contractor dashboard before the client portal, and the field-to-manager-to-client approval path protects contractors from publishing anything unpolished. The portal prototype already matches the plan almost exactly. What stands between the prototype and a live product is the data layer, and there are two cheap tests we should run before any heavy building.
+2. What the Architecture Gets Right
+* One shared project record, three controlled views. The Custom Object foundation with per-item client visibility toggles is the correct backbone.
+* The publishing approval path. Field submits, contractor reviews and edits the client summary, then publishes. Internal notes never reach the client. This one rule prevents most of the ways tracking systems embarrass contractors.
+* Build order. Contractor dashboard first, client portal last, because the dashboard creates and controls everything the other two display.
+* Phased versions. Launching with overview, stages, updates, photos, and documents, then adding selections and change orders, keeps version one shippable.
+* Snapshot distribution. Build once, deploy to every contractor sub-account, optionally as a paid add-on. This is the multiplier.
+3. How BuildSuite Connects
+The portal never needs to talk to BuildSuite directly. GHL sits in the middle and BuildSuite’s side of the bridge is mostly already built:
+* Send to CRM is the handoff trigger and it already works. The proposal lands in the contractor’s sub-account, creates the client contact, and goes out for signature. Workflow 1 (New Project Setup) hangs directly off this.
+* I will extend the handoff to stamp the project identity. Project name, address, contract amount, and a shared BuildSuite project ID written onto the contact in the same call. The workflow reads those fields and creates the Project record. About a day of work on my side.
+* Stage sync back into BuildSuite. A scheduled job reads each project’s pipeline stage by the shared ID and updates the contractor’s My Projects view, the "update every hour" idea. Straightforward once the pipeline exists.
+* Everything else is created inside GHL after handoff. Milestones, tasks, daily updates, change orders, and invoices come from the contractor, the field team, and the workflows, not from BuildSuite. That separation is what keeps both systems clean.
+4. Client Portal Prototype, Review Findings
+I tested the AI Studio prototype page by page, including on mobile. It is genuinely good: the action-required queue, change order cards with cost and schedule impact, the budget view showing only client-safe numbers, daily updates with acknowledge and comment, and the navigation collapses properly on a phone. To go from demo to product it needs:
+* The data foundation. Every screen is sample data today; the custom objects have to exist before anything can go live.
+* Real login through GHL’s native client portal, filtered to the signed-in contact, with Pay Now routed through native GHL invoices.
+* A project switcher, since one client can eventually have multiple projects.
+* The approve and message buttons wired to the workflows (change order approval, selection approval, messaging).
+5. Verify Before Building Big
+Two cheap tests decide the whole build. I recommend running both before creating all nine objects and thirteen screens:
+Test
+	Why it matters
+	Effort
+	Create ONE test custom object and push it through a snapshot to a test sub-account. Confirm the object, fields, and associations arrive intact.
+	The entire per-contractor rollout rides on snapshots carrying custom objects. If they do not transfer, we need a per-account setup script instead, and we want to know that on day one.
+	~10 minutes
+	Wire ONE real field (for example progress percentage) from a live custom object record into the prototype dashboard.
+	Proves AI Studio can display live per-client data. This is the only piece of the plan nobody has tested yet.
+	~1 hour
+	
+
+Also confirm Custom Objects and the native Client Portal are available on the GHL plan tier our contractor sub-accounts sit on, not just at the agency view.
+6. Security Guardrails
+* Anything beyond read-only summary info requires the authenticated portal login. Email plus project ID alone is fine as a lookup convenience but must not gate approvals, money, or documents.
+* Internal notes, vendor costs, markups, and margins never render in the client experience, and the prototype already respects this. Keep it enforced at the data layer with the Client Visible flags, not just in the UI.
+* The new system should live in a clean dedicated sub-account with its own integration token, then deploy into Alliance Pro Services as the first live test. Clean snapshot source, no tangling with live data.
+7. Recommended Build Order and Timeline
+Step
+	What ships
+	Owner
+	1
+	The two verification tests from section 5
+	Chris + Pat
+	2
+	Project custom object + BuildSuite Project Lifecycle pipeline
+	Chris + Pat
+	3
+	Workflow 1 (New Project Setup) and Workflow 2 (Stage Sync)
+	Dale
+	4
+	Send to CRM handoff extension (project ID, name, address, contract amount)
+	Sing
+	5
+	Contractor dashboard Overview + Projects screens wired to real data
+	Chris + AI Studio
+	6
+	Native Client Portal enabled + prototype connected for the client view
+	Chris + Pat
+	7
+	Daily updates + field interface, then remaining Version 1 items
+	All
+	
+
+Steps 1 through 6 are the demoable slice: sign a proposal in BuildSuite, the project appears, the stage moves, the client sees progress. Realistically that slice is 1 to 2 weeks of combined effort if the two tests pass. The full Version 1 as written is more like 3 to 5 weeks, with the main stretch risks being AI Studio’s live data wiring and snapshot behavior. If either test fails we adjust the approach before losing time, which is the point of running them first.
+8. Open Decisions
+* Packaging: is the client portal a paid add-on or bundled into higher plan tiers? Affects how we gate it per sub-account.
+* Master project ID: I recommend BuildSuite’s project ID as the single shared key across BuildSuite, GHL, and Supabase.
+* Sub-account: confirm the dedicated build sub-account approach and I will set up the integration token for it.

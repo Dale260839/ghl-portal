@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Secrets — GHL integration tokens are per-sub-account (ARCHITECTURE §2)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Next.js
+.next/
+out/
+next-env.d.ts

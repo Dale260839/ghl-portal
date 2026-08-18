@@ -1,0 +1,298 @@
+﻿BuildSuite™  |  Development & Kickoff Plan
+BuildSuite™
+Three-Experience Platform
+Development Phases & Project Kickoff Plan
+
+
+A single shared project record, three controlled experiences — Contractor Dashboard, Field Interface, and Client Portal — built on GoHighLevel, fed by BuildSuite at handoff.
+
+
+Prepared as a build-readiness document   •   Version 1.0
+Date: July 30, 2026
+Status: Pre-kickoff — validation sprint gates the full build
+________________
+
+
+1. Purpose of This Document
+This document turns the approved architecture and technical review into an actionable kickoff plan. It states what must be prepared before any heavy building begins, the exact validation tests that gate the project, and the phased development sequence from data foundation to a distributable deployment package.
+Read this before starting: the plan is deliberately front-loaded with two cheap tests. If either fails, the approach changes before time is spent building nine objects and dozens of screens. Nothing in Phase 1 onward starts until Phase 0 passes.
+2. What We Are Building
+BuildSuite stays focused on estimating, proposals, takeoffs, and profitability. Once a proposal is signed, the project is handed off to GoHighLevel (GHL), which runs everything operational — tracking, workflows, communication, approvals, documents, and payments. The three user experiences are not three separate systems. They are three permission-controlled views of one shared GHL project record.
+
+
+
+
+	The integration boundary
+BuildSuite  →  (Send to CRM handoff)  →  GHL Project Record  →  Contractor Dashboard · Field Interface · Client Portal
+The portals never talk to BuildSuite directly. The handoff is the bridge; GHL owns all operational records created after it.
+	
+
+The three experiences
+Experience
+	Who uses it
+	What it does
+	Build order
+	Contractor Dashboard
+	Owners, PMs,
+estimators,
+designers, admin
+	Creates & controls projects, stages,
+tasks, budgets, approvals; decides
+what becomes client-visible
+	1st
+(control center)
+	Field Interface
+	Superintendents,
+crew leaders,
+subs, field users
+	Submit daily updates, tasks, photos,
+issues, deliveries — submits only,
+never publishes to the client
+	2nd
+	Client Portal
+	Homeowners,
+owners,
+investors
+	Track progress, approve selections &
+change orders, review pricing, pay
+invoices, message the contractor
+	3rd
+(depends on both)
+	
+
+Why this order: the Contractor Dashboard creates and controls all the information the other two experiences display, so it is built first. The Client Portal is built last because it can only show contractor-approved content.
+________________
+
+
+3. Guiding Principles (Non-Negotiable)
+These rules are enforced at the data layer, not just the UI, and hold across every phase.
+* One record, three views. The Project Custom Object is the single backbone; visibility is controlled per item, not per system.
+* The publishing approval path. Field submits → contractor reviews and edits the client summary → contractor publishes. Field updates are never auto-published to the client.
+* The client-facing rule. A record reaches the client only when Client Visible = Yes AND Manager Approval = Approved. Anything else stays internal.
+* Authenticated access for anything that matters. Email + project ID is a lookup convenience only. It must never gate approvals, money, or documents — those require GHL portal login.
+* Internal data never crosses the boundary. Internal notes, vendor cost, internal labor cost, markup, margin, profit, private messages, and risk assessments are never passed into any client response.
+* One shared key. The BuildSuite Project ID is the master identifier across BuildSuite, GHL, and Supabase. Names and addresses change; the ID does not.
+* Build shippable slices. Prove the data chain end-to-end before widening scope. Do not build the full accounting, warranty, vendor, and reporting sections until the core connection works.
+4. Pre-Kickoff Preparation
+Complete these items before Phase 0 so the validation sprint isn't blocked. Nothing here requires building the product — it is access, confirmation, and decisions.
+4.1 Accounts & environment
+* Create a clean, dedicated master build sub-account (e.g. “BuildSuite™ Development / Template”). All custom objects, pipeline, workflows, AI Studio apps, forms, and portal setup live here — kept separate from live client data.
+* Provision a test contractor sub-account to receive the snapshot in Phase 0.
+* Confirm Alliance Pro Services as the first live implementation target (used after the build sub-account is proven).
+* Generate a dedicated integration token for the build sub-account (owner: Sing).
+4.2 Plan-tier confirmations (do this first — it can block everything)
+
+
+	Confirm on the actual contractor sub-account tier, not just the agency view:
+•  GHL Custom Objects are available on the plan tier the contractor sub-accounts sit on.
+•  The native GHL Client Portal is available on that same tier.
+•  Snapshots on that tier can carry Custom Objects, their fields, and associations.
+	4.3 Team & ownership
+Name / role
+	Owns in this project
+	Sing — integration lead
+	Send to CRM handoff extension, integration token,
+shared Project ID standard
+	Chris + Pat — GHL build
+	Validation tests, Project object + pipeline,
+dashboard data wiring, portal enablement
+	Dale — workflows
+	New Project Setup & Stage Sync workflows (and later automation)
+	AI Studio — interfaces
+	Contractor dashboard & client portal front-ends, live-data wiring
+	All
+	Field interface + remaining Version 1 items
+	4.4 Decisions to lock before Phase 1
+These don't block Phase 0 but must be settled before the full build (also tracked in Section 10):
+* Packaging: is the Client Portal a paid add-on or bundled into higher plan tiers? Determines per-sub-account gating.
+* Confirm BuildSuite Project ID as the single master key across all systems.
+* Confirm the dedicated build sub-account approach so the integration token can be set up.
+4.5 Reference material to have on hand
+* The AI Studio client portal prototype (already close to the target experience).
+* The full field list for the Project object and supporting objects (Section 9 summarizes; source architecture doc has the complete list).
+* The 20-stage BuildSuite™ Project Lifecycle pipeline definition.
+________________
+
+
+5. Phase 0 — Validation Sprint (Go / No-Go)
+Run both tests before creating all the objects and screens. These are the two things nobody has proven yet, and together they decide whether the whole distribution and live-data model works. Owner: Chris + Pat.
+Test A — Snapshot transfer
+Effort: ~10 minutes.   Why it matters: the entire per-contractor rollout rides on snapshots carrying custom objects. If they don't transfer, we need a per-account setup script instead — and we want to know that on day one.
+Create a Custom Object “BuildSuite Test Project” with fields: Project Name, BuildSuite Project ID, Progress Percentage, Project Stage, Client Visible; plus one association to Contact. Then:
+1. Add it to the master build sub-account and create/update the snapshot.
+2. Push the snapshot into the test contractor sub-account.
+3. Confirm the object, fields, and associations all arrive intact.
+4. Confirm workflows can reference the transferred object.
+Test B — AI Studio live data
+Effort: ~1 hour.   Why it matters: proves AI Studio can display live per-client data — the only piece of the plan nobody has tested. It's the difference between a visual demo and a real portal.
+Create one real record and wire a single field into the prototype:
+
+
+	
+
+Project Name: Johnson Kitchen Remodel     BuildSuite Project ID: BSP-TEST-001
+Progress Percentage: 62     Project Stage: In Progress     Client Visible: Yes
+Then update Progress 62 → 70 and confirm the AI Studio dashboard reflects the change live.
+	
+
+
+
+	Gate
+If both tests pass → proceed to Phase 1 and build the full Project object, first two workflows, and initial dashboard screens.
+If Test A fails → replace snapshot distribution with a per-account setup script / deployment checklist.
+If Test B fails → rethink the live-data wiring approach before building any client-facing screens.
+	________________
+
+
+6. Development Phases
+Each phase produces something demonstrable. Phases 1–4 together deliver the demoable core; Phases 5–6 complete Version 1 and package it for distribution.
+Phase 1 — Shared data foundation
+Goal: the one record everything reads from exists and is correct. Owner: Chris + Pat.
+* Create the Project Custom Object with the demoable-core field set (Section 9) — identity, status, dates, financials, and client-visibility flags.
+* Create the BuildSuite™ Project Lifecycle pipeline (20 stages, New Project → Warranty, plus On Hold / Canceled).
+* Establish associations: Contact → Project, and Project → Opportunity / Company / team roles. Design for one contact having multiple projects — never assume one contact equals one project.
+* Add supporting objects (Milestone, Task, Daily Update, Selection, Change Order, Issue, Message, Punch List, Warranty) as needed — but only what the current phase uses.
+Phase 2 — Workflows & the BuildSuite handoff
+Goal: a signed proposal automatically becomes a live GHL project that stays in sync. Owners: Dale (workflows), Sing (handoff).
+* Extend Send to CRM to stamp project identity onto the contact in the same call: project name, address, contract amount, and the shared BuildSuite Project ID (~1 day, Sing).
+* Workflow 1 — New Project Setup: on estimate approved / project created, create the Project record, associate contact and opportunity, assign PM, seed default milestones/tasks, set progress to 10%, prepare portal access.
+* Workflow 2 — Project Stage Sync: on opportunity stage change, update the Project's stage, progress, current/next milestone, and notify appropriately.
+* Stage sync back into BuildSuite: a scheduled job reads each project's pipeline stage by shared ID and updates the contractor's My Projects view (the “update every hour” idea).
+Phase 3 — Contractor Dashboard (real data)
+Goal: the control center shows and drives live projects. Owners: Chris + AI Studio.
+* Build the initial screens only: Portfolio Overview, Projects List, Project Overview, Project Timeline, Daily Update Review, Client Visibility Settings.
+* Wire Overview and Projects to real Project records first, then layer the rest.
+* Defer the full accounting, warranty, vendor, and reporting sections until the core connection is solid.
+Phase 4 — Client Portal (connected)
+Goal: clients see live, approved progress through a secure login. Owners: Chris + Pat.
+* Enable GHL's native Client Portal; route contracts, estimates, invoices, receipts, and payments through it (Pay Now → native GHL invoices).
+* Connect the AI Studio prototype as the richer project-tracking experience, filtered to the signed-in contact.
+* Add the missing pieces the prototype needs: real authentication, live project data, project switcher (multi-project clients), and wired approve / message buttons.
+* Enforce Client Visible = Yes AND Manager Approval = Approved on every view; strip internal fields at the data layer.
+Phase 5 — Field Interface & remaining Version 1
+Goal: the field can submit, and the review-then-publish loop is complete. Owner: All.
+* Build the minimal field app: assigned projects, today's tasks, start/complete task, daily update form, photo upload, report issue, submit to PM.
+* Keep the flow strict: Field submits → PM reviews → PM edits client summary → PM publishes → client receives.
+* Complete remaining Version 1 items: schedule, tasks, documents, client messages, issues, and a basic financial summary.
+* Defer to later versions: time tracking, materials inventory, delivery management, offline mode, subcontractor access, detailed budgets, and change-order/selection automation.
+Phase 6 — Deployment package & distribution
+Goal: build once, deploy to every contractor sub-account. This is the multiplier.
+* Once proven in the build sub-account and validated in Alliance Pro Services, package everything into a reusable snapshot: custom objects, fields, pipeline, workflows, forms, calendars, document/contract templates, email & SMS templates, AI Studio experiences, portal settings, roles, and sample data.
+* Distribute per contractor sub-account — optionally gated as a paid add-on per the packaging decision.
+________________
+
+
+7. Recommended Build Order & Owners
+Steps 1–6 are the demoable slice: sign a proposal in BuildSuite, the project appears, the stage moves, the client sees progress.
+Step
+	What ships
+	Owner
+	1
+	The two validation tests (Phase 0)
+	Chris + Pat
+	2
+	Project custom object + BuildSuite Project
+Lifecycle pipeline
+	Chris + Pat
+	3
+	Workflow 1 (New Project Setup) & Workflow 2 (Stage Sync)
+	Dale
+	4
+	Send to CRM handoff extension (project ID,
+name, address, contract amount)
+	Sing
+	5
+	Contractor dashboard Overview + Projects
+wired to real data
+	Chris + AI Studio
+	6
+	Native Client Portal enabled + prototype
+connected for the client view
+	Chris + Pat
+	7
+	Daily updates + field interface, then remaining V1 items
+	All
+	8. Timeline & Risk
+Milestone
+	Estimate
+	Condition
+	Validation sprint (Phase 0)
+	~1 hour of work
+	Run before anything else
+	Demoable slice (Steps 1–6)
+	1–2 weeks combined
+	If both tests pass
+	Full Version 1 (as written)
+	3–5 weeks
+	Full field + V1 feature set
+	
+
+Main stretch risks: AI Studio's live-data wiring and snapshot behavior — which is exactly why both are tested first. If either test fails, the approach is adjusted before time is lost.
+________________
+
+
+9. Data Model — Demoable Core
+Start with the minimum that proves the journey end-to-end, not the full nine-object model. Expand once the chain works.
+Records first required
+* Contact, Opportunity, and the Project Custom Object.
+First fields on the Project object
+Field
+	Purpose
+	BuildSuite Project ID
+	The master shared key (e.g. BSP-2026-000184)
+	Project Name
+	Primary display field
+	Project Address
+	Identity
+	Client
+	Associated contact / primary client
+	Contract Amount
+	Financial baseline from handoff
+	Project Stage
+	Synced from the opportunity pipeline
+	Progress Percentage
+	The live field used in Test B
+	Current Milestone
+	Client-facing status
+	Estimated Completion Date
+	Client-facing schedule
+	Client Portal Enabled
+	Access control flag
+	
+
+Full model (later phases): the Project object expands into identity, status, dates, financials, and visibility groups, supported by Milestone, Task, Daily Update, Material Selection, Change Order, Issue, Message, Punch List, and Warranty objects — each associated back to the Project and, through it, the Contact.
+10. Shared Project ID Standard
+The BuildSuite Project ID is the single key that ties records together across systems. It must exist in every layer so records are never matched only by client name, address, email, or opportunity title — those change; the ID does not.
+* BuildSuite  •  GHL Project Custom Object  •  GHL Contact / Opportunity  •  Supabase (when used)  •  external API calls  •  workflow webhook payloads.
+Format example: BSP-2026-000184
+11. Security Guardrails
+Authenticated login gates everything that matters
+Email + project number/ID can help locate a record, but GHL portal login must control access to: change-order approvals, selection approvals, payments, contracts, documents, private messages, and warranty records.
+Internal fields never enter the client response
+Enforce at the data layer, not just visually. Never pass to the client: Internal Notes, Vendor Cost, Internal Labor Cost, Markup, Margin, Profit, Private Team Messages, Internal Risk Assessment.
+12. Open Decisions to Resolve
+Decision
+	Why it matters
+	Recommendation
+	Client Portal packaging
+	Paid add-on vs bundled into higher
+tiers — affects per-sub-account gating
+	Decide before Phase 4
+	Master project ID
+	The single shared key across all systems
+	Use BuildSuite's
+Project ID
+	Dedicated build sub-account
+	Clean snapshot source, no live-data tangling
+	Confirm so token
+can be set up
+	Plan-tier availability
+	Custom Objects + native Client Portal on the
+contractor sub-account tier
+	Confirm in Section 4.2
+	
+
+
+
+Immediate next step: run the Phase 0 validation sprint (Section 5). Do not begin a full portal build prompt until both tests pass.
+Page
