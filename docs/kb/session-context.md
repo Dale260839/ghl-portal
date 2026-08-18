@@ -5,7 +5,8 @@ Self-contained: what this is, the rules that can't be broken, what exists, what'
 guessed, what's left, what's blocked.
 
 **Repo:** `c:\Users\John\ProgrammingProjects\ghl-portal` · `github.com/Dale260839/ghl-portal`
-**Last updated:** 2026-08-14 · **Tests:** 186 green (152 web, 34 contracts) · **Build:** clean
+**Live:** https://project-hub-one-vert.vercel.app — deploys automatically on push
+**Last updated:** 2026-08-14 · **Tests:** 198 green (164 web, 34 contracts) · **Build:** clean
 
 ---
 
