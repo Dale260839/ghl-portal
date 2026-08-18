@@ -160,3 +160,43 @@ export function InternalOnly({ children }: { children: ReactNode }) {
     </span>
   );
 }
+
+/**
+ * The portal's empty state.
+ *
+ * Used wherever a client legitimately sees nothing — a contractor hasn't shared
+ * the schedule, messaging is switched off, a section isn't relevant yet. The
+ * wording always says *why*, because "nothing here" reads as a broken page and
+ * "your contractor hasn't shared this yet" reads as a system working correctly.
+ */
+export function PortalEmpty({
+  title,
+  body,
+  tiles,
+}: {
+  title: string;
+  body: string;
+  tiles?: { label: string; hint: string }[];
+}) {
+  return (
+    <div className="rounded-xl border border-dashed border-navy-200 px-6 py-14 text-center">
+      <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-navy-100">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-navy-400">
+          <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+        </svg>
+      </div>
+      <p className="text-base font-medium text-navy-900">{title}</p>
+      <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-navy-400">{body}</p>
+      {tiles !== undefined && (
+        <div className="mx-auto mt-7 grid max-w-2xl gap-3 sm:grid-cols-3">
+          {tiles.map((t) => (
+            <div key={t.label} className="rounded-lg border border-navy-100 px-4 py-4">
+              <div className="text-sm font-medium text-navy-600">{t.label}</div>
+              <div className="mt-0.5 text-xs text-navy-400">{t.hint}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
