@@ -22,7 +22,28 @@ import type { GhlConfig } from '../ghl/config.ts';
 
 export type LocationOutcome =
   | { verified: true; name: string }
-  | { verified: false; reason: 'unknown_location' | 'lookup_failed' };
+  | { verified: false; reason: 'unknown_location' | 'bad_credential' | 'lookup_failed' };
+
+/**
+ * Three failures that look alike and need different fixes.
+ *
+ * Measured against the live API, not guessed: a location our token cannot reach
+ * returns **403 Forbidden**, not 404. That's the forged-landing case, and it
+ * means the link is wrong.
+ *
+ * A **401** is different — it says our own credential is bad, which is an
+ * operator problem, not the visitor's. Reporting it as "bad link" would send
+ * someone to check the menu link when they should be checking the token.
+ *
+ * Anything else — 5xx, a timeout, DNS — is an outage, and the honest message is
+ * "try again" rather than implying anyone did something wrong.
+ */
+function classify(error: unknown): 'unknown_location' | 'bad_credential' | 'lookup_failed' {
+  const status = (error as { status?: number | null } | null)?.status;
+  if (status === 401) return 'bad_credential';
+  if (status === 400 || status === 403 || status === 404) return 'unknown_location';
+  return 'lookup_failed';
+}
 
 interface GhlLocationResponse {
   id?: string;
@@ -53,9 +74,9 @@ export async function verifyGhlLocation(
     }
 
     return { verified: true, name: location.name ?? '' };
-  } catch {
-    // A lookup failure is NOT a pass. If we can't confirm, we refuse — an
-    // outage must not become an open door.
-    return { verified: false, reason: 'lookup_failed' };
+  } catch (error) {
+    // Either way we refuse — if we can't confirm, nobody gets in, and an outage
+    // must not become an open door. Only the reported reason differs.
+    return { verified: false, reason: classify(error) };
   }
 }

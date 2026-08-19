@@ -31,6 +31,17 @@ import { homeFor, setSession, type Role } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * One message per failure, because they need different actions. Measured
+ * against the live API: an unreachable location returns 403, not 404.
+ */
+const LOCATION_ERRORS = {
+  unknown_location: "That link doesn't match a sub-account we have access to.",
+  // Ours to fix, not theirs — say so rather than implying a bad link.
+  bad_credential: 'This site is not correctly connected to GoHighLevel yet.',
+  lookup_failed: "Couldn't reach GoHighLevel just now. Please try again.",
+} as const;
+
 function reject(request: NextRequest, message: string): NextResponse {
   const url = new URL('/', request.nextUrl.origin);
   url.searchParams.set('error', message);
@@ -72,12 +83,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const check = await verifyGhlLocation(locationId, ghlConfig.config);
     if (!check.verified) {
       console.warn(`[auth] Location verification failed for ${locationId}: ${check.reason}`);
-      return reject(
-        request,
-        check.reason === 'lookup_failed'
-          ? "Couldn't reach GoHighLevel to confirm this account. Please try again."
-          : "That link doesn't match a sub-account we have access to.",
-      );
+      return reject(request, LOCATION_ERRORS[check.reason]);
     }
   } else if (landing.proof === 'unverified_development' && process.env.NODE_ENV === 'production') {
     // verifyLanding already refuses this, but production must never mint a

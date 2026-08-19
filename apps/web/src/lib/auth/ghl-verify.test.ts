@@ -36,11 +36,18 @@ function clientReturning(body: unknown, status = 200): GhlClient {
 
 // ── Refusals ─────────────────────────────────────────────────────────────────
 
-test('a location our token cannot see is refused', async () => {
-  // The forged-landing case: someone substitutes another agency's id.
+test('a location our token cannot see is reported as unknown, not as an outage', async () => {
+  // The forged-landing case: someone substitutes another agency's id. GHL
+  // answered and said no, so blaming the network would send them to check
+  // their wifi when they should be checking the link.
   const result = await verifyGhlLocation(LOCATION, config, clientReturning({}, 404));
   assert.equal(result.verified, false);
-  assert.equal(result.verified === false ? result.reason : '', 'lookup_failed');
+  assert.equal(result.verified === false ? result.reason : '', 'unknown_location');
+});
+
+test('a malformed location id is also a definite no', async () => {
+  const result = await verifyGhlLocation('!!!', config, clientReturning({}, 400));
+  assert.equal(result.verified === false ? result.reason : '', 'unknown_location');
 });
 
 test('an empty response is refused, not treated as success', async () => {
@@ -64,10 +71,17 @@ test('a GHL outage refuses rather than passing', async () => {
   assert.equal(result.verified === false ? result.reason : '', 'lookup_failed');
 });
 
-test('a 401 refuses and does not throw past the caller', async () => {
+test('a 403 is the real forged-link signal — measured, not assumed', async () => {
+  // GHL returns 403 Forbidden for a location our token cannot reach, not 404.
+  const result = await verifyGhlLocation(LOCATION, config, clientReturning({}, 403));
+  assert.equal(result.verified === false ? result.reason : '', 'unknown_location');
+});
+
+test('a 401 blames our credential, not their link', async () => {
+  // An operator problem. Telling the visitor their link is wrong would send
+  // them chasing something they cannot fix.
   const result = await verifyGhlLocation(LOCATION, config, clientReturning({}, 401));
-  assert.equal(result.verified, false);
-  assert.equal(result.verified === false ? result.reason : '', 'lookup_failed');
+  assert.equal(result.verified === false ? result.reason : '', 'bad_credential');
 });
 
 // ── Acceptances ──────────────────────────────────────────────────────────────
