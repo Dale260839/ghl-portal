@@ -39,12 +39,21 @@ sub-account and new clients need no extra work.
 | Field | Value |
 |---|---|
 | **Name** | Project Hub *(whatever you want on the menu)* |
-| **URL** | `https://<your-domain>/api/auth/ghl?locationId={{location.id}}` |
+| **URL** | `https://<your-domain>/auth/ghl?locationId=<THE SUB-ACCOUNT ID>` |
 | **Open in** | New tab, to start with |
 
-One merge field, matching BuildSuite's own menu link exactly — its callback is
-`?locationId=IifYfP2B2NUaoDPdsTTa` and nothing else. **The tenant is the
-sub-account, not a person**, so a user id is accepted but never required.
+**Put the real sub-account ID in the URL — do not use `{{location.id}}`.**
+GoHighLevel does not substitute merge fields in Custom Menu Links; the literal
+braces arrive at our end. That is why BuildSuite's own link is
+`?locationId=IifYfP2B2NUaoDPdsTTa` — a hardcoded ID, not a placeholder.
+
+The consequence: **one menu link per sub-account**, each with its own ID. Fine
+for a handful of clients, and the thing a GHL Marketplace app removes later.
+
+The ID is in the URL when you are inside a sub-account:
+`app.gohighlevel.com/v2/location/**IifYfP2B2NUaoDPdsTTa**/dashboard`.
+
+**The tenant is the sub-account, not a person**, so no user id is needed.
 
 **On "Open in":** a new tab is simpler. An iframe feels more integrated but adds
 cookie and framing constraints — worth trying only once the new-tab version works.

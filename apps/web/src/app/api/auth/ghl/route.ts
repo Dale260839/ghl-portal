@@ -42,10 +42,40 @@ const LOCATION_ERRORS = {
   lookup_failed: "Couldn't reach GoHighLevel just now. Please try again.",
 } as const;
 
+/**
+ * Answers in whichever shape the caller asked for.
+ *
+ * The authenticating page fetches with `?json=1` so it can show a failure in
+ * place rather than bouncing to sign-in with the message in a URL. A direct hit
+ * — someone opening the link with no page around it — still redirects, so the
+ * endpoint keeps working on its own.
+ */
 function reject(request: NextRequest, message: string): NextResponse {
+  if (request.nextUrl.searchParams.get('json') === '1') {
+    return NextResponse.json({ ok: false, error: message });
+  }
   const url = new URL('/', request.nextUrl.origin);
   url.searchParams.set('error', message);
   return NextResponse.redirect(url);
+}
+
+function accept(request: NextRequest, to: string): NextResponse {
+  if (request.nextUrl.searchParams.get('json') === '1') {
+    return NextResponse.json({ ok: true, redirectTo: to });
+  }
+  return NextResponse.redirect(new URL(to, request.nextUrl.origin));
+}
+
+/**
+ * A merge field GoHighLevel never substituted.
+ *
+ * Saving the menu link as `?locationId={{location.id}}` and having GHL not
+ * interpolate it delivers the literal braces here. Down the normal path that
+ * surfaces as "this sub-account doesn't exist", which sends someone hunting a
+ * permissions problem that was never there.
+ */
+function isUnsubstitutedPlaceholder(value: string): boolean {
+  return value.includes('{{') || value.includes('}}');
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -77,6 +107,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const { locationId } = landing;
+
+  if (isUnsubstitutedPlaceholder(locationId)) {
+    console.warn(`[auth] Menu link merge field was not substituted: ${locationId}`);
+    return reject(
+      request,
+      "GoHighLevel didn't fill in the sub-account — put its ID directly in the menu link URL.",
+    );
+  }
 
   // ── Prove the location ────────────────────────────────────────────────────
   if (landing.proof !== 'signature' && ghlConfig.configured) {
@@ -132,5 +170,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   console.log(
     `[auth] Signed in via GHL — location ${locationId}, ${authProfileIds.length} profile(s)`,
   );
-  return NextResponse.redirect(new URL(homeFor(role), request.nextUrl.origin));
+  return accept(request, homeFor(role));
 }
