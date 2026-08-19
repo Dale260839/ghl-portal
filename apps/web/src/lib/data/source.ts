@@ -1,5 +1,5 @@
-import { readGhlConfig } from '../ghl/config.ts';
-import { assertScope, type TenantScope } from '../tenancy.ts';
+import { canReadProjectObject, readGhlConfig } from '../ghl/config.ts';
+import { assertScope, ownedByScope, type TenantScope } from '../tenancy.ts';
 import { CONTACTS, DAILY_UPDATES, ISSUES, MILESTONES, PROJECTS, TASKS } from './fixtures.ts';
 import { GhlDataSource } from './ghl-source.ts';
 import type { Contact, DailyUpdate, Issue, Milestone, Project, Task } from './types.ts';
@@ -41,7 +41,7 @@ class FixtureDataSource implements ProjectDataSource {
   /** The tenant predicate. Built here from the asserted scope, never passed in. */
   private owns(scope: TenantScope, context: string): (p: Project) => boolean {
     const safe = assertScope(scope, context);
-    return (p) => p.ownerAuthProfileId === safe.authProfileId;
+    return (p) => ownedByScope(safe, p.ownerAuthProfileId);
   }
 
   async listProjects(scope: TenantScope): Promise<Project[]> {
@@ -110,9 +110,14 @@ const FIXTURE_KEY = '__fixtures__';
 export function getDataSource(scope?: TenantScope): ProjectDataSource {
   const result = readGhlConfig();
 
-  if (!result.configured) {
+  if (!result.configured || !canReadProjectObject(result.config)) {
     if (process.env.GHL_API_BASE_URL !== undefined) {
-      console.warn(`[data] Falling back to fixtures. Missing: ${result.missing.join(', ')}`);
+      // Say which half is missing. "GHL reachable but no object key" and "no
+      // GHL at all" look identical from a screen and need different fixes.
+      const missing = result.configured
+        ? 'GHL_PROJECT_OBJECT_KEY or a location'
+        : result.missing.join(', ');
+      console.warn(`[data] Falling back to fixtures. Missing: ${missing}`);
     }
     const existing = sources.get(FIXTURE_KEY);
     if (existing !== undefined) return existing;
@@ -122,7 +127,7 @@ export function getDataSource(scope?: TenantScope): ProjectDataSource {
   }
 
   // Live GHL: the instance is bound to a location, so the location must be known.
-  const locationId = scope?.ghlLocationId;
+  const locationId = scope?.locationId;
   if (locationId === undefined || locationId.trim() === '') {
     throw new Error(
       'GHL is configured but the request carries no locationId — refusing to guess which sub-account (D-013)',
@@ -138,7 +143,8 @@ export function getDataSource(scope?: TenantScope): ProjectDataSource {
 
 /** Surfaced in the UI so nobody demos fixtures believing they are live data. */
 export function isLiveData(): boolean {
-  return readGhlConfig().configured;
+  const result = readGhlConfig();
+  return result.configured && canReadProjectObject(result.config);
 }
 
 /** Test seam — the per-location cache must not leak between tests either. */

@@ -59,9 +59,7 @@ test('config reports exactly which vars are missing rather than throwing', () =>
   assert.deepEqual(result.configured === false ? result.missing : [], [
     'GHL_API_BASE_URL',
     'GHL_API_VERSION',
-    'GHL_LOCATION_ID',
     'GHL_PRIVATE_INTEGRATION_TOKEN',
-    'GHL_PROJECT_OBJECT_KEY',
   ]);
 });
 

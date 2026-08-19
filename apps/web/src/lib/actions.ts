@@ -32,7 +32,7 @@ export async function signIn(_prev: { error?: string } | undefined, formData: Fo
     name: account.name,
     email: account.email,
     contactId: account.contactId,
-    authProfileId: account.authProfileId,
+    authProfileIds: account.authProfileIds,
   });
 
   redirect(homeFor(account.role));
@@ -67,7 +67,10 @@ export async function reviewUpdate(formData: FormData) {
   const action = String(formData.get('action') ?? '');
 
   if (action === 'publish') {
-    const scope: TenantScope = { authProfileId: session.authProfileId ?? '', ghlLocationId: session.ghlLocationId };
+    const scope: TenantScope = {
+      locationId: session.ghlLocationId ?? '',
+      authProfileIds: session.authProfileIds ?? [],
+    };
     const db = getDataSource(scope);
     const updates = await db.listDailyUpdates(scope);
     const row = updates.find((u) => u.id === id);
@@ -155,7 +158,10 @@ export async function submitFieldUpdate(formData: FormData) {
     today(),
   );
 
-  const fieldScope: TenantScope = { authProfileId: session.authProfileId ?? '', ghlLocationId: session.ghlLocationId };
+  const fieldScope: TenantScope = {
+    locationId: session.ghlLocationId ?? '',
+    authProfileIds: session.authProfileIds ?? [],
+  };
   const project = await getDataSource(fieldScope).getProject(fieldScope, projectId);
 
   const result = await execute(

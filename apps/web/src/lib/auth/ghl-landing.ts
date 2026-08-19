@@ -27,6 +27,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 export interface LandingParams {
   locationId?: string;
+  /** Optional. BuildSuite's own menu link sends locationId alone. */
   userId?: string;
   email?: string;
   /** HMAC over the other params, when GHL is configured to send one. */
@@ -89,8 +90,10 @@ export function verifyLanding(params: LandingParams, policy: LandingPolicy): Lan
   // Identity first — a landing that can't say who or where is not worth
   // verifying, and reporting that separately makes a misconfigured menu link
   // obvious instead of looking like a signature problem.
+  // BuildSuite's Custom Menu Link passes only `locationId`, and the tenant is
+  // the sub-account rather than a person — so a user id is welcome but not
+  // required. Matching that shape is deliberate (D-015).
   if (locationId === '') return { ok: false, reason: 'missing_location' };
-  if (userId === '') return { ok: false, reason: 'missing_user' };
 
   if (policy.signingSecret !== undefined && policy.signingSecret !== '') {
     if (params.signature === undefined || params.signature === '') {

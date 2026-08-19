@@ -1,9 +1,10 @@
 /**
  * Verifying a Custom Menu Link landing against the GHL API.
  *
- * The landing gives us a claim, not proof. These tests are about refusing the
- * claim when it doesn't check out — including the case that matters most: a
- * real user id paired with someone else's location.
+ * The landing gives us a location id and nothing else — the same single
+ * parameter BuildSuite's own menu link sends. These tests are about refusing
+ * that claim when it doesn't check out, because an unverified location id is a
+ * choice of whose data to receive.
  *
  * Run: npm test --workspace @buildsuite/web
  */
@@ -12,15 +13,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { GhlClient } from '../ghl/client.ts';
-import { verifyGhlUser } from './ghl-verify.ts';
+import { verifyGhlLocation } from './ghl-verify.ts';
 
 const config = {
   baseUrl: 'https://services.leadconnectorhq.com',
   apiVersion: '2021-07-28',
-  locationId: 'loc_alliance',
+  locationId: 'IifYfP2B2NUaoDPdsTTa',
   token: 'pit-test',
   projectObjectKey: 'custom_objects.projects',
 };
+
+const LOCATION = 'IifYfP2B2NUaoDPdsTTa';
 
 function clientReturning(body: unknown, status = 200): GhlClient {
   const fetchImpl = (async () =>
@@ -31,101 +34,63 @@ function clientReturning(body: unknown, status = 200): GhlClient {
   return new GhlClient({ config, fetchImpl, sleep: async () => {}, maxRetries: 0 });
 }
 
-const claim = { locationId: 'loc_alliance', userId: 'usr_marcus' };
-
 // ── Refusals ─────────────────────────────────────────────────────────────────
 
-test('a user in a different location is refused — the forged-landing case', async () => {
-  const client = clientReturning({
-    user: { id: 'usr_marcus', email: 'm@x.com', locationIds: ['loc_someone_else'] },
-  });
-  const result = await verifyGhlUser(claim, config, client);
-  assert.equal(result.verified, false);
-  assert.equal(result.verified === false ? result.reason : '', 'wrong_location');
-});
-
-test('an unresolvable user is refused', async () => {
-  const result = await verifyGhlUser(claim, config, clientReturning({ user: {} }));
-  assert.equal(result.verified, false);
-  assert.equal(result.verified === false ? result.reason : '', 'unknown_user');
-});
-
-test('a lookup failure refuses rather than passing', async () => {
-  // An outage must not become an open door.
-  const result = await verifyGhlUser(claim, config, clientReturning({}, 500));
+test('a location our token cannot see is refused', async () => {
+  // The forged-landing case: someone substitutes another agency's id.
+  const result = await verifyGhlLocation(LOCATION, config, clientReturning({}, 404));
   assert.equal(result.verified, false);
   assert.equal(result.verified === false ? result.reason : '', 'lookup_failed');
 });
 
-test('a 401 from GHL also refuses, it does not throw past the caller', async () => {
-  const result = await verifyGhlUser(claim, config, clientReturning({}, 401));
+test('an empty response is refused, not treated as success', async () => {
+  const result = await verifyGhlLocation(LOCATION, config, clientReturning({ location: {} }));
+  assert.equal(result.verified, false);
+  assert.equal(result.verified === false ? result.reason : '', 'unknown_location');
+});
+
+test('a blank location id never reaches the API', async () => {
+  for (const blank of ['', '   ']) {
+    const result = await verifyGhlLocation(blank, config, clientReturning({ id: 'x' }));
+    assert.equal(result.verified, false);
+    assert.equal(result.verified === false ? result.reason : '', 'unknown_location');
+  }
+});
+
+test('a GHL outage refuses rather than passing', async () => {
+  // An outage must not become an open door.
+  const result = await verifyGhlLocation(LOCATION, config, clientReturning({}, 500));
+  assert.equal(result.verified, false);
+  assert.equal(result.verified === false ? result.reason : '', 'lookup_failed');
+});
+
+test('a 401 refuses and does not throw past the caller', async () => {
+  const result = await verifyGhlLocation(LOCATION, config, clientReturning({}, 401));
   assert.equal(result.verified, false);
   assert.equal(result.verified === false ? result.reason : '', 'lookup_failed');
 });
 
 // ── Acceptances ──────────────────────────────────────────────────────────────
 
-test('a user in the claimed location is verified', async () => {
+test('a real location is verified and its name returned', async () => {
   const client = clientReturning({
-    user: {
-      id: 'usr_marcus',
-      email: 'Marcus@AlliancePro.com',
-      name: 'Marcus Reyes',
-      locationIds: ['loc_alliance'],
-    },
+    location: { id: LOCATION, name: 'Alliance For Contractors' },
   });
-  const result = await verifyGhlUser(claim, config, client);
+  const result = await verifyGhlLocation(LOCATION, config, client);
   assert.ok(result.verified);
-  assert.equal(result.user.id, 'usr_marcus');
-  assert.equal(result.user.email, 'marcus@alliancepro.com', 'email is normalised for matching');
-  assert.equal(result.user.name, 'Marcus Reyes');
+  assert.equal(result.name, 'Alliance For Contractors');
 });
 
-test('locations are read from roles.locationIds as well', async () => {
-  // GHL reports membership in more than one place depending on how the user was
-  // created. Reading only one would reject legitimate users, and the failure
-  // would look like a security block rather than a parsing bug.
-  const client = clientReturning({
-    user: { id: 'usr_marcus', email: 'm@x.com', roles: { locationIds: ['loc_alliance'] } },
-  });
-  assert.ok((await verifyGhlUser(claim, config, client)).verified);
-});
-
-test('a user in several locations including the claimed one is verified', async () => {
-  const client = clientReturning({
-    user: { id: 'usr_marcus', email: 'm@x.com', locationIds: ['loc_other', 'loc_alliance'] },
-  });
-  assert.ok((await verifyGhlUser(claim, config, client)).verified);
-});
-
-test('an unwrapped response is handled — GHL wraps some and not others', async () => {
-  const client = clientReturning({
-    id: 'usr_marcus',
-    email: 'm@x.com',
-    locationIds: ['loc_alliance'],
-  });
-  assert.ok((await verifyGhlUser(claim, config, client)).verified);
-});
-
-test('a name is assembled from first and last when there is no name field', async () => {
-  const client = clientReturning({
-    user: {
-      id: 'usr_marcus',
-      email: 'm@x.com',
-      firstName: 'Marcus',
-      lastName: 'Reyes',
-      locationIds: ['loc_alliance'],
-    },
-  });
-  const result = await verifyGhlUser(claim, config, client);
+test('an unwrapped response works — GHL wraps some and not others', async () => {
+  const client = clientReturning({ id: LOCATION, name: 'Alliance For Contractors' });
+  const result = await verifyGhlLocation(LOCATION, config, client);
   assert.ok(result.verified);
-  assert.equal(result.user.name, 'Marcus Reyes');
+  assert.equal(result.name, 'Alliance For Contractors');
 });
 
-test('a user with no location list at all is accepted', async () => {
-  // Single-location tokens see users without a location array. Refusing them
-  // would break the common case; the token itself is already scoped to one
-  // sub-account, so it cannot return a user from somewhere else.
-  const client = clientReturning({ user: { id: 'usr_marcus', email: 'm@x.com' } });
-  assert.ok((await verifyGhlUser(claim, config, client)).verified);
+test('a location with no name still verifies', async () => {
+  // The name is decoration; the id is the thing being proven.
+  const result = await verifyGhlLocation(LOCATION, config, clientReturning({ id: LOCATION }));
+  assert.ok(result.verified);
+  assert.equal(result.name, '');
 });

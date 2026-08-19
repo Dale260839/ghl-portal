@@ -135,14 +135,18 @@ export interface BuildSuiteReader {
   listActiveProjects(scope: TenantScope, limit?: number): Promise<BuildSuiteProject[]>;
   countByStatus(scope: TenantScope): Promise<Record<string, number>>;
   /**
-   * Resolves the tenant key for a signed-in GHL user (D-011).
+   * Every BuildSuite profile belonging to a GHL sub-account (D-011, D-015).
    *
-   * Deliberately NOT tenant-scoped — it runs *before* a scope exists, at the
-   * moment of establishing one. That makes it the one read in the system that
-   * can look across contractors, so it returns a single id and nothing else:
-   * no names, no projects, no rows a caller could enumerate.
+   * This is the tenant lookup, and it runs *before* a scope exists — at the
+   * moment of establishing one. That makes it the only read in the system that
+   * can look across tenants, so it returns ids and nothing else: no names, no
+   * emails, no rows a caller could harvest.
+   *
+   * Returns several because an agency legitimately has several. The live
+   * location `IifYfP2B2NUaoDPdsTTa` has two admin profiles owning nine projects
+   * between them; scoping to one would hide half an agency's work from itself.
    */
-  findAuthProfileId(identity: { email: string; locationId?: string }): Promise<string | null>;
+  listAuthProfileIdsForLocation(locationId: string): Promise<string[]>;
 }
 
 export interface BuildSuiteUnavailable {
@@ -164,7 +168,10 @@ class SupabaseReader implements BuildSuiteReader {
    */
   private tenantFilter(scope: TenantScope, context: string): Record<string, string> {
     const safe = assertScope(scope, context);
-    return { auth_profile_id: `eq.${safe.authProfileId}` };
+    // PostgREST `in` takes a parenthesised list. assertScope has already
+    // guaranteed the list is non-empty — an empty `in ()` would match nothing
+    // silently, which reads as "this agency has no projects".
+    return { auth_profile_id: `in.(${safe.authProfileIds.join(',')})` };
   }
 
   async listActiveProjects(scope: TenantScope, limit = 50): Promise<BuildSuiteProject[]> {
@@ -178,33 +185,20 @@ class SupabaseReader implements BuildSuiteReader {
     return rows.map(normalizeProject);
   }
 
-  async findAuthProfileId(identity: { email: string; locationId?: string }): Promise<string | null> {
-    const email = identity.email.trim().toLowerCase();
-    if (email === '') return null;
-
-    // `auth_profiles` carries `location_id`, so the match is scoped to the
-    // sub-account the landing came from — not email alone. The same person
-    // legitimately having a profile in two sub-accounts would otherwise be
-    // ambiguous, and ambiguity here means the wrong tenant.
-    const filters: Record<string, string> = { email: `eq.${email}` };
-    if (identity.locationId !== undefined && identity.locationId.trim() !== '') {
-      filters.location_id = `eq.${identity.locationId.trim()}`;
-    }
+  async listAuthProfileIdsForLocation(locationId: string): Promise<string[]> {
+    const id = locationId.trim();
+    if (id === '') return [];
 
     const rows = await this.client.select<{ id: string }>({
       from: 'auth_profiles',
       // Only the id. This read crosses tenants by necessity, so it returns the
       // minimum that establishes one and nothing that could be harvested.
       columns: ['id'],
-      filters,
-      limit: 2,
+      filters: { location_id: `eq.${id}` },
+      limit: 50,
     });
 
-    // Two matches means the join isn't unique. Picking one would silently put
-    // someone in the wrong tenant — the worst outcome available here, and a
-    // silent one. Refusing produces a support ticket instead of a breach.
-    if (rows.length !== 1) return null;
-    return rows[0]?.id ?? null;
+    return rows.map((r) => r.id).filter((v) => typeof v === 'string' && v !== '');
   }
 
   async countByStatus(scope: TenantScope): Promise<Record<string, number>> {

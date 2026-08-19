@@ -93,7 +93,7 @@ export class GhlDataSource implements ProjectDataSource {
 
   /** §1.4 — a contact may have many projects. */
   private async listProjectsForContactId(contactId: string): Promise<Project[]> {
-    const all = await this.listProjects({ authProfileId: contactId });
+    const all = await this.listProjects({ locationId: this.config.locationId, authProfileIds: [contactId] });
     return all.filter((p) => p.primaryContactId === contactId);
   }
 

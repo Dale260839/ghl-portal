@@ -144,8 +144,8 @@ export async function currentPortalProject(params: {
 
   // A contractor browsing the portal without a preview id gets the first
   // project they own, so the nav is explorable rather than dead.
-  if (session?.role === 'contractor' && session.authProfileId !== undefined) {
-    const owned = PROJECTS.filter((p) => p.ownerAuthProfileId === session.authProfileId);
+  if (session?.role === 'contractor' && session.authProfileIds !== undefined) {
+    const owned = PROJECTS.filter((p) => session.authProfileIds!.includes(p.ownerAuthProfileId));
     return { project: owned[0] ?? null, allProjects: owned };
   }
 

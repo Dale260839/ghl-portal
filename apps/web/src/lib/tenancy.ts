@@ -1,45 +1,61 @@
 /**
- * Tenancy — which contractor's data a request is allowed to touch.
+ * Tenancy — whose data a request is allowed to touch.
  *
- * §9.1 already scopes *client* reads to the signed-in contact's projects. This is
- * the equivalent rule one level up: a contractor sees their own projects and
- * nobody else's. Without it, a single BuildSuite database read returns every
- * contractor's work to whoever asked — verified 2026-08-12: 43 active projects
- * across 5 contractors, all visible to any signed-in user.
+ * **The tenant is the GHL sub-account, not a person.** That's how BuildSuite
+ * works, and matching it matters: its Custom Menu Link passes only
+ * `locationId`, and everything a contractor sees is scoped to that location.
  *
- * The rule is enforced the same way the gate is — at the data layer, structurally.
- * A read function takes a `TenantScope` as a required argument, so there is no
- * unscoped overload to reach for and forgetting to scope is a type error rather
- * than a leak.
+ * A location maps to *several* BuildSuite `auth_profiles` — the live agency
+ * `IifYfP2B2NUaoDPdsTTa` has two admin profiles owning nine projects between
+ * them. Scoping to one profile would hide half an agency's work from itself, so
+ * a scope carries the whole set.
+ *
+ * §9.1 already scopes *client* reads to the signed-in contact's projects. This
+ * is the equivalent rule one level up, and it's enforced the same way: at the
+ * data layer, structurally. Read functions take a `TenantScope` as a required
+ * argument, so forgetting to scope is a type error rather than a leak.
+ *
+ * Without it, one read returns everything: 43 active projects across 5
+ * contractors, measured on the live database.
  */
 
 export interface TenantScope {
+  /** The GHL sub-account. The tenant identity itself. */
+  locationId: string;
   /**
-   * BuildSuite's `auth_profiles.id` — the login identity that owns projects.
-   * Verified as the owning column on `projects`; `user_id` and `client_id` are
-   * unpopulated.
+   * Every BuildSuite `auth_profiles.id` belonging to that location. Verified as
+   * the owning column on `projects`; `user_id` and `client_id` are unpopulated.
    */
-  authProfileId: string;
-  /** The GHL sub-account. Used to scope GHL reads once that side is connected. */
-  ghlLocationId?: string;
+  authProfileIds: readonly string[];
 }
 
 export class TenancyError extends Error {
   constructor(context: string) {
-    super(`refusing an unscoped read of ${context} — every read must be scoped to one contractor`);
+    super(`refusing an unscoped read of ${context} — every read must be scoped to one tenant`);
     this.name = 'TenancyError';
   }
 }
 
 /**
- * Fails closed. An absent or blank scope raises rather than falling back to
- * "everything", because the fallback for a missing tenant filter is the entire
- * database and that is precisely the bug this exists to prevent.
+ * Fails closed. An absent scope, a blank location, or an empty profile list all
+ * raise — because the natural fallback for a missing tenant filter is the entire
+ * database, and an empty `in ()` clause is the same mistake wearing a disguise.
  */
 export function assertScope(scope: TenantScope | null | undefined, context: string): TenantScope {
   if (scope === null || scope === undefined) throw new TenancyError(context);
-  if (typeof scope.authProfileId !== 'string' || scope.authProfileId.trim() === '') {
+  if (typeof scope.locationId !== 'string' || scope.locationId.trim() === '') {
+    throw new TenancyError(context);
+  }
+  if (!Array.isArray(scope.authProfileIds) || scope.authProfileIds.length === 0) {
+    throw new TenancyError(context);
+  }
+  if (scope.authProfileIds.some((id) => typeof id !== 'string' || id.trim() === '')) {
     throw new TenancyError(context);
   }
   return scope;
+}
+
+/** True when a row's owner belongs to this tenant. */
+export function ownedByScope(scope: TenantScope, ownerAuthProfileId: string): boolean {
+  return scope.authProfileIds.includes(ownerAuthProfileId);
 }

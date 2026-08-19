@@ -27,7 +27,7 @@ export default async function ClientPortal({
   if (session?.role === 'client' && session.contactId !== undefined) {
     contact = await db.getContact(session.contactId);
   } else if (session?.role === 'contractor' && params.preview !== undefined) {
-    const target = (await db.listProjects({ authProfileId: session.authProfileId ?? '', ghlLocationId: session.ghlLocationId }).catch(() => [])).find((p) => p.buildsuiteProjectId === params.preview) ?? null;
+    const target = (await db.listProjects({ locationId: session.ghlLocationId ?? '', authProfileIds: session.authProfileIds ?? [] }).catch(() => [])).find((p) => p.buildsuiteProjectId === params.preview) ?? null;
     contact = target === null ? null : await db.getContact(target.primaryContactId);
   }
 

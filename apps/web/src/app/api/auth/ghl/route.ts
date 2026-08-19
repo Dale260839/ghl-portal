@@ -1,39 +1,32 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { describeRejection, verifyLanding } from '@/lib/auth/ghl-landing';
-import { verifyGhlUser } from '@/lib/auth/ghl-verify';
+import { verifyGhlLocation } from '@/lib/auth/ghl-verify';
 import { readGhlConfig } from '@/lib/ghl/config';
 import { getBuildSuiteReader } from '@/lib/buildsuite/projects';
 import { homeFor, setSession, type Role } from '@/lib/session';
 
 /**
- * GoHighLevel Custom Menu Link landing (D-011).
+ * GoHighLevel Custom Menu Link landing (D-011, D-015).
  *
- * A user already signed in to GHL clicks our menu item, arrives here, and leaves
- * with a Hub session. No second login.
+ * Mirrors what BuildSuite already does. Its menu link opens:
+ *
+ *   https://api.buildsuite.ai/api/v1/auth/ghl_auth_callback?locationId=IifYfP2B2NUaoDPdsTTa
+ *
+ * — one parameter. **The tenant is the sub-account, not a person.** Everything
+ * the contractor then sees is scoped to that location, which is why a single
+ * `locationId` is enough to establish a session.
+ *
+ * Our menu link is the same shape:
+ *
+ *   https://<domain>/api/auth/ghl?locationId={{location.id}}
  *
  * ---------------------------------------------------------------------------
- * HOW THE LANDING IS PROVEN
- *
- * The URL's parameters are a **claim**, never proof — GHL does not sign menu
- * link merge fields, so anyone who learns this address could supply a location
- * of their choosing. Since tenancy comes from the session, that would be
- * choosing whose data to receive.
- *
- * Three modes, strongest first:
- *
- *   1. **Signature** — if GHL is ever configured to send one, verify it.
- *   2. **API verification** — ask GHL, with our own credential, whether that
- *      user really belongs to that location. This is the normal path.
- *   3. **Development** — explicit opt-in, never in production.
- *
- * If none apply, the landing is refused. Failing to sign anyone in is a support
- * ticket; signing in the wrong person is a breach.
+ * The parameter is a CLAIM, not proof. GHL doesn't sign merge fields, so anyone
+ * who learns this address could substitute another agency's location id. Before
+ * minting anything we ask GHL — with our own credential — whether that location
+ * is real and ours. A location we can't confirm gets no session.
  * ---------------------------------------------------------------------------
- *
- * Register as the Custom Menu Link target:
- *
- *   /api/auth/ghl?locationId={{location.id}}&userId={{user.id}}&email={{user.email}}
  */
 
 export const dynamic = 'force-dynamic';
@@ -58,9 +51,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     },
     {
       signingSecret: process.env.GHL_MENU_LINK_SECRET,
-      // The claim is allowed through the first check when we can verify it
-      // against the API below. Without a credential there is nothing to verify
-      // with, so only the explicit development opt-in remains.
+      // The claim passes this first gate when we hold a credential to check it
+      // with below. Without one, only the explicit development opt-in remains.
       allowUnverified:
         ghlConfig.configured ||
         (process.env.NODE_ENV !== 'production' &&
@@ -73,89 +65,66 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return reject(request, describeRejection(landing.reason));
   }
 
-  // ── Proof ─────────────────────────────────────────────────────────────────
-  let proof = landing.proof;
-  let email = landing.email;
-  let displayName = landing.email ?? landing.userId;
+  const { locationId } = landing;
 
+  // ── Prove the location ────────────────────────────────────────────────────
   if (landing.proof !== 'signature' && ghlConfig.configured) {
-    const check = await verifyGhlUser(
-      { locationId: landing.locationId, userId: landing.userId },
-      { ...ghlConfig.config, locationId: landing.locationId },
-    );
-
+    const check = await verifyGhlLocation(locationId, ghlConfig.config);
     if (!check.verified) {
-      // Includes the forged-location case, and a GHL outage. Both refuse.
-      console.warn(`[auth] GHL verification failed: ${check.reason}`);
+      console.warn(`[auth] Location verification failed for ${locationId}: ${check.reason}`);
       return reject(
         request,
         check.reason === 'lookup_failed'
-          ? "Couldn't reach GoHighLevel to confirm your account. Please try again."
-          : "That link doesn't match a user in this sub-account.",
+          ? "Couldn't reach GoHighLevel to confirm this account. Please try again."
+          : "That link doesn't match a sub-account we have access to.",
       );
     }
-
-    proof = 'signature';
-    // GHL is the authority on the user's identity, not the URL.
-    email = check.user.email !== '' ? check.user.email : email;
-    displayName = check.user.name !== '' ? check.user.name : displayName;
   } else if (landing.proof === 'unverified_development' && process.env.NODE_ENV === 'production') {
-    // Belt and braces: verifyLanding already refuses this, but production must
-    // never mint a session on an unverified claim, whatever the config says.
+    // verifyLanding already refuses this, but production must never mint a
+    // session on an unverified claim whatever the configuration says.
     return reject(request, 'Sign-in from GoHighLevel is not configured yet.');
   }
 
-  // ── Tenant ────────────────────────────────────────────────────────────────
-  const authProfileId = await resolveAuthProfileId(email, landing.locationId);
+  // ── Resolve the tenant ────────────────────────────────────────────────────
+  const reader = getBuildSuiteReader();
+  if (!reader.available) {
+    console.error(`[auth] BuildSuite unavailable: ${reader.missing.join(', ')}`);
+    return reject(request, 'The project database is not configured yet.');
+  }
 
-  if (authProfileId === null) {
-    // Authenticated, but not linked to a BuildSuite profile — so there is no
-    // tenant whose data they could see. Refusing beats issuing a session with
-    // no scope, which renders empty screens that look like an outage.
-    console.warn(`[auth] No BuildSuite profile for ${email ?? landing.userId}`);
+  let authProfileIds: string[];
+  try {
+    authProfileIds = await reader.listAuthProfileIdsForLocation(locationId);
+  } catch (error) {
+    console.error('[auth] Failed to resolve BuildSuite profiles', error);
+    return reject(request, "Couldn't load this account's projects. Please try again.");
+  }
+
+  if (authProfileIds.length === 0) {
+    // The location is real but has no BuildSuite presence. Refusing beats a
+    // session with no tenant, which renders empty screens that look like an
+    // outage rather than a setup gap.
+    console.warn(`[auth] No BuildSuite profiles for location ${locationId}`);
     return reject(
       request,
-      'Signed in to GoHighLevel, but this user is not linked to a BuildSuite profile yet.',
+      'This sub-account is signed in, but has no BuildSuite projects linked to it yet.',
     );
   }
 
   // Everyone arriving through a GHL menu link is staff. Homeowners have no GHL
-  // login — their path is still open (D-011) and deliberately not guessed at.
+  // login — their path is separate and deliberately not guessed at here.
   const role: Role = 'contractor';
 
   await setSession({
     role,
-    name: displayName,
-    email: email ?? '',
-    authProfileId,
-    ghlLocationId: landing.locationId,
+    name: landing.email ?? 'GoHighLevel user',
+    email: landing.email ?? '',
+    authProfileIds,
+    ghlLocationId: locationId,
   });
 
-  console.log(`[auth] GHL landing accepted (${proof}) for ${landing.locationId}`);
+  console.log(
+    `[auth] Signed in via GHL — location ${locationId}, ${authProfileIds.length} profile(s)`,
+  );
   return NextResponse.redirect(new URL(homeFor(role), request.nextUrl.origin));
-}
-
-/**
- * Maps a GHL user onto BuildSuite's `auth_profiles.id` — the tenant key.
- *
- * Matched on email AND location, since `auth_profiles` carries `location_id`.
- * Still not ideal: once the GHL user id is stored against the profile this
- * becomes an exact lookup. Flagged rather than hidden, because a fuzzy join is
- * the sort of thing that quietly becomes permanent.
- */
-async function resolveAuthProfileId(
-  email: string | null,
-  locationId: string,
-): Promise<string | null> {
-  if (email === null || email === '') return null;
-
-  const reader = getBuildSuiteReader();
-  if (!reader.available) return null;
-
-  try {
-    return await reader.findAuthProfileId({ email, locationId });
-  } catch (error) {
-    console.error('[auth] Failed to resolve the BuildSuite profile', error);
-    return null;
-  }
 }

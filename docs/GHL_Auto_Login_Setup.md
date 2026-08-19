@@ -3,24 +3,29 @@
 **Goal:** a contractor signed in to GHL clicks a menu item and lands in the
 Project Hub already signed in. No second password.
 
-The code is built, tested, and deployed. What's left is configuration in GHL and
-two environment variables.
+Built, tested, and **verified end to end against the live Alliance For
+Contractors sub-account**. What is left is configuration in GHL.
 
 ---
 
 ## How it works
 
-1. You add a **Custom Menu Link** in GHL pointing at the Hub.
-2. GHL appends who and where as merge fields: `locationId`, `userId`, `email`.
-3. The Hub takes those as a **claim** and checks it against the GHL API using our
-   own credential — is that user really in that sub-account?
-4. If yes, it looks the user up in BuildSuite by email and location to find which
-   contractor's data they may see, then issues a signed session.
+1. A **Custom Menu Link** in GHL points at the Hub with one merge field:
+   `?locationId={{location.id}}`.
+2. The Hub treats that as a **claim** and asks GHL, with our own credential,
+   whether the location is real and reachable by us.
+3. It then finds every BuildSuite profile belonging to that location — the live
+   agency has **two** — and issues a signed session scoped to all of them.
+4. Every screen after that shows only that agency's projects.
 
-**Why step 3 exists.** GHL doesn't sign menu-link parameters — they arrive as
-plain text in a URL. Without checking them, anyone who learned the address could
-put a different `locationId` in it and be handed that contractor's projects.
-Verifying against the API is what turns a claim into proof.
+**Why step 2 exists.** GHL does not sign menu-link parameters; they are plain
+text in a URL. Without checking, anyone who learned the address could substitute
+another agency's `locationId` and be handed their projects. Verifying is what
+turns a claim into proof.
+
+**Verified on 2026-08-19:** landing on `?locationId=IifYfP2B2NUaoDPdsTTa`
+resolved both admin profiles and rendered that agency's eight active projects —
+and nobody else's.
 
 ---
 
@@ -34,12 +39,12 @@ sub-account and new clients need no extra work.
 | Field | Value |
 |---|---|
 | **Name** | Project Hub *(whatever you want on the menu)* |
-| **URL** | `https://<your-domain>/api/auth/ghl?locationId={{location.id}}&userId={{user.id}}&email={{user.email}}` |
+| **URL** | `https://<your-domain>/api/auth/ghl?locationId={{location.id}}` |
 | **Open in** | New tab, to start with |
 
-Those three merge fields are required. The Hub refuses a landing that's missing
-`locationId` or `userId`, and reports which one so a mistyped link looks like a
-mistyped link rather than a security failure.
+One merge field, matching BuildSuite's own menu link exactly — its callback is
+`?locationId=IifYfP2B2NUaoDPdsTTa` and nothing else. **The tenant is the
+sub-account, not a person**, so a user id is accepted but never required.
 
 **On "Open in":** a new tab is simpler. An iframe feels more integrated but adds
 cookie and framing constraints — worth trying only once the new-tab version works.
@@ -49,13 +54,13 @@ cookie and framing constraints — worth trying only once the new-tab version wo
 On the Vercel project:
 
 ```
-GHL_LOCATION_ID          the sub-account's ID
-GHL_PROJECT_OBJECT_KEY   the Project custom object's key
+GHL_API_BASE_URL                 https://services.leadconnectorhq.com
+GHL_API_VERSION                  2021-07-28
+GHL_PRIVATE_INTEGRATION_TOKEN    the sub-account token
 ```
 
-Auto-login needs the first one; the second is what also switches the dashboard
-from sample data to live GHL records. Both come from the GHL account — the
-Location ID is in the URL when you're inside a sub-account.
+**Those three are all auto-login needs.** `GHL_PROJECT_OBJECT_KEY` is separate —
+it unlocks GHL custom objects, and sign-in deliberately does not wait on it.
 
 **Then redeploy.** Environment variables are read at build time, so an existing
 deployment won't pick them up.
@@ -69,24 +74,25 @@ signed in.
 
 | Message | Meaning |
 |---|---|
-| "The link did not identify a sub-account / user" | A merge field is missing or misspelled in the menu link URL |
-| "That link doesn't match a user in this sub-account" | Verification worked and said no. Either the link was tampered with, or the token is scoped to a different sub-account. |
+| "The link did not identify a sub-account" | The `locationId` merge field is missing or misspelled |
+| "That link doesn't match a sub-account we have access to" | Verification worked and said no. Either the link was tampered with, or our token is scoped elsewhere. |
 | "Couldn't reach GoHighLevel to confirm your account" | GHL was unreachable. **We refuse rather than let people through** — an outage must not become an open door. |
-| "Not linked to a BuildSuite profile yet" | Signed in fine, but that email has no matching BuildSuite profile for this location, so there's no data to show them |
-| "Sign-in from GoHighLevel is not configured yet" | `GHL_LOCATION_ID` isn't set |
+| "No BuildSuite projects linked to it yet" | The sub-account is real, but no BuildSuite profile points at it, so there is nothing to show |
+| "Sign-in from GoHighLevel is not configured yet" | The three variables above are not set |
 
 ---
 
 ## Two limits worth knowing
 
 **One sub-account for now.** A private integration token is scoped to a single
-sub-account, so verification only works for that one. Serving several means a
-GHL Marketplace app with OAuth — recorded as D-013, and worth doing before the
-second client rather than after.
+sub-account, so verification only covers that one. Serving several means a GHL
+Marketplace app with OAuth — D-013, and worth doing before the second client
+rather than after.
 
-**A leaked URL still works.** Verification proves the user exists in the
-location; it can't prove the person holding the browser *is* that user. Anyone
-with the full link could use it until the setup changes. GHL's Marketplace SSO —
+**A leaked URL still works.** Verification proves the location is real; it cannot
+prove the person holding the browser came from GoHighLevel. Anyone with the full
+link could use it until the setup changes — **and BuildSuite's own callback has
+exactly the same property today**, so this is parity, not a regression. GHL's Marketplace SSO —
 where GHL hands the page encrypted, signed user data — is the fix, and it's the
 same piece of work as multi-tenant tokens. For an internal tool behind a GHL
 login this is a reasonable starting point; it isn't where it should end.

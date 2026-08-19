@@ -20,13 +20,16 @@ import type { Project } from './data/types.ts';
 export async function requireTenantScope(): Promise<TenantScope> {
   const session = await getSession();
   if (session === null) redirect('/');
-  if (session.authProfileId === undefined || session.authProfileId.trim() === '') {
+  if (session.authProfileIds === undefined || session.authProfileIds.length === 0) {
     // Signed in, but not linked to a BuildSuite profile — so there is no tenant
     // whose data they could see. Sending them back beats showing an empty
     // dashboard that looks like a bug.
     redirect('/?error=no-profile');
   }
-  return { authProfileId: session.authProfileId, ghlLocationId: session.ghlLocationId };
+  return {
+    locationId: session.ghlLocationId ?? '',
+    authProfileIds: session.authProfileIds,
+  };
 }
 
 /**
@@ -42,7 +45,7 @@ export async function requireTenantScope(): Promise<TenantScope> {
  */
 export function scopeOfProject(project: Project): TenantScope {
   return {
-    authProfileId: project.ownerAuthProfileId,
-    ghlLocationId: project.ghlLocationId,
+    locationId: project.ghlLocationId,
+    authProfileIds: [project.ownerAuthProfileId],
   };
 }

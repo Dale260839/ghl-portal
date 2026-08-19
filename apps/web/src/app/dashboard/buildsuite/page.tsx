@@ -17,7 +17,7 @@ export default async function BuildSuiteProjects() {
   // Tenancy: a session with no auth profile can read nothing. Failing closed
   // matters here — the fallback for a missing tenant filter is every
   // contractor's projects, which is the bug this guard exists to prevent.
-  if (session?.authProfileId === undefined) {
+  if (session?.authProfileIds === undefined || session.authProfileIds.length === 0) {
     return (
       <div className="space-y-6">
         <h1 className="text-xl font-semibold tracking-tight text-navy-900">
@@ -34,7 +34,10 @@ export default async function BuildSuiteProjects() {
       </div>
     );
   }
-  const scope = { authProfileId: session.authProfileId };
+  const scope = {
+    locationId: session.ghlLocationId ?? '',
+    authProfileIds: session.authProfileIds,
+  };
 
   if (!reader.available) {
     return (

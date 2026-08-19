@@ -36,7 +36,7 @@ export interface Session {
    * below use real ids from the live database so the scoping is genuinely
    * demonstrated rather than simulated.
    */
-  authProfileId?: string;
+  authProfileIds?: readonly string[];
   /** The GHL sub-account this session is working in (D-013). */
   ghlLocationId?: string;
 }
@@ -56,7 +56,7 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     name: 'Marcus Reyes',
     email: 'marcus@allianceproservices.com',
     // A real auth_profiles.id from the live database — 26 active projects.
-    authProfileId: '7726102a-8e13-4006-889d-d68bc1cccd40',
+    authProfileIds: ['7726102a-8e13-4006-889d-d68bc1cccd40'],
     ghlLocationId: 'loc_alliance_pro',
     label: 'Contractor Dashboard',
     description: 'Project manager — creates and controls everything the other two views display',
@@ -67,7 +67,7 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     email: 'priya@allianceproservices.com',
     // A different real owner — 6 active projects. Signing in as each in turn
     // shows the tenancy scoping working against live data.
-    authProfileId: 'a4502e38-bb67-420b-a7fc-3e1bc3d99c01',
+    authProfileIds: ['a4502e38-bb67-420b-a7fc-3e1bc3d99c01'],
     ghlLocationId: 'loc_bexar_builders',
     label: 'Contractor Dashboard (second tenant)',
     description: 'A different contractor — proves the data is scoped, not global',
@@ -76,7 +76,7 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     role: 'field',
     name: 'Tony Alvarez',
     email: 'tony@allianceproservices.com',
-    authProfileId: '7726102a-8e13-4006-889d-d68bc1cccd40',
+    authProfileIds: ['7726102a-8e13-4006-889d-d68bc1cccd40'],
     ghlLocationId: 'loc_alliance_pro',
     label: 'Field Interface',
     description: 'Superintendent — submits updates and tasks, never publishes to the client',

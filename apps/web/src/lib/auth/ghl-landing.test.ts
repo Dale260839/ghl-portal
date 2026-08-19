@@ -85,20 +85,25 @@ test('with nothing configured, a landing is refused rather than trusted', () => 
   assert.equal(result.ok === false ? result.reason : '', 'not_configured');
 });
 
-test('an incomplete landing is reported precisely, not as a signature failure', () => {
+test('a landing with no location is reported precisely, not as a signature failure', () => {
   // A misconfigured menu link should look like a misconfigured menu link.
-  assert.equal(
-    verifyLanding({ ...params, locationId: '' }, { signingSecret: SECRET }).ok === false
-      ? (verifyLanding({ ...params, locationId: '' }, { signingSecret: SECRET }) as { reason: string }).reason
-      : '',
-    'missing_location',
+  const result = verifyLanding({ ...params, locationId: '' }, { signingSecret: SECRET });
+  assert.equal(result.ok, false);
+  assert.equal(result.ok === false ? result.reason : '', 'missing_location');
+});
+
+test('a landing with NO user id is fine — locationId is the whole claim (D-015)', () => {
+  // BuildSuite's own menu link sends locationId alone:
+  //   /auth/ghl_auth_callback?locationId=IifYfP2B2NUaoDPdsTTa
+  // The tenant is the sub-account, not a person, so requiring a user id would
+  // reject the exact shape we're matching.
+  const result = verifyLanding(
+    { locationId: 'IifYfP2B2NUaoDPdsTTa' },
+    { allowUnverified: true },
   );
-  assert.equal(
-    verifyLanding({ ...params, userId: '  ' }, { signingSecret: SECRET }).ok === false
-      ? (verifyLanding({ ...params, userId: '  ' }, { signingSecret: SECRET }) as { reason: string }).reason
-      : '',
-    'missing_user',
-  );
+  assert.ok(result.ok);
+  assert.equal(result.locationId, 'IifYfP2B2NUaoDPdsTTa');
+  assert.equal(result.userId, '');
 });
 
 // ── Acceptances ──────────────────────────────────────────────────────────────
