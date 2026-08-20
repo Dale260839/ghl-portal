@@ -136,12 +136,30 @@ export function shortDate(iso: string): string {
  * Shown on every surface while the app is running on fixtures. A demo that
  * looks live but isn't is the fastest way to lose a client's trust later.
  */
-export function DataModeBanner({ live }: { live: boolean }) {
-  if (live) return null;
+/**
+ * Names the source behind the screen.
+ *
+ * Three states, not two. "Demo data" and "real projects, but no field updates
+ * yet" are different things to be looking at, and a presenter told the wrong one
+ * gets contradicted by their own screen mid-sentence — which is exactly what
+ * happened when the dashboard claimed to be live and was on fixtures.
+ */
+export function DataModeBanner({ kind }: { kind: 'fixture' | 'buildsuite' | 'ghl' }) {
+  if (kind === 'ghl') return null;
+
+  if (kind === 'buildsuite') {
+    return (
+      <div className="border-b border-navy-200 bg-navy-50 px-4 py-1.5 text-center text-xs text-navy-600">
+        <strong className="font-semibold">Live BuildSuite data</strong> — real projects, clients and
+        dates. Field updates, milestones and budgets need the Hub tables, which are not created yet.
+      </div>
+    );
+  }
+
   return (
     <div className="border-b border-amber-600/20 bg-amber-soft px-4 py-1.5 text-center text-xs text-amber-700">
-      <strong className="font-semibold">Demo data</strong> — running on fixtures. Live GHL data
-      connects once the integration token is issued.
+      <strong className="font-semibold">Demo data</strong> — running on fixtures. Neither BuildSuite
+      nor GHL is reachable from this deployment.
     </div>
   );
 }

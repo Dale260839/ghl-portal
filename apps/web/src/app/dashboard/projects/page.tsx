@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getDataSource } from '@/lib/data/source';
 import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, HealthBadge, ProgressBar, currency, shortDate } from '@/components/ui';
+import { hasOperationalDetail, moneyLabel, stageLabel } from '@/lib/data/types';
 
 export default async function ProjectsList() {
   const scope = await requireTenantScope();
@@ -43,15 +44,23 @@ export default async function ProjectsList() {
                     {p.clientName} · {p.buildsuiteProjectId}
                   </div>
                 </td>
-                <td className="px-5 py-3.5 text-sm text-navy-600">{p.projectStage}</td>
+                <td className="px-5 py-3.5 text-sm text-navy-600">{stageLabel(p)}</td>
                 <td className="px-5 py-3.5">
-                  <ProgressBar value={p.progressPercentage} />
+                  {hasOperationalDetail(p) ? (
+                    <ProgressBar value={p.progressPercentage} />
+                  ) : (
+                    <span className="text-xs text-navy-400">—</span>
+                  )}
                 </td>
                 <td className="tabular px-5 py-3.5 text-right text-sm text-navy-900">
-                  {currency(p.currentProjectTotal)}
+                  {moneyLabel(p, currency)}
                 </td>
                 <td className="px-5 py-3.5">
-                  <HealthBadge status={p.healthStatus} />
+                  {hasOperationalDetail(p) ? (
+                    <HealthBadge status={p.healthStatus} />
+                  ) : (
+                    <span className="text-xs text-navy-400">—</span>
+                  )}
                 </td>
                 <td className="px-5 py-3.5">
                   {p.clientPortalEnabled ? (
@@ -79,16 +88,20 @@ export default async function ProjectsList() {
                       {p.projectName}
                     </div>
                     <div className="mt-0.5 truncate text-xs text-navy-400">
-                      {p.clientName} · {p.projectStage}
+                      {p.clientName} · {stageLabel(p)}
                     </div>
                   </div>
-                  <HealthBadge status={p.healthStatus} />
+                  {hasOperationalDetail(p) && <HealthBadge status={p.healthStatus} />}
                 </div>
-                <div className="mt-3">
-                  <ProgressBar value={p.progressPercentage} />
-                </div>
+                {hasOperationalDetail(p) && (
+                  <div className="mt-3">
+                    <ProgressBar value={p.progressPercentage} />
+                  </div>
+                )}
                 <div className="tabular mt-2 text-xs text-navy-400">
-                  {currency(p.currentProjectTotal)} · due {shortDate(p.estimatedCompletionDate)}
+                  {moneyLabel(p, currency)}
+                  {p.estimatedCompletionDate !== '' &&
+                    ` · due ${shortDate(p.estimatedCompletionDate)}`}
                 </div>
               </Link>
             </li>

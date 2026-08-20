@@ -1,4 +1,5 @@
 import { assertNoInternalFields, evaluateGate, type GateDenialReason } from '@buildsuite/contracts';
+import { stageLabel } from './data/types.ts';
 import type { Contact, DailyUpdate, Milestone, Project } from './data/types';
 
 /**
@@ -82,7 +83,9 @@ export function toClientProject(project: Project, requester: Contact): ProjectPr
     buildsuiteProjectId: project.buildsuiteProjectId,
     projectName: project.projectName,
     projectAddress: project.projectAddress,
-    projectStage: project.projectStage,
+    // A BuildSuite-sourced project has no §7 stage; show what it does have
+    // rather than an empty cell. `stageLabel` never invents a mapping.
+    projectStage: stageLabel(project),
     progressPercentage: project.progressPercentage,
     currentMilestone: project.currentMilestone,
     nextMilestone: project.nextMilestone,

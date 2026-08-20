@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/session';
-import { getDataSource, isLiveData } from '@/lib/data/source';
+import { getDataSource, activeSourceKind } from '@/lib/data/source';
 import { AppShell, type NavItem } from '@/components/app-shell';
 import { ViewSwitcher, ViewingAsBanner } from '@/components/view-switcher';
 import { isViewingAs, viewAsEnabled } from '@/lib/view-as';
@@ -77,7 +77,7 @@ export default async function PortalLayout({ children }: { children: React.React
       banner={
         <>
           {viewing && <ViewingAsBanner persona={session.name} role={session.role} />}
-          <DataModeBanner live={isLiveData()} />
+          <DataModeBanner kind={activeSourceKind()} />
           {session.role === 'contractor' && (
             <div className="bg-navy-900 px-4 py-1.5 text-center text-xs text-navy-100">
               Contractor preview — showing exactly what the client is served, through the same gate.

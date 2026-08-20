@@ -2,6 +2,7 @@ import { submitFieldUpdate } from '@/lib/actions';
 import { getDataSource } from '@/lib/data/source';
 import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, CardHeader, shortDate } from '@/components/ui';
+import { stageLabel } from '@/lib/data/types';
 
 /**
  * Field Interface (§12.2). Mobile-first, large tap targets, minimal typing.
@@ -229,7 +230,7 @@ export default async function FieldToday({
             <li key={p.buildsuiteProjectId} className="px-4 py-3">
               <div className="text-sm font-medium text-navy-900">{p.projectName}</div>
               <div className="mt-0.5 text-xs text-navy-400">
-                {p.projectStage} · updated {shortDate(p.lastUpdatedDate)}
+                {stageLabel(p)} · updated {shortDate(p.lastUpdatedDate)}
               </div>
             </li>
           ))}

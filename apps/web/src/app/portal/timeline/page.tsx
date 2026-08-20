@@ -70,9 +70,15 @@ export default async function PortalTimeline({
         </Card>
       )}
 
-      <p className="text-xs text-navy-400">
-        Currently in the <strong className="font-semibold text-navy-600">{clientStageFor(project.projectStage)}</strong> phase.
-      </p>
+      {project.projectStage !== undefined && (
+        <p className="text-xs text-navy-400">
+          Currently in the{' '}
+          <strong className="font-semibold text-navy-600">
+            {clientStageFor(project.projectStage)}
+          </strong>{' '}
+          phase.
+        </p>
+      )}
     </div>
   );
 }

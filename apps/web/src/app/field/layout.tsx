@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { signOut } from '@/lib/actions';
 import { getSession } from '@/lib/session';
-import { isLiveData } from '@/lib/data/source';
+import { activeSourceKind } from '@/lib/data/source';
 import { DataModeBanner } from '@/components/ui';
 import { ViewSwitcher, ViewingAsBanner } from '@/components/view-switcher';
 import { isViewingAs, viewAsEnabled } from '@/lib/view-as';
@@ -16,7 +16,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-dvh bg-navy-50">
       {viewing && <ViewingAsBanner persona={session.name} role={session.role} />}
-      <DataModeBanner live={isLiveData()} />
+      <DataModeBanner kind={activeSourceKind()} />
 
       <header className="sticky top-0 z-10 border-b border-navy-100 bg-white">
         <div className="mx-auto flex max-w-lg items-center justify-between gap-3 px-4 py-3">

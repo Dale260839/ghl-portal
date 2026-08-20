@@ -31,8 +31,28 @@ export interface Project {
   projectManager: string;
   superintendent: string;
 
+  /**
+   * Where this record came from, and therefore what it can be trusted to carry.
+   *
+   * BuildSuite holds a project's identity, client, address, dates and a budget
+   * *band* — and none of the §7 stage, progress, milestones or money. A screen
+   * that renders a BuildSuite-sourced project as though it had all of that shows
+   * zeros and calls them facts, so the provenance travels with the row.
+   */
+  provenance: 'fixture' | 'buildsuite' | 'ghl';
+
   // Status
-  projectStage: ProjectStage;
+  /**
+   * The §7 pipeline stage. **Absent on BuildSuite-sourced projects** — its
+   * status vocabulary (`active`, `draft`, `matched`, ...) is its own and mapping
+   * it onto the nineteen stages is lossy in both directions, so we do not.
+   * Use `stageLabel()` for display rather than reading this directly.
+   */
+  projectStage?: ProjectStage;
+  /** BuildSuite's own status word, carried verbatim when that is the source. */
+  sourceStatus?: string;
+  /** BuildSuite records a band, not an amount — `exact_budget` is never set. */
+  budgetBand?: string;
   progressPercentage: number;
   currentMilestone: string;
   nextMilestone: string;
@@ -209,4 +229,53 @@ export interface ScheduleItem {
   /** PROVISIONAL (new in the demo, not in the architecture). */
   accessConfirmed: boolean;
   clientVisible: boolean;
+}
+
+/**
+ * What to show where a stage would go.
+ *
+ * A BuildSuite project has no §7 stage, so this falls back to the status
+ * BuildSuite itself recorded. Never invents a mapping between the two.
+ */
+export function stageLabel(project: Project): string {
+  return project.projectStage ?? project.sourceStatus ?? 'Unknown';
+}
+
+/**
+ * Whether this record carries progress, health and money — or only identity.
+ *
+ * BuildSuite holds who, where and when. It holds no percentage complete, no
+ * health assessment and no contract value. Rendering those anyway produces
+ * "0% · On Track · $0" on every row, which is not missing data — it is three
+ * confident statements nobody made.
+ */
+export function hasOperationalDetail(project: Project): boolean {
+  return project.provenance !== 'buildsuite';
+}
+
+/** Whether this record carries real money, as opposed to zeros standing in. */
+export function hasFinancials(project: Project): boolean {
+  return hasOperationalDetail(project);
+}
+
+/** What to show in a money column: a real amount, BuildSuite's band, or nothing. */
+export function moneyLabel(project: Project, format: (n: number) => string): string {
+  if (hasFinancials(project)) return format(project.currentProjectTotal);
+  return project.budgetBand ?? '—';
+}
+
+/**
+ * Whether a project is still live work.
+ *
+ * The §7 pipeline says so with a stage; BuildSuite says so with its own status
+ * word. Both are checked here so callers do not have to know which source they
+ * are holding — and so a BuildSuite project does not count as active merely
+ * because it has no stage.
+ */
+export function isActiveProject(project: Project): boolean {
+  if (project.projectStage !== undefined) {
+    return project.projectStage !== 'Completed' && project.projectStage !== 'Canceled';
+  }
+  const status = project.sourceStatus ?? '';
+  return status !== 'completed' && status !== 'cancelled' && status !== 'canceled';
 }

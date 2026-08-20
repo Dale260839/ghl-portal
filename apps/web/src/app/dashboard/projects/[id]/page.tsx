@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getDataSource } from '@/lib/data/source';
 import { requireTenantScope } from '@/lib/scope';
+import { hasFinancials, hasOperationalDetail, stageLabel } from '@/lib/data/types';
 import {
   Badge,
   Card,
@@ -44,7 +45,7 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
           <h1 className="text-xl font-semibold tracking-tight text-navy-900">
             {project.projectName}
           </h1>
-          <HealthBadge status={project.healthStatus} />
+          {hasOperationalDetail(project) && <HealthBadge status={project.healthStatus} />}
         </div>
         <p className="mt-1 text-sm text-navy-400">
           {project.projectAddress} · {project.buildsuiteProjectId}
@@ -57,7 +58,7 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
             <div className="grid gap-5 sm:grid-cols-3">
               <div>
                 <div className="text-xs tracking-wide text-navy-400 uppercase">Stage</div>
-                <div className="mt-1 text-sm font-medium text-navy-900">{project.projectStage}</div>
+                <div className="mt-1 text-sm font-medium text-navy-900">{stageLabel(project)}</div>
               </div>
               <div>
                 <div className="text-xs tracking-wide text-navy-400 uppercase">Current</div>
@@ -70,9 +71,11 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
                 <div className="mt-1 text-sm font-medium text-navy-900">{project.nextMilestone}</div>
               </div>
             </div>
-            <div className="mt-5">
-              <ProgressBar value={project.progressPercentage} />
-            </div>
+            {hasOperationalDetail(project) && (
+              <div className="mt-5">
+                <ProgressBar value={project.progressPercentage} />
+              </div>
+            )}
           </Card>
 
           <Card>
@@ -161,6 +164,19 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
         <div className="space-y-5">
           <Card>
             <CardHeader title="Financials" />
+            {!hasFinancials(project) ? (
+              <div className="px-5 py-5 text-sm text-navy-400">
+                BuildSuite records a budget band, not a contract ledger.
+                <div className="mt-2 text-base font-medium text-navy-900">
+                  {project.budgetBand ?? 'No budget recorded'}
+                </div>
+                <p className="mt-3 text-xs leading-relaxed">
+                  Contract value, change orders, invoicing and margin arrive with the Hub tables.
+                  Nothing here is estimated from the band — an invented figure on this screen is
+                  worse than an absent one.
+                </p>
+              </div>
+            ) : (
             <dl className="divide-y divide-navy-100 text-sm">
               {[
                 ['Contract Amount', currency(project.contractAmount), false],
@@ -182,6 +198,7 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
                 </div>
               ))}
             </dl>
+            )}
             <p className="border-t border-navy-100 px-5 py-3 text-xs leading-relaxed text-navy-400">
               Fields marked internal are excluded from client responses at the data layer, not
               hidden in the UI.

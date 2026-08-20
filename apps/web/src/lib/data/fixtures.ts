@@ -12,6 +12,7 @@ import type { Contact, DailyUpdate, Issue, Milestone, Project, Task } from './ty
 
 export const PROJECTS: Project[] = [
   {
+    provenance: 'fixture',
     ownerAuthProfileId: '7726102a-8e13-4006-889d-d68bc1cccd40',
     ghlLocationId: 'loc_alliance_pro',
     buildsuiteProjectId: 'BSP-2026-000184',
@@ -56,6 +57,7 @@ export const PROJECTS: Project[] = [
     allowFileUploads: false,
   },
   {
+    provenance: 'fixture',
     ownerAuthProfileId: '7726102a-8e13-4006-889d-d68bc1cccd40',
     ghlLocationId: 'loc_alliance_pro',
     buildsuiteProjectId: 'BSP-2026-000191',
@@ -100,6 +102,7 @@ export const PROJECTS: Project[] = [
     allowFileUploads: false,
   },
   {
+    provenance: 'fixture',
     ownerAuthProfileId: '7726102a-8e13-4006-889d-d68bc1cccd40',
     ghlLocationId: 'loc_alliance_pro',
     buildsuiteProjectId: 'BSP-2026-000177',
@@ -144,6 +147,7 @@ export const PROJECTS: Project[] = [
     allowFileUploads: false,
   },
   {
+    provenance: 'fixture',
     ownerAuthProfileId: 'a4502e38-bb67-420b-a7fc-3e1bc3d99c01',
     ghlLocationId: 'loc_bexar_builders',
     buildsuiteProjectId: 'BSP-2026-000203',
@@ -188,6 +192,7 @@ export const PROJECTS: Project[] = [
     allowFileUploads: false,
   },
   {
+    provenance: 'fixture',
     ownerAuthProfileId: 'a4502e38-bb67-420b-a7fc-3e1bc3d99c01',
     ghlLocationId: 'loc_bexar_builders',
     buildsuiteProjectId: 'BSP-2026-000168',
@@ -232,6 +237,7 @@ export const PROJECTS: Project[] = [
     allowFileUploads: false,
   },
   {
+    provenance: 'fixture',
     ownerAuthProfileId: 'a4502e38-bb67-420b-a7fc-3e1bc3d99c01',
     ghlLocationId: 'loc_bexar_builders',
     buildsuiteProjectId: 'BSP-2026-000212',

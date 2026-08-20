@@ -39,6 +39,9 @@ export const PROJECT_COLUMNS = [
   'client_name',
   'ghl_contact_id',
   'ghl_opportunity_id',
+  // Selected as well as filtered on: `Project.ownerAuthProfileId` carries it,
+  // and a row that cannot say who owns it cannot be re-checked downstream.
+  'auth_profile_id',
 ] as const;
 
 /**
@@ -71,6 +74,7 @@ export interface BuildSuiteProjectRow {
   client_name: string | null;
   ghl_contact_id: string | null;
   ghl_opportunity_id: string | null;
+  auth_profile_id: string | null;
 }
 
 /** What the Hub actually renders. Normalized, nothing internal. */
@@ -147,6 +151,24 @@ export interface BuildSuiteReader {
    * between them; scoping to one would hide half an agency's work from itself.
    */
   listAuthProfileIdsForLocation(locationId: string): Promise<string[]>;
+
+  /**
+   * Every project for the tenant, whatever its status — the raw rows.
+   *
+   * `listActiveProjects` narrows to `status=active` and normalizes for the
+   * "Incoming from BuildSuite" screen. This one backs the main data source,
+   * which needs draft and completed work too and does its own mapping.
+   */
+  listProjectRows(scope: TenantScope, limit?: number): Promise<BuildSuiteProjectRow[]>;
+
+  /**
+   * The projects belonging to one GHL contact (§1.4 — a contact may hold
+   * several; two of this tenant's five do).
+   *
+   * Deliberately not tenant-scoped: a homeowner's jobs can sit with any
+   * contractor, and the §9.1 gate is what constrains this read.
+   */
+  listProjectRowsForContact(ghlContactId: string, limit?: number): Promise<BuildSuiteProjectRow[]>;
 }
 
 export interface BuildSuiteUnavailable {
@@ -199,6 +221,33 @@ class SupabaseReader implements BuildSuiteReader {
     });
 
     return rows.map((r) => r.id).filter((v) => typeof v === 'string' && v !== '');
+  }
+
+  async listProjectRows(scope: TenantScope, limit = 200): Promise<BuildSuiteProjectRow[]> {
+    return await this.client.select<BuildSuiteProjectRow>({
+      from: 'projects',
+      columns: PROJECT_COLUMNS,
+      filters: this.tenantFilter(scope, 'project rows'),
+      order: 'updated_at.desc',
+      limit,
+    });
+  }
+
+  async listProjectRowsForContact(
+    ghlContactId: string,
+    limit = 50,
+  ): Promise<BuildSuiteProjectRow[]> {
+    const id = ghlContactId.trim();
+    // An empty contact id would drop the filter and return the whole table.
+    if (id === '') return [];
+
+    return await this.client.select<BuildSuiteProjectRow>({
+      from: 'projects',
+      columns: PROJECT_COLUMNS,
+      filters: { ghl_contact_id: `eq.${id}` },
+      order: 'updated_at.desc',
+      limit,
+    });
   }
 
   async countByStatus(scope: TenantScope): Promise<Record<string, number>> {

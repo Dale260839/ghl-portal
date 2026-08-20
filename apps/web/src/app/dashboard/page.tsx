@@ -2,6 +2,12 @@ import Link from 'next/link';
 import { getDataSource } from '@/lib/data/source';
 import { requireTenantScope } from '@/lib/scope';
 import {
+  hasFinancials,
+  hasOperationalDetail,
+  isActiveProject,
+  stageLabel,
+} from '@/lib/data/types';
+import {
   Card,
   CardHeader,
   HealthBadge,
@@ -16,9 +22,11 @@ export default async function PortfolioOverview() {
   const db = getDataSource(scope);
   const [projects, updates] = await Promise.all([db.listProjects(scope), db.listDailyUpdates(scope)]);
 
-  const active = projects.filter(
-    (p) => p.projectStage !== 'Completed' && p.projectStage !== 'Canceled',
-  );
+  const active = projects.filter(isActiveProject);
+  // BuildSuite records a budget *band*, never an amount, so there is nothing to
+  // total. Summing zeros and formatting the result as currency would put "$0"
+  // where a contractor expects their book of work.
+  const money = active.some(hasFinancials);
   const contractValue = active.reduce((sum, p) => sum + p.currentProjectTotal, 0);
   const outstanding = active.reduce((sum, p) => sum + p.remainingBalance, 0);
   const needsAttention = active.filter(
@@ -39,13 +47,13 @@ export default async function PortfolioOverview() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
           label="Active contract value"
-          value={currency(contractValue)}
-          sub={`across ${active.length} projects`}
+          value={money ? currency(contractValue) : '—'}
+          sub={money ? `across ${active.length} projects` : 'not held in BuildSuite'}
         />
         <StatTile
           label="Outstanding balance"
-          value={currency(outstanding)}
-          sub="invoiced and unbilled"
+          value={money ? currency(outstanding) : '—'}
+          sub={money ? 'invoiced and unbilled' : 'not held in BuildSuite'}
         />
         <StatTile
           label="Updates awaiting review"
@@ -89,13 +97,13 @@ export default async function PortfolioOverview() {
                         {p.projectName}
                       </div>
                       <div className="mt-0.5 truncate text-xs text-navy-400">
-                        {p.clientName} · {p.projectStage}
+                        {p.clientName} · {stageLabel(p)}
                       </div>
                     </div>
-                    <HealthBadge status={p.healthStatus} />
+                    {hasOperationalDetail(p) && <HealthBadge status={p.healthStatus} />}
                   </div>
                   <div className="mt-3">
-                    <ProgressBar value={p.progressPercentage} />
+                    {hasOperationalDetail(p) && <ProgressBar value={p.progressPercentage} />}
                   </div>
                   {p.delayReason !== '' && (
                     <div className="mt-2.5 rounded-md bg-red-50 px-2.5 py-1.5 text-xs text-red-700">

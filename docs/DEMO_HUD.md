@@ -102,6 +102,25 @@ Step 19 deliberately ends on the **From BuildSuite** screen, because that is the
 one reading their real database. Finishing on live data rather than fixtures is
 the point of putting it last.
 
+### The dashboard is on real data now
+
+As of 2026-08-20 the contractor screens read **BuildSuite's live Supabase**, not
+fixtures. The banner says "Live BuildSuite data" and the projects are the
+tenant's own. Step 4's watch-out in the HUD is now out of date if you have
+pulled the latest — check the banner before you say anything about demo data.
+
+What BuildSuite actually carries, measured: identity, client, city/state/zip,
+start and end dates, a budget **band**, and its own status word. It carries **no**
+progress, health, contract value, milestones, field updates or issues — those are
+the Hub tables, still not created. Those screens are empty rather than
+fixture-filled, on purpose: mixing invented updates into a list of real projects
+is indistinguishable from the product working.
+
+So on the call: the project list, client names and dates are real. The Field
+Updates queue will be **empty**, which breaks the walkthrough's spine (steps
+9-14). Run that part against fixtures by unsetting `SUPABASE_URL` locally, or say
+plainly that updates arrive with the Hub tables.
+
 ### The one caveat you must not drop
 
 The annex step *The two we are waiting on* says the project list **shows more

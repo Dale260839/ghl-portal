@@ -157,6 +157,7 @@ const row: BuildSuiteProjectRow = {
   client_name: 'Dana Johnson',
   ghl_contact_id: 'ghl_contact_abc',
   ghl_opportunity_id: 'ghl_opp_xyz',
+  auth_profile_id: '1dca7b15-9904-449b-a702-5725a5d1b069',
 };
 
 test('normalization joins the address and formats the budget', () => {

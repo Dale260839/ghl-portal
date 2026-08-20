@@ -1,4 +1,6 @@
 import { canReadProjectObject, readGhlConfig } from '../ghl/config.ts';
+import { getBuildSuiteReader } from '../buildsuite/projects.ts';
+import { BuildSuiteDataSource } from './buildsuite-source.ts';
 import { assertScope, ownedByScope, type TenantScope } from '../tenancy.ts';
 import { CONTACTS, DAILY_UPDATES, ISSUES, MILESTONES, PROJECTS, TASKS } from './fixtures.ts';
 import { GhlDataSource } from './ghl-source.ts';
@@ -18,8 +20,10 @@ import type { Contact, DailyUpdate, Issue, Milestone, Project, Task } from './ty
  * GHL sub-accounts. A module-level singleton would let the first tenant's data
  * source serve the second, so instances are keyed by location.
  */
+export type DataSourceKind = 'fixture' | 'buildsuite' | 'ghl';
+
 export interface ProjectDataSource {
-  readonly kind: 'fixture' | 'ghl';
+  readonly kind: DataSourceKind;
   listProjects(scope: TenantScope): Promise<Project[]>;
   getProject(scope: TenantScope, buildsuiteProjectId: string): Promise<Project | null>;
   listMilestones(scope: TenantScope, buildsuiteProjectId: string): Promise<Milestone[]>;
@@ -106,45 +110,102 @@ class FixtureDataSource implements ProjectDataSource {
 const sources = new Map<string, ProjectDataSource>();
 
 const FIXTURE_KEY = '__fixtures__';
+const BUILDSUITE_KEY = '__buildsuite__';
 
+/**
+ * Which source backs this request.
+ *
+ * Order of preference, and the reasoning:
+ *
+ *   1. **GHL custom objects**, when `GHL_PROJECT_OBJECT_KEY` is set. This is the
+ *      §7 model — nineteen stages, milestones, the full financial record — and
+ *      it is what the architecture targets.
+ *   2. **BuildSuite's Supabase**, when Supabase is configured. Fewer fields, but
+ *      they are real: the tenant's actual projects, clients, addresses and
+ *      dates. Preferred over fixtures because a real partial record beats an
+ *      invented complete one on every screen that matters.
+ *   3. **Fixtures**, only when neither is reachable.
+ *
+ * BuildSuite carries no daily updates, milestones, tasks or issues — those are
+ * the `hub_*` tables and do not exist yet — so under (2) those lists come back
+ * empty. That is deliberate: mixing fixture updates into a screen of real
+ * projects would be indistinguishable from the product working.
+ */
 export function getDataSource(scope?: TenantScope): ProjectDataSource {
   const result = readGhlConfig();
 
-  if (!result.configured || !canReadProjectObject(result.config)) {
-    if (process.env.GHL_API_BASE_URL !== undefined) {
-      // Say which half is missing. "GHL reachable but no object key" and "no
-      // GHL at all" look identical from a screen and need different fixes.
-      const missing = result.configured
-        ? 'GHL_PROJECT_OBJECT_KEY or a location'
-        : result.missing.join(', ');
-      console.warn(`[data] Falling back to fixtures. Missing: ${missing}`);
+  if (result.configured && canReadProjectObject(result.config)) {
+    // Live GHL: the instance is bound to a location, so it must be known.
+    const locationId = scope?.locationId;
+    if (locationId === undefined || locationId.trim() === '') {
+      throw new Error(
+        'GHL is configured but the request carries no locationId — refusing to guess which sub-account (D-013)',
+      );
     }
-    const existing = sources.get(FIXTURE_KEY);
+
+    const existing = sources.get(locationId);
     if (existing !== undefined) return existing;
-    const created: ProjectDataSource = new FixtureDataSource();
-    sources.set(FIXTURE_KEY, created);
+    const created: ProjectDataSource = new GhlDataSource({ ...result.config, locationId });
+    sources.set(locationId, created);
     return created;
   }
 
-  // Live GHL: the instance is bound to a location, so the location must be known.
-  const locationId = scope?.locationId;
-  if (locationId === undefined || locationId.trim() === '') {
-    throw new Error(
-      'GHL is configured but the request carries no locationId — refusing to guess which sub-account (D-013)',
+  const reader = getBuildSuiteReader();
+  if (reader.available) {
+    // Same rule as GHL: one instance per location, never one per process, or
+    // the first tenant's source would serve the second (D-013).
+    const locationId = scope?.locationId;
+    if (locationId !== undefined && locationId.trim() !== '') {
+      const key = `buildsuite:${locationId}`;
+      const existing = sources.get(key);
+      if (existing !== undefined) return existing;
+      const created: ProjectDataSource = new BuildSuiteDataSource(reader, locationId);
+      sources.set(key, created);
+      return created;
+    }
+    // No location: the client portal path, which resolves through a contact
+    // rather than a tenant. It still needs real projects.
+    const existing = sources.get(BUILDSUITE_KEY);
+    if (existing !== undefined) return existing;
+    const created: ProjectDataSource = new BuildSuiteDataSource(reader, '');
+    sources.set(BUILDSUITE_KEY, created);
+    return created;
+  }
+
+  if (process.env.GHL_API_BASE_URL !== undefined || process.env.SUPABASE_URL !== undefined) {
+    // Say which half is missing — the three fallbacks look identical from a
+    // screen and need different fixes.
+    console.warn(
+      `[data] Falling back to fixtures. GHL: ${
+        result.configured ? 'no GHL_PROJECT_OBJECT_KEY' : result.missing.join(', ')
+      }. BuildSuite: ${reader.available ? 'ok' : reader.missing.join(', ')}.`,
     );
   }
 
-  const existing = sources.get(locationId);
+  const existing = sources.get(FIXTURE_KEY);
   if (existing !== undefined) return existing;
-  const created: ProjectDataSource = new GhlDataSource({ ...result.config, locationId });
-  sources.set(locationId, created);
+  const created: ProjectDataSource = new FixtureDataSource();
+  sources.set(FIXTURE_KEY, created);
   return created;
 }
 
 /** Surfaced in the UI so nobody demos fixtures believing they are live data. */
 export function isLiveData(): boolean {
+  return activeSourceKind() !== 'fixture';
+}
+
+/**
+ * Which source the next request will use, without building one.
+ *
+ * The banner needs to name it. "Demo data" and "real projects, no updates yet"
+ * are different things to be looking at, and telling a contractor the wrong one
+ * is how a demo gets contradicted by its own screen.
+ */
+export function activeSourceKind(): DataSourceKind {
   const result = readGhlConfig();
-  return result.configured && canReadProjectObject(result.config);
+  if (result.configured && canReadProjectObject(result.config)) return 'ghl';
+  if (getBuildSuiteReader().available) return 'buildsuite';
+  return 'fixture';
 }
 
 /** Test seam — the per-location cache must not leak between tests either. */
