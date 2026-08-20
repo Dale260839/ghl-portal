@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { accountForEmail, clearSession, getSession, homeFor, setSession } from './session';
+import { planReturn, planViewAs, viewAsEnabled } from './view-as';
 import {
   approveInternally,
   createDraftUpdate,
@@ -182,4 +183,36 @@ export async function submitFieldUpdate(formData: FormData) {
   revalidatePath('/dashboard/updates');
   revalidatePath('/dashboard');
   redirect('/field?submitted=1');
+}
+
+/**
+ * "View as" — assume the field or client experience (D-016, demo scaffolding).
+ *
+ * The decision lives in `view-as.ts` so the tenancy rule is testable; this only
+ * applies the result. Permission is re-checked here against the session rather
+ * than trusted from the form, because the dropdown being hidden is a UI fact and
+ * this is a server action anyone can post to.
+ */
+export async function viewAs(formData: FormData) {
+  if (!viewAsEnabled()) throw new Error('View switching is disabled');
+
+  const target = String(formData.get('role') ?? '');
+  if (target !== 'contractor' && target !== 'field' && target !== 'client') {
+    throw new Error(`unknown role "${target}"`);
+  }
+
+  const result = planViewAs(await getSession(), target);
+  if (!result.ok) throw new Error(result.reason);
+
+  await setSession(result.session);
+  redirect(result.redirectTo);
+}
+
+/** Hands the assumed view back and restores the contractor identity. */
+export async function returnToMyAccount() {
+  const result = planReturn(await getSession());
+  if (!result.ok) throw new Error(result.reason);
+
+  await setSession(result.session);
+  redirect(result.redirectTo);
 }

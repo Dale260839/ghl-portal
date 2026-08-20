@@ -36,6 +36,8 @@ export interface AppShellProps {
   userName: string;
   /** Optional strip above everything — the fixtures banner, preview notice. */
   banner?: ReactNode;
+  /** Slot in the context bar, left of the user name — the demo view switcher. */
+  headerExtra?: ReactNode;
   children: ReactNode;
 }
 
@@ -48,6 +50,7 @@ export function AppShell({
   activeHref,
   userName,
   banner,
+  headerExtra,
   children,
 }: AppShellProps) {
   return (
@@ -125,6 +128,7 @@ export function AppShell({
             )}
 
             <div className="ml-auto flex shrink-0 items-center gap-3">
+              {headerExtra}
               <span className="hidden text-xs text-navy-400 sm:block">{userName}</span>
               <form action={signOut}>
                 <button

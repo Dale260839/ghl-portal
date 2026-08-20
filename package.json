@@ -10,6 +10,7 @@
     "dev": "npm run dev --workspace @buildsuite/web",
     "build": "npm run build --workspace @buildsuite/web",
     "test": "npm test --workspace @buildsuite/contracts",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "hud": "node scripts/build-hud.mjs"
   }
 }

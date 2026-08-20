@@ -3,14 +3,19 @@ import { signOut } from '@/lib/actions';
 import { getSession } from '@/lib/session';
 import { isLiveData } from '@/lib/data/source';
 import { DataModeBanner } from '@/components/ui';
+import { ViewSwitcher, ViewingAsBanner } from '@/components/view-switcher';
+import { isViewingAs, viewAsEnabled } from '@/lib/view-as';
 
 export default async function FieldLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   if (session === null) redirect('/');
   if (session.role !== 'field' && session.role !== 'contractor') redirect('/');
 
+  const viewing = isViewingAs(session);
+
   return (
     <div className="min-h-dvh bg-navy-50">
+      {viewing && <ViewingAsBanner persona={session.name} role={session.role} />}
       <DataModeBanner live={isLiveData()} />
 
       <header className="sticky top-0 z-10 border-b border-navy-100 bg-white">
@@ -19,14 +24,19 @@ export default async function FieldLayout({ children }: { children: React.ReactN
             <div className="text-sm font-semibold text-navy-900">Today</div>
             <div className="text-xs text-navy-400">{session.name}</div>
           </div>
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="rounded-md border border-navy-100 px-2.5 py-1.5 text-xs font-medium text-navy-600"
-            >
-              Sign out
-            </button>
-          </form>
+          <div className="flex items-center gap-2">
+            {viewAsEnabled() && (session.role === 'contractor' || viewing) && (
+              <ViewSwitcher current={session.role} viewing={viewing} />
+            )}
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="rounded-md border border-navy-100 px-2.5 py-1.5 text-xs font-medium text-navy-600"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 

@@ -4,6 +4,8 @@ import { getSession } from '@/lib/session';
 import { requireTenantScope } from '@/lib/scope';
 import { getDataSource, isLiveData } from '@/lib/data/source';
 import { AppShell, type NavItem } from '@/components/app-shell';
+import { ViewSwitcher } from '@/components/view-switcher';
+import { viewAsEnabled } from '@/lib/view-as';
 import { DataModeBanner } from '@/components/ui';
 import {
   IconBuildSuite,
@@ -48,6 +50,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       nav={nav}
       activeHref={activeHref}
       userName={session.name}
+      headerExtra={viewAsEnabled() ? <ViewSwitcher current="contractor" viewing={false} /> : null}
       banner={<DataModeBanner live={isLiveData()} />}
     >
       {children}
