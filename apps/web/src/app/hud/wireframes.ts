@@ -1,13 +1,18 @@
 /**
  * Schematic maps of every screen the walkthrough visits.
  *
- * Not decoration — the point of the HUD is that the presenter knows where the
- * mouse goes before they get there. Each step names a screen and a block, and
- * the map draws that block lit while the rest stays dim, so the shape of the
- * page is recognisable at a glance from a second monitor.
+ * GENERATED — do not edit by hand. Run `npm run hud:maps` with the dev server
+ * up, which scrapes the real pages so nav labels, their order, section headings
+ * and button text come from the app rather than from anyone's memory. The
+ * hand-drawn version of this file was wrong about the portal nav, the project
+ * detail panels, and the number of buttons on the review screen.
  *
- * Deliberately crude. A pixel-accurate mini-render would compete with the real
- * screen for attention; a grey box in roughly the right place does not.
+ * Vertical order follows the DOM, which is the order a person reads the page in.
+ * Deliberately crude: it has to be recognisable at a glance from a second
+ * monitor, not accurate to the pixel.
+ *
+ * The two entries at the bottom are diagrams rather than screens, so they are
+ * authored in `scripts/build-wireframes.mjs` and not scraped.
  */
 
 export type BlockKind = 'sidebar' | 'nav' | 'header' | 'tile' | 'panel' | 'row' | 'button' | 'hero';
@@ -18,7 +23,7 @@ export interface Block {
   kind: BlockKind;
   /** [start column, span] on a 12-column grid. */
   col: [number, number];
-  /** [start row, span] on a 14-row grid. */
+  /** [start row, span]. */
   row: [number, number];
 }
 
@@ -26,223 +31,350 @@ export interface Screen {
   name: string;
   /** Shown under the map — which page the presenter should be on. */
   route: string;
+  /** How many grid rows this screen's blocks occupy. */
+  rows: number;
   blocks: Block[];
 }
 
-const CONTRACTOR_NAV = ['Overview', 'Projects', 'Field Updates', 'Issues', 'From BuildSuite'];
-
-const PORTAL_NAV = [
-  'Dashboard',
-  'Timeline',
-  'Schedule',
-  'Daily Updates',
-  'Designs',
-  'Budget',
-  'Change Orders',
-  'Documents',
-  'Photos',
-  'Messages',
-  'Issues',
-];
-
-function slug(label: string): string {
-  return label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
-}
-
-/**
- * The furniture shared by every signed-in screen: banner, sidebar, context bar.
- * Nav labels are shortened hard — the map is for locating things, not reading.
- */
-function chrome(nav: string[]): Block[] {
-  const blocks: Block[] = [
-    { id: 'banner', label: 'data banner', kind: 'header', col: [1, 12], row: [1, 1] },
-    { id: 'sidebar', kind: 'sidebar', col: [1, 3], row: [2, 13] },
-    { id: 'context', label: 'project name', kind: 'header', col: [4, 6], row: [2, 1] },
-    { id: 'switcher', label: 'Viewing as', kind: 'button', col: [10, 3], row: [2, 1] },
-  ];
-
-  nav.forEach((label, i) => {
-    blocks.push({ id: `nav-${slug(label)}`, label, kind: 'nav', col: [1, 3], row: [3 + i, 1] });
-  });
-
-  return blocks;
-}
-
 export const SCREENS = {
-  // ── Before the app ────────────────────────────────────────────────────────
-  ghl: {
-    name: 'GoHighLevel',
-    route: 'app.gohighlevel.com',
-    blocks: [
-      { id: 'ghl-sidebar', kind: 'sidebar', col: [1, 3], row: [1, 14] },
-      { id: 'ghl-nav', label: 'GHL menu', kind: 'nav', col: [1, 3], row: [2, 1] },
-      { id: 'menu-link', label: 'Project Hub', kind: 'nav', col: [1, 3], row: [8, 1] },
-      { id: 'ghl-body', label: 'GHL dashboard', kind: 'panel', col: [4, 9], row: [1, 14] },
-    ],
-  },
-
   signin: {
-    name: 'Sign in',
-    route: '/',
+    name: "Sign in",
+    route: "/",
+    rows: 14,
     blocks: [
-      { id: 'hero', label: 'One record, three views', kind: 'hero', col: [1, 7], row: [1, 14] },
-      { id: 'form', label: 'Choose an experience', kind: 'panel', col: [8, 4], row: [5, 5] },
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "header", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'title', label: "One shared project record. Three controlled experiences.", kind: 'header', col: [4, 6], row: [3, 1] },
+      { id: 'sec-sign-in', label: "Sign in", kind: 'panel', col: [4, 6], row: [4, 2] },
+      { id: 'btn-sign-in', label: "Sign in", kind: 'button', col: [4, 6], row: [6, 1] },
     ],
   },
 
-  connecting: {
-    name: 'Signing you in',
-    route: '/auth/ghl',
-    blocks: [{ id: 'spinner', label: 'Signing you in', kind: 'panel', col: [4, 6], row: [6, 3] }],
-  },
-
-  // ── Contractor ────────────────────────────────────────────────────────────
   dashboard: {
-    name: 'Contractor Dashboard',
-    route: '/dashboard',
+    name: "Contractor Dashboard",
+    route: "/dashboard",
+    rows: 14,
     blocks: [
-      ...chrome(CONTRACTOR_NAV),
-      { id: 'title', label: 'Portfolio Overview', kind: 'header', col: [4, 9], row: [3, 1] },
-      { id: 'tile-1', label: 'Active', kind: 'tile', col: [4, 2], row: [4, 2] },
-      { id: 'tile-2', label: 'Value', kind: 'tile', col: [6, 2], row: [4, 2] },
-      { id: 'tile-3', label: 'Review', kind: 'tile', col: [8, 3], row: [4, 2] },
-      { id: 'tile-4', label: 'Issues', kind: 'tile', col: [11, 2], row: [4, 2] },
-      { id: 'attention', label: 'Projects needing attention', kind: 'panel', col: [4, 9], row: [6, 4] },
-      { id: 'queue', label: 'Review queue', kind: 'panel', col: [4, 5], row: [10, 5] },
-      { id: 'waiting', label: 'Waiting on the client', kind: 'panel', col: [9, 4], row: [10, 5] },
+      { id: 'sidebar', kind: 'sidebar', col: [1, 3], row: [2, 13] },
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "project name", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'switcher', label: "Viewing as", kind: 'button', col: [10, 3], row: [2, 1] },
+      { id: 'nav-overview', label: "Overview", kind: 'nav', col: [1, 3], row: [3, 1] },
+      { id: 'nav-projects', label: "Projects", kind: 'nav', col: [1, 3], row: [4, 1] },
+      { id: 'nav-field-updates', label: "Field Updates", kind: 'nav', col: [1, 3], row: [5, 1] },
+      { id: 'nav-issues', label: "Issues", kind: 'nav', col: [1, 3], row: [6, 1] },
+      { id: 'nav-from-buildsuite', label: "From BuildSuite", kind: 'nav', col: [1, 3], row: [7, 1] },
+      { id: 'title', label: "Portfolio Overview", kind: 'header', col: [4, 9], row: [3, 1] },
+      { id: 'sec-projects-needing-attention', label: "Projects needing attention", kind: 'panel', col: [4, 9], row: [4, 2] },
+      { id: 'sec-review-queue', label: "Review queue", kind: 'panel', col: [4, 9], row: [6, 2] },
+      { id: 'sec-waiting-on-the-client', label: "Waiting on the client", kind: 'panel', col: [4, 9], row: [8, 2] },
     ],
   },
 
   projects: {
-    name: 'Projects',
-    route: '/dashboard/projects',
+    name: "Projects",
+    route: "/dashboard/projects",
+    rows: 14,
     blocks: [
-      ...chrome(CONTRACTOR_NAV),
-      { id: 'title', label: 'Projects', kind: 'header', col: [4, 9], row: [3, 1] },
-      { id: 'row-1', label: 'Johnson Kitchen Remodel', kind: 'row', col: [4, 9], row: [5, 1] },
-      { id: 'row-2', kind: 'row', col: [4, 9], row: [6, 1] },
-      { id: 'row-3', kind: 'row', col: [4, 9], row: [7, 1] },
-      { id: 'row-4', kind: 'row', col: [4, 9], row: [8, 1] },
-      { id: 'row-5', kind: 'row', col: [4, 9], row: [9, 1] },
-      { id: 'row-6', kind: 'row', col: [4, 9], row: [10, 1] },
+      { id: 'sidebar', kind: 'sidebar', col: [1, 3], row: [2, 13] },
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "project name", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'switcher', label: "Viewing as", kind: 'button', col: [10, 3], row: [2, 1] },
+      { id: 'nav-overview', label: "Overview", kind: 'nav', col: [1, 3], row: [3, 1] },
+      { id: 'nav-projects', label: "Projects", kind: 'nav', col: [1, 3], row: [4, 1] },
+      { id: 'nav-field-updates', label: "Field Updates", kind: 'nav', col: [1, 3], row: [5, 1] },
+      { id: 'nav-issues', label: "Issues", kind: 'nav', col: [1, 3], row: [6, 1] },
+      { id: 'nav-from-buildsuite', label: "From BuildSuite", kind: 'nav', col: [1, 3], row: [7, 1] },
+      { id: 'title', label: "Projects", kind: 'header', col: [4, 9], row: [3, 1] },
     ],
   },
 
   project: {
-    name: 'Project detail',
-    route: '/dashboard/projects/...',
+    name: "Project detail",
+    route: "/dashboard/projects/...",
+    rows: 14,
     blocks: [
-      ...chrome(CONTRACTOR_NAV),
-      { id: 'title', label: 'Johnson Kitchen Remodel', kind: 'header', col: [4, 6], row: [3, 1] },
-      { id: 'visibility-btn', label: 'Client Visibility', kind: 'button', col: [10, 3], row: [3, 1] },
-      { id: 'stage', label: 'Stage and progress', kind: 'panel', col: [4, 9], row: [4, 2] },
-      { id: 'financials', label: 'Contract, cost, margin', kind: 'panel', col: [4, 5], row: [6, 4] },
-      { id: 'contacts', label: 'Client and crew', kind: 'panel', col: [9, 4], row: [6, 4] },
-      { id: 'activity', label: 'Recent activity', kind: 'panel', col: [4, 9], row: [10, 5] },
+      { id: 'sidebar', kind: 'sidebar', col: [1, 3], row: [2, 13] },
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "project name", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'switcher', label: "Viewing as", kind: 'button', col: [10, 3], row: [2, 1] },
+      { id: 'nav-overview', label: "Overview", kind: 'nav', col: [1, 3], row: [3, 1] },
+      { id: 'nav-projects', label: "Projects", kind: 'nav', col: [1, 3], row: [4, 1] },
+      { id: 'nav-field-updates', label: "Field Updates", kind: 'nav', col: [1, 3], row: [5, 1] },
+      { id: 'nav-issues', label: "Issues", kind: 'nav', col: [1, 3], row: [6, 1] },
+      { id: 'nav-from-buildsuite', label: "From BuildSuite", kind: 'nav', col: [1, 3], row: [7, 1] },
+      { id: 'title', label: "Johnson Kitchen Remodel", kind: 'header', col: [4, 9], row: [3, 1] },
+      { id: 'sec-timeline', label: "Timeline", kind: 'panel', col: [4, 9], row: [4, 2] },
+      { id: 'sec-field-updates', label: "Field updates", kind: 'panel', col: [4, 9], row: [6, 2] },
+      { id: 'sec-financials', label: "Financials", kind: 'panel', col: [4, 9], row: [8, 2] },
+      { id: 'sec-client-visibility', label: "Client visibility", kind: 'panel', col: [4, 9], row: [10, 2] },
+      { id: 'sec-assigned-team', label: "Assigned team", kind: 'panel', col: [4, 9], row: [12, 2] },
     ],
   },
 
   visibility: {
-    name: 'Client Visibility Settings',
-    route: '/dashboard/projects/.../visibility',
+    name: "Client Visibility Settings",
+    route: "/dashboard/projects/.../visibility",
+    rows: 14,
     blocks: [
-      ...chrome(CONTRACTOR_NAV),
-      { id: 'title', label: 'Client Visibility Settings', kind: 'header', col: [4, 9], row: [3, 1] },
-      { id: 'switches', label: 'The switches', kind: 'panel', col: [4, 5], row: [4, 7] },
-      { id: 'preview', label: 'What the client sees', kind: 'panel', col: [9, 4], row: [4, 4] },
-      { id: 'never', label: 'Never visible, whatever the switches say', kind: 'panel', col: [9, 4], row: [8, 3] },
-      { id: 'save', label: 'Save', kind: 'button', col: [4, 2], row: [11, 1] },
+      { id: 'sidebar', kind: 'sidebar', col: [1, 3], row: [2, 13] },
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "project name", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'switcher', label: "Viewing as", kind: 'button', col: [10, 3], row: [2, 1] },
+      { id: 'nav-overview', label: "Overview", kind: 'nav', col: [1, 3], row: [3, 1] },
+      { id: 'nav-projects', label: "Projects", kind: 'nav', col: [1, 3], row: [4, 1] },
+      { id: 'nav-field-updates', label: "Field Updates", kind: 'nav', col: [1, 3], row: [5, 1] },
+      { id: 'nav-issues', label: "Issues", kind: 'nav', col: [1, 3], row: [6, 1] },
+      { id: 'nav-from-buildsuite', label: "From BuildSuite", kind: 'nav', col: [1, 3], row: [7, 1] },
+      { id: 'title', label: "Client Visibility Settings", kind: 'header', col: [4, 9], row: [3, 1] },
+      { id: 'sec-switches', label: "Switches", kind: 'panel', col: [4, 9], row: [4, 2] },
+      { id: 'sec-what-the-client-actually-gets', label: "What the client actually gets", kind: 'panel', col: [4, 9], row: [6, 2] },
+      { id: 'sec-never-visible-whatever-the-switches-', label: "Never visible, whatever the switches say", kind: 'panel', col: [4, 9], row: [8, 2] },
+      { id: 'btn-save-visibility', label: "Save visibility", kind: 'button', col: [4, 9], row: [10, 1] },
     ],
   },
 
   updates: {
-    name: 'Field Updates',
-    route: '/dashboard/updates',
+    name: "Field Updates",
+    route: "/dashboard/updates",
+    rows: 14,
     blocks: [
-      ...chrome(CONTRACTOR_NAV),
-      { id: 'title', label: 'Field Updates', kind: 'header', col: [4, 9], row: [3, 1] },
-      { id: 'pending', label: 'Awaiting your review', kind: 'panel', col: [4, 9], row: [4, 6] },
-      { id: 'internal', label: 'Internal notes (red block)', kind: 'row', col: [5, 7], row: [6, 1] },
-      { id: 'summary', label: 'Client summary, editable', kind: 'row', col: [5, 7], row: [8, 1] },
-      { id: 'publish', label: 'Approve and Publish', kind: 'button', col: [5, 3], row: [10, 1] },
-      { id: 'internal-only', label: 'Approve Internally', kind: 'button', col: [8, 3], row: [10, 1] },
-      { id: 'return', label: 'Return for Revision', kind: 'button', col: [11, 2], row: [10, 1] },
-      { id: 'published', label: 'Published to clients', kind: 'panel', col: [4, 9], row: [12, 3] },
+      { id: 'sidebar', kind: 'sidebar', col: [1, 3], row: [2, 13] },
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "project name", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'switcher', label: "Viewing as", kind: 'button', col: [10, 3], row: [2, 1] },
+      { id: 'nav-overview', label: "Overview", kind: 'nav', col: [1, 3], row: [3, 1] },
+      { id: 'nav-projects', label: "Projects", kind: 'nav', col: [1, 3], row: [4, 1] },
+      { id: 'nav-field-updates', label: "Field Updates", kind: 'nav', col: [1, 3], row: [5, 1] },
+      { id: 'nav-issues', label: "Issues", kind: 'nav', col: [1, 3], row: [6, 1] },
+      { id: 'nav-from-buildsuite', label: "From BuildSuite", kind: 'nav', col: [1, 3], row: [7, 1] },
+      { id: 'title', label: "Field Updates", kind: 'header', col: [4, 9], row: [3, 1] },
+      { id: 'sec-johnson-kitchen-remodel', label: "Johnson Kitchen Remodel", kind: 'panel', col: [4, 9], row: [4, 2] },
+      { id: 'sec-whitfield-master-suite-addition', label: "Whitfield Master Suite Addition", kind: 'panel', col: [4, 9], row: [6, 2] },
+      { id: 'sec-published-to-clients', label: "Published to clients", kind: 'panel', col: [4, 9], row: [8, 2] },
+      { id: 'btn-approve-and-publish', label: "Approve and Publish", kind: 'button', col: [4, 2], row: [10, 1] },
+      { id: 'btn-approve-internally', label: "Approve Internally", kind: 'button', col: [6, 2], row: [10, 1] },
+      { id: 'btn-edit-client-summary', label: "Edit Client Summary", kind: 'button', col: [8, 2], row: [10, 1] },
+      { id: 'btn-return-for-revision', label: "Return for Revision", kind: 'button', col: [10, 2], row: [10, 1] },
     ],
   },
 
-  // ── Client ────────────────────────────────────────────────────────────────
-  portal: {
-    name: 'Client Portal',
-    route: '/portal',
+  buildsuite: {
+    name: "Incoming from BuildSuite",
+    route: "/dashboard/buildsuite",
+    rows: 14,
     blocks: [
-      ...chrome(PORTAL_NAV),
-      { id: 'title', label: 'Johnson Kitchen Remodel', kind: 'header', col: [4, 9], row: [3, 1] },
-      { id: 'tracker', label: 'Six-stage tracker', kind: 'panel', col: [4, 9], row: [4, 2] },
-      { id: 'progress', label: 'Progress and next milestone', kind: 'panel', col: [4, 5], row: [6, 3] },
-      { id: 'schedule', label: 'Upcoming schedule', kind: 'panel', col: [9, 4], row: [6, 3] },
-      { id: 'budget', label: 'Budget summary', kind: 'panel', col: [4, 5], row: [9, 3] },
-      { id: 'recent', label: 'Recent updates', kind: 'panel', col: [9, 4], row: [9, 3] },
+      { id: 'sidebar', kind: 'sidebar', col: [1, 3], row: [2, 13] },
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "project name", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'switcher', label: "Viewing as", kind: 'button', col: [10, 3], row: [2, 1] },
+      { id: 'nav-overview', label: "Overview", kind: 'nav', col: [1, 3], row: [3, 1] },
+      { id: 'nav-projects', label: "Projects", kind: 'nav', col: [1, 3], row: [4, 1] },
+      { id: 'nav-field-updates', label: "Field Updates", kind: 'nav', col: [1, 3], row: [5, 1] },
+      { id: 'nav-issues', label: "Issues", kind: 'nav', col: [1, 3], row: [6, 1] },
+      { id: 'nav-from-buildsuite', label: "From BuildSuite", kind: 'nav', col: [1, 3], row: [7, 1] },
+      { id: 'title', label: "Incoming from BuildSuite", kind: 'header', col: [4, 9], row: [3, 1] },
+      { id: 'sec-active-projects', label: "Active projects", kind: 'panel', col: [4, 9], row: [4, 2] },
+    ],
+  },
+
+  portal: {
+    name: "Client Portal — Dashboard",
+    route: "/portal",
+    rows: 16,
+    blocks: [
+      { id: 'sidebar', kind: 'sidebar', col: [1, 3], row: [2, 15] },
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "project name", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'switcher', label: "Viewing as", kind: 'button', col: [10, 3], row: [2, 1] },
+      { id: 'nav-dashboard', label: "Dashboard", kind: 'nav', col: [1, 3], row: [3, 1] },
+      { id: 'nav-project-timeline', label: "Project Timeline", kind: 'nav', col: [1, 3], row: [4, 1] },
+      { id: 'nav-schedule', label: "Schedule", kind: 'nav', col: [1, 3], row: [5, 1] },
+      { id: 'nav-daily-updates', label: "Daily Updates", kind: 'nav', col: [1, 3], row: [6, 1] },
+      { id: 'nav-designs-selections', label: "Designs & Selections", kind: 'nav', col: [1, 3], row: [7, 1] },
+      { id: 'nav-budget-pricing', label: "Budget & Pricing", kind: 'nav', col: [1, 3], row: [8, 1] },
+      { id: 'nav-change-orders', label: "Change Orders", kind: 'nav', col: [1, 3], row: [9, 1] },
+      { id: 'nav-documents', label: "Documents", kind: 'nav', col: [1, 3], row: [10, 1] },
+      { id: 'nav-photos-videos', label: "Photos & Videos", kind: 'nav', col: [1, 3], row: [11, 1] },
+      { id: 'nav-messages', label: "Messages", kind: 'nav', col: [1, 3], row: [12, 1] },
+      { id: 'nav-issues-requests', label: "Issues & Requests", kind: 'nav', col: [1, 3], row: [13, 1] },
+      { id: 'nav-payments', label: "Payments", kind: 'nav', col: [1, 3], row: [14, 1] },
+      { id: 'nav-completion-warranty', label: "Completion & Warranty", kind: 'nav', col: [1, 3], row: [15, 1] },
+      { id: 'title', label: "Johnson Kitchen Remodel", kind: 'header', col: [4, 9], row: [3, 1] },
+      { id: 'sec-upcoming-schedule', label: "Upcoming schedule", kind: 'panel', col: [4, 9], row: [4, 2] },
+      { id: 'sec-budget-summary', label: "Budget summary", kind: 'panel', col: [4, 9], row: [6, 2] },
+      { id: 'sec-recent-updates', label: "Recent updates", kind: 'panel', col: [4, 9], row: [8, 2] },
+      { id: 'btn-review-and-approve', label: "Review and approve", kind: 'button', col: [4, 2], row: [10, 1] },
+      { id: 'btn-pay-now', label: "Pay now", kind: 'button', col: [6, 2], row: [10, 1] },
+      { id: 'btn-acknowledge', label: "Acknowledge", kind: 'button', col: [8, 2], row: [10, 1] },
+      { id: 'btn-comment', label: "Comment", kind: 'button', col: [10, 2], row: [10, 1] },
     ],
   },
 
   portalTimeline: {
-    name: 'Project Timeline',
-    route: '/portal/timeline',
+    name: "Project Timeline",
+    route: "/portal/timeline",
+    rows: 16,
     blocks: [
-      ...chrome(PORTAL_NAV),
-      { id: 'title', label: 'Project Timeline', kind: 'header', col: [4, 9], row: [3, 1] },
-      { id: 'stage-1', label: 'Planning', kind: 'row', col: [4, 9], row: [5, 1] },
-      { id: 'stage-2', label: 'Design', kind: 'row', col: [4, 9], row: [6, 1] },
-      { id: 'stage-3', label: 'Materials', kind: 'row', col: [4, 9], row: [7, 1] },
-      { id: 'stage-4', label: 'In Progress  <-- you are here', kind: 'row', col: [4, 9], row: [8, 1] },
-      { id: 'stage-5', label: 'Inspection', kind: 'row', col: [4, 9], row: [9, 1] },
-      { id: 'stage-6', label: 'Completed', kind: 'row', col: [4, 9], row: [10, 1] },
+      { id: 'sidebar', kind: 'sidebar', col: [1, 3], row: [2, 15] },
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "project name", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'switcher', label: "Viewing as", kind: 'button', col: [10, 3], row: [2, 1] },
+      { id: 'nav-dashboard', label: "Dashboard", kind: 'nav', col: [1, 3], row: [3, 1] },
+      { id: 'nav-project-timeline', label: "Project Timeline", kind: 'nav', col: [1, 3], row: [4, 1] },
+      { id: 'nav-schedule', label: "Schedule", kind: 'nav', col: [1, 3], row: [5, 1] },
+      { id: 'nav-daily-updates', label: "Daily Updates", kind: 'nav', col: [1, 3], row: [6, 1] },
+      { id: 'nav-designs-selections', label: "Designs & Selections", kind: 'nav', col: [1, 3], row: [7, 1] },
+      { id: 'nav-budget-pricing', label: "Budget & Pricing", kind: 'nav', col: [1, 3], row: [8, 1] },
+      { id: 'nav-change-orders', label: "Change Orders", kind: 'nav', col: [1, 3], row: [9, 1] },
+      { id: 'nav-documents', label: "Documents", kind: 'nav', col: [1, 3], row: [10, 1] },
+      { id: 'nav-photos-videos', label: "Photos & Videos", kind: 'nav', col: [1, 3], row: [11, 1] },
+      { id: 'nav-messages', label: "Messages", kind: 'nav', col: [1, 3], row: [12, 1] },
+      { id: 'nav-issues-requests', label: "Issues & Requests", kind: 'nav', col: [1, 3], row: [13, 1] },
+      { id: 'nav-payments', label: "Payments", kind: 'nav', col: [1, 3], row: [14, 1] },
+      { id: 'nav-completion-warranty', label: "Completion & Warranty", kind: 'nav', col: [1, 3], row: [15, 1] },
+      { id: 'title', label: "Project Timeline", kind: 'header', col: [4, 9], row: [3, 1] },
     ],
   },
 
-  portalList: {
-    name: 'A portal list screen',
-    route: '/portal/updates, /documents, /photos',
+  portalUpdates: {
+    name: "Daily Updates",
+    route: "/portal/updates",
+    rows: 16,
     blocks: [
-      ...chrome(PORTAL_NAV),
-      { id: 'title', label: 'Screen title', kind: 'header', col: [4, 6], row: [3, 1] },
-      { id: 'count', label: 'the item count', kind: 'header', col: [10, 3], row: [3, 1] },
-      { id: 'item-1', kind: 'row', col: [4, 9], row: [5, 2] },
-      { id: 'item-2', kind: 'row', col: [4, 9], row: [7, 2] },
-      { id: 'item-3', kind: 'row', col: [4, 9], row: [9, 2] },
-      { id: 'item-4', kind: 'row', col: [4, 9], row: [11, 2] },
+      { id: 'sidebar', kind: 'sidebar', col: [1, 3], row: [2, 15] },
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "project name", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'switcher', label: "Viewing as", kind: 'button', col: [10, 3], row: [2, 1] },
+      { id: 'nav-dashboard', label: "Dashboard", kind: 'nav', col: [1, 3], row: [3, 1] },
+      { id: 'nav-project-timeline', label: "Project Timeline", kind: 'nav', col: [1, 3], row: [4, 1] },
+      { id: 'nav-schedule', label: "Schedule", kind: 'nav', col: [1, 3], row: [5, 1] },
+      { id: 'nav-daily-updates', label: "Daily Updates", kind: 'nav', col: [1, 3], row: [6, 1] },
+      { id: 'nav-designs-selections', label: "Designs & Selections", kind: 'nav', col: [1, 3], row: [7, 1] },
+      { id: 'nav-budget-pricing', label: "Budget & Pricing", kind: 'nav', col: [1, 3], row: [8, 1] },
+      { id: 'nav-change-orders', label: "Change Orders", kind: 'nav', col: [1, 3], row: [9, 1] },
+      { id: 'nav-documents', label: "Documents", kind: 'nav', col: [1, 3], row: [10, 1] },
+      { id: 'nav-photos-videos', label: "Photos & Videos", kind: 'nav', col: [1, 3], row: [11, 1] },
+      { id: 'nav-messages', label: "Messages", kind: 'nav', col: [1, 3], row: [12, 1] },
+      { id: 'nav-issues-requests', label: "Issues & Requests", kind: 'nav', col: [1, 3], row: [13, 1] },
+      { id: 'nav-payments', label: "Payments", kind: 'nav', col: [1, 3], row: [14, 1] },
+      { id: 'nav-completion-warranty', label: "Completion & Warranty", kind: 'nav', col: [1, 3], row: [15, 1] },
+      { id: 'title', label: "Daily Updates", kind: 'header', col: [4, 9], row: [3, 1] },
+      { id: 'btn-acknowledge', label: "Acknowledge", kind: 'button', col: [4, 4], row: [4, 1] },
+      { id: 'btn-comment', label: "Comment", kind: 'button', col: [8, 4], row: [4, 1] },
     ],
   },
 
-  portalPlaceholder: {
-    name: 'A screen still being built',
-    route: '/portal/designs, /budget, /change-orders',
+  portalDocuments: {
+    name: "Document Center",
+    route: "/portal/documents",
+    rows: 16,
     blocks: [
-      ...chrome(PORTAL_NAV),
-      { id: 'title', label: 'Designs and Selections', kind: 'header', col: [4, 9], row: [3, 1] },
-      { id: 'coming', label: 'Coming shortly, and what it will do', kind: 'panel', col: [4, 9], row: [5, 5] },
+      { id: 'sidebar', kind: 'sidebar', col: [1, 3], row: [2, 15] },
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "project name", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'switcher', label: "Viewing as", kind: 'button', col: [10, 3], row: [2, 1] },
+      { id: 'nav-dashboard', label: "Dashboard", kind: 'nav', col: [1, 3], row: [3, 1] },
+      { id: 'nav-project-timeline', label: "Project Timeline", kind: 'nav', col: [1, 3], row: [4, 1] },
+      { id: 'nav-schedule', label: "Schedule", kind: 'nav', col: [1, 3], row: [5, 1] },
+      { id: 'nav-daily-updates', label: "Daily Updates", kind: 'nav', col: [1, 3], row: [6, 1] },
+      { id: 'nav-designs-selections', label: "Designs & Selections", kind: 'nav', col: [1, 3], row: [7, 1] },
+      { id: 'nav-budget-pricing', label: "Budget & Pricing", kind: 'nav', col: [1, 3], row: [8, 1] },
+      { id: 'nav-change-orders', label: "Change Orders", kind: 'nav', col: [1, 3], row: [9, 1] },
+      { id: 'nav-documents', label: "Documents", kind: 'nav', col: [1, 3], row: [10, 1] },
+      { id: 'nav-photos-videos', label: "Photos & Videos", kind: 'nav', col: [1, 3], row: [11, 1] },
+      { id: 'nav-messages', label: "Messages", kind: 'nav', col: [1, 3], row: [12, 1] },
+      { id: 'nav-issues-requests', label: "Issues & Requests", kind: 'nav', col: [1, 3], row: [13, 1] },
+      { id: 'nav-payments', label: "Payments", kind: 'nav', col: [1, 3], row: [14, 1] },
+      { id: 'nav-completion-warranty', label: "Completion & Warranty", kind: 'nav', col: [1, 3], row: [15, 1] },
+      { id: 'title', label: "Document Center", kind: 'header', col: [4, 9], row: [3, 1] },
+      { id: 'btn-download', label: "Download", kind: 'button', col: [4, 9], row: [4, 1] },
     ],
   },
 
-  // ── Diagrams, for the backend annex ───────────────────────────────────────
-  // Not screens. The map slot is the only drawing surface the HUD has, and a
-  // architecture question is much easier to answer with a shape on it.
+  portalPhotos: {
+    name: "Photos & Videos",
+    route: "/portal/photos",
+    rows: 16,
+    blocks: [
+      { id: 'sidebar', kind: 'sidebar', col: [1, 3], row: [2, 15] },
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "project name", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'switcher', label: "Viewing as", kind: 'button', col: [10, 3], row: [2, 1] },
+      { id: 'nav-dashboard', label: "Dashboard", kind: 'nav', col: [1, 3], row: [3, 1] },
+      { id: 'nav-project-timeline', label: "Project Timeline", kind: 'nav', col: [1, 3], row: [4, 1] },
+      { id: 'nav-schedule', label: "Schedule", kind: 'nav', col: [1, 3], row: [5, 1] },
+      { id: 'nav-daily-updates', label: "Daily Updates", kind: 'nav', col: [1, 3], row: [6, 1] },
+      { id: 'nav-designs-selections', label: "Designs & Selections", kind: 'nav', col: [1, 3], row: [7, 1] },
+      { id: 'nav-budget-pricing', label: "Budget & Pricing", kind: 'nav', col: [1, 3], row: [8, 1] },
+      { id: 'nav-change-orders', label: "Change Orders", kind: 'nav', col: [1, 3], row: [9, 1] },
+      { id: 'nav-documents', label: "Documents", kind: 'nav', col: [1, 3], row: [10, 1] },
+      { id: 'nav-photos-videos', label: "Photos & Videos", kind: 'nav', col: [1, 3], row: [11, 1] },
+      { id: 'nav-messages', label: "Messages", kind: 'nav', col: [1, 3], row: [12, 1] },
+      { id: 'nav-issues-requests', label: "Issues & Requests", kind: 'nav', col: [1, 3], row: [13, 1] },
+      { id: 'nav-payments', label: "Payments", kind: 'nav', col: [1, 3], row: [14, 1] },
+      { id: 'nav-completion-warranty', label: "Completion & Warranty", kind: 'nav', col: [1, 3], row: [15, 1] },
+      { id: 'title', label: "Photos & Videos", kind: 'header', col: [4, 9], row: [3, 1] },
+    ],
+  },
+
+  portalDesigns: {
+    name: "Designs & Selections",
+    route: "/portal/designs",
+    rows: 16,
+    blocks: [
+      { id: 'sidebar', kind: 'sidebar', col: [1, 3], row: [2, 15] },
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "project name", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'switcher', label: "Viewing as", kind: 'button', col: [10, 3], row: [2, 1] },
+      { id: 'nav-dashboard', label: "Dashboard", kind: 'nav', col: [1, 3], row: [3, 1] },
+      { id: 'nav-project-timeline', label: "Project Timeline", kind: 'nav', col: [1, 3], row: [4, 1] },
+      { id: 'nav-schedule', label: "Schedule", kind: 'nav', col: [1, 3], row: [5, 1] },
+      { id: 'nav-daily-updates', label: "Daily Updates", kind: 'nav', col: [1, 3], row: [6, 1] },
+      { id: 'nav-designs-selections', label: "Designs & Selections", kind: 'nav', col: [1, 3], row: [7, 1] },
+      { id: 'nav-budget-pricing', label: "Budget & Pricing", kind: 'nav', col: [1, 3], row: [8, 1] },
+      { id: 'nav-change-orders', label: "Change Orders", kind: 'nav', col: [1, 3], row: [9, 1] },
+      { id: 'nav-documents', label: "Documents", kind: 'nav', col: [1, 3], row: [10, 1] },
+      { id: 'nav-photos-videos', label: "Photos & Videos", kind: 'nav', col: [1, 3], row: [11, 1] },
+      { id: 'nav-messages', label: "Messages", kind: 'nav', col: [1, 3], row: [12, 1] },
+      { id: 'nav-issues-requests', label: "Issues & Requests", kind: 'nav', col: [1, 3], row: [13, 1] },
+      { id: 'nav-payments', label: "Payments", kind: 'nav', col: [1, 3], row: [14, 1] },
+      { id: 'nav-completion-warranty', label: "Completion & Warranty", kind: 'nav', col: [1, 3], row: [15, 1] },
+      { id: 'title', label: "Designs & Selections", kind: 'header', col: [4, 9], row: [3, 1] },
+    ],
+  },
+
+  field: {
+    name: "Field Interface",
+    route: "/field",
+    rows: 14,
+    blocks: [
+      { id: 'banner', label: "data banner", kind: 'header', col: [1, 12], row: [1, 1] },
+      { id: 'context', label: "header", kind: 'header', col: [4, 6], row: [2, 1] },
+      { id: 'title', label: "Today's tasks", kind: 'header', col: [4, 6], row: [3, 1] },
+      { id: 'sec-add-daily-update', label: "Add daily update", kind: 'panel', col: [4, 6], row: [4, 2] },
+      { id: 'sec-my-projects', label: "My projects", kind: 'panel', col: [4, 6], row: [6, 2] },
+      { id: 'btn-start', label: "Start", kind: 'button', col: [4, 2], row: [8, 1] },
+      { id: 'btn-complete', label: "Complete", kind: 'button', col: [6, 2], row: [8, 1] },
+      { id: 'btn-submit-to-project-manager', label: "Submit to Project Manager", kind: 'button', col: [8, 2], row: [8, 1] },
+    ],
+  },
+
+  // Not screens — the map slot is the only drawing surface the HUD has, and an
+  // architecture question is far easier to answer with a shape on it.
   systems: {
     name: 'How the three systems fit',
-    route: 'GoHighLevel -> BuildSuite -> back to GoHighLevel -> Project Hub',
+    route: 'GoHighLevel -> BuildSuite -> back at signing -> Project Hub',
+    rows: 14,
     blocks: [
       { id: 'ghl', label: 'GoHighLevel — leads, CRM', kind: 'panel', col: [1, 4], row: [2, 3] },
       { id: 'buildsuite', label: 'BuildSuite — estimating', kind: 'panel', col: [5, 4], row: [2, 3] },
       { id: 'hub', label: 'Project Hub', kind: 'button', col: [9, 4], row: [2, 3] },
-      { id: 'inbound', label: 'leads flow in, deals get bid', kind: 'row', col: [1, 8], row: [6, 1] },
-      { id: 'handoff', label: 'Send-to-CRM handoff, once at signing', kind: 'row', col: [3, 9], row: [7, 1] },
+      { id: 'inbound', label: 'leads in, deals get bid', kind: 'row', col: [1, 8], row: [6, 1] },
+      { id: 'handoff', label: 'hands back at signing', kind: 'row', col: [3, 9], row: [7, 1] },
       { id: 'syncback', label: 'stage sync-back, read-only', kind: 'row', col: [5, 8], row: [8, 1] },
-      { id: 'supabase', label: 'Supabase — BuildSuite owns it', kind: 'panel', col: [1, 6], row: [10, 2] },
-      { id: 'hubtables', label: 'hub_ tables — ours, not yet created', kind: 'panel', col: [7, 6], row: [10, 2] },
+      { id: 'supabase', label: "Supabase — BuildSuite's", kind: 'panel', col: [1, 6], row: [10, 2] },
+      { id: 'hubtables', label: 'hub_ tables — not yet created', kind: 'panel', col: [7, 6], row: [10, 2] },
       { id: 'browsers', label: 'Contractor    Field    Client', kind: 'sidebar', col: [1, 12], row: [13, 2] },
     ],
   },
@@ -250,27 +382,13 @@ export const SCREENS = {
   stack: {
     name: 'What sits between a client and the data',
     route: 'screens -> the gate -> data layer -> sources',
+    rows: 14,
     blocks: [
       { id: 'ui', label: 'Screens', kind: 'panel', col: [2, 10], row: [2, 2] },
-      { id: 'gate', label: 'The gate: 4 checks, then strip the internals', kind: 'button', col: [2, 10], row: [5, 3] },
-      { id: 'data', label: 'Data layer — every read needs a tenant', kind: 'panel', col: [2, 10], row: [9, 2] },
+      { id: 'gate', label: 'The gate: 4 checks, then strip internals', kind: 'button', col: [2, 10], row: [5, 3] },
+      { id: 'data', label: 'Data layer — every staff read needs a tenant', kind: 'panel', col: [2, 10], row: [9, 2] },
       { id: 'src-1', label: 'Supabase', kind: 'row', col: [2, 5], row: [12, 2] },
       { id: 'src-2', label: 'GoHighLevel API', kind: 'row', col: [7, 5], row: [12, 2] },
-    ],
-  },
-
-  // ── Field ─────────────────────────────────────────────────────────────────
-  field: {
-    name: 'Field Interface',
-    route: '/field',
-    blocks: [
-      { id: 'phone', label: 'phone width', kind: 'sidebar', col: [4, 6], row: [1, 14] },
-      { id: 'today', label: 'Today', kind: 'header', col: [4, 6], row: [2, 1] },
-      { id: 'project-pick', label: 'Which project', kind: 'row', col: [5, 4], row: [4, 1] },
-      { id: 'work', label: 'Work completed', kind: 'panel', col: [5, 4], row: [5, 2] },
-      { id: 'internal', label: 'Internal notes', kind: 'panel', col: [5, 4], row: [7, 2] },
-      { id: 'client-note', label: 'Note for the client', kind: 'panel', col: [5, 4], row: [9, 2] },
-      { id: 'submit', label: 'Submit to PM', kind: 'button', col: [5, 4], row: [12, 1] },
     ],
   },
 } satisfies Record<string, Screen>;

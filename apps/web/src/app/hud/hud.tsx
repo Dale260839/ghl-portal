@@ -186,7 +186,7 @@ function Map({ step, index }: { step: Step; index: number }) {
         className="grid aspect-[15/11] w-full gap-[2px] rounded-md border border-slate-800 bg-[#0b1220] p-1"
         style={{
           gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
-          gridTemplateRows: 'repeat(14, minmax(0, 1fr))',
+          gridTemplateRows: `repeat(${screen.rows}, minmax(0, 1fr))`,
         }}
       >
         {screen.blocks.map((block) => {

@@ -20,15 +20,25 @@ rather have it in a browser tab alongside everything else. Both are generated
 from the same source, so they cannot drift:
 
 ```bash
-npm run hud     # regenerate docs/demo-hud.html after editing the script
+npm run hud          # rebuild docs/demo-hud.html after editing the script
+npm run hud:maps     # ALSO re-scrape the hover maps (needs the dev server up)
 ```
 
-The script lives in `apps/web/src/app/hud/script.ts` and the screen maps in
-`wireframes.ts`. Edit those, rerun `npm run hud`, and both surfaces update.
+The words live in `apps/web/src/app/hud/script.ts`. Edit them and run
+`npm run hud`.
 
-**Twenty-two steps, about forty minutes of talking.** With questions, expect an
-hour. If they only have twenty minutes, do the eight **★** steps and skip
-everything else — they carry the argument on their own.
+**The hover maps are generated, not drawn.** `wireframes.ts` is scraped from the
+running app by `scripts/build-wireframes.mjs`, so nav labels, their order,
+section headings and button text come from the real pages. The hand-drawn first
+version was wrong about the portal nav (eleven items when there are thirteen),
+the project detail panels, and the number of buttons on the review screen — all
+of which send the presenter's mouse to the wrong place. If a screen changes,
+start the dev server and run `npm run hud:maps`; never edit `wireframes.ts` by
+hand.
+
+**Twenty-two steps, thirty-two minutes of talking.** With questions, expect an
+hour — which is why step 0 promises forty. If they only have twenty minutes, do
+the nine **★** steps and skip everything else; they carry the argument alone.
 
 ### What each step gives you
 
@@ -44,7 +54,7 @@ everything else — they carry the argument on their own.
 
 ### The annex
 
-Below the numbered steps there is an **Annex** — eight steps covering how the
+Below the numbered steps there is an **Annex** — seven steps covering how the
 thing actually works: how the three systems fit together, where data lives, the
 security model, what happens when something breaks, and what is still open.
 
@@ -78,22 +88,26 @@ demo. This order fixes that: GoHighLevel sign-in, a short pass through the
 contractor view, then the control that makes us different, then straight into the
 homeowner's portal.
 
-The spine is steps 6 → 14: a field note is written, a PM edits what the client
-will read, it gets published, and then you switch sides and show that the
-internal complaint is not there. That sequence is the argument. Everything else
-is context around it.
+The spine is **steps 9 → 14**: a field note is written, a PM edits what the
+client will read, it gets published, then you switch sides and show the internal
+complaint is not there. That sequence is the argument; everything else is context
+around it.
 
-**Two steps exist purely for honesty** — 17 ("what is not built yet") and 19
-("what is live and what is not"). Do not skip them to save time. The trust
+**Two steps exist purely for honesty** — **17** ("what is not built yet") and
+**19** ("what is live, what is not"). Do not skip them to save time. The trust
 problem came from a gap between what was said and what was seen, and it does not
 close by widening it.
 
+Step 19 deliberately ends on the **From BuildSuite** screen, because that is the
+one reading their real database. Finishing on live data rather than fixtures is
+the point of putting it last.
+
 ### The one caveat you must not drop
 
-Step 19 says the project list **shows more than it should**. That is true: we
-read every project BuildSuite holds for the account, with no way yet to narrow it
-to signed work. Two things are blocking that, both covered in the annex step
-*The two things we are waiting on*:
+The annex step *The two we are waiting on* says the project list **shows more
+than it should**. That is true: we read every project BuildSuite holds for the
+account, with no way yet to narrow it to signed work. Two things are blocking that, both covered in the annex step
+*The two we are waiting on*:
 
 1. **The client-to-contractor matching** is unfinished on the BuildSuite side, so
    there is no reliable join from a contractor to the deal they closed.

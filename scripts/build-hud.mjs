@@ -126,7 +126,7 @@ aside {
 .map {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  grid-template-rows: repeat(14, minmax(0, 1fr));
+  /* row count is set per screen from JS */
   gap: 2px;
   aspect-ratio: 15 / 11;
   padding: 4px;
@@ -289,6 +289,7 @@ function drawMap() {
   const screen = SCREENS[step.screen];
   $('screen-name').textContent = screen.name;
   $('route').textContent = screen.route;
+  $('map').style.gridTemplateRows = 'repeat(' + (screen.rows || 14) + ', minmax(0, 1fr))';
   $('map').innerHTML = screen.blocks.map((b) => {
     const lit = b.id === step.hotspot;
     const style = 'grid-column:' + b.col[0] + '/span ' + b.col[1] + ';grid-row:' + b.row[0] + '/span ' + b.row[1];
