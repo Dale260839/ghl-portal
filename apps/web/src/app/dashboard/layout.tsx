@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
 import { getSession } from '@/lib/session';
 import { requireTenantScope } from '@/lib/scope';
 import { getDataSource, isLiveData } from '@/lib/data/source';
@@ -39,8 +38,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: '/dashboard/buildsuite', label: 'From BuildSuite', icon: IconBuildSuite },
   ];
 
-  const activeHref = (await headers()).get('x-pathname') ?? '/dashboard';
-
   return (
     <AppShell
       brand="BuildSuite"
@@ -48,7 +45,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
       contextTitle="Alliance Pro Services"
       contextSubtitle={`${session.name} · Project Manager`}
       nav={nav}
-      activeHref={activeHref}
       userName={session.name}
       headerExtra={viewAsEnabled() ? <ViewSwitcher current="contractor" viewing={false} /> : null}
       banner={<DataModeBanner live={isLiveData()} />}

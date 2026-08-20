@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import { headers } from 'next/headers';
 import { getSession } from '@/lib/session';
 import { getDataSource, isLiveData } from '@/lib/data/source';
 import { AppShell, type NavItem } from '@/components/app-shell';
@@ -62,8 +61,6 @@ export default async function PortalLayout({ children }: { children: React.React
     { href: '/portal/completion', label: 'Completion & Warranty', icon: IconCompletion },
   ];
 
-  const activeHref = (await headers()).get('x-pathname') ?? '/portal';
-
   return (
     <AppShell
       brand="BuildSuite"
@@ -71,7 +68,6 @@ export default async function PortalLayout({ children }: { children: React.React
       contextTitle={contextTitle}
       contextSubtitle={contextSubtitle}
       nav={nav}
-      activeHref={activeHref}
       userName={session.name}
       headerExtra={
         viewAsEnabled() && (session.role === 'contractor' || viewing) ? (
