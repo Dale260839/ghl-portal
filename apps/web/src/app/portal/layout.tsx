@@ -1,10 +1,13 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/session';
-import { getDataSource, activeSourceKind } from '@/lib/data/source';
+
 import { AppShell, type NavItem } from '@/components/app-shell';
+import { DemoToggle } from '@/components/demo-toggle';
 import { ViewSwitcher, ViewingAsBanner } from '@/components/view-switcher';
+import { demoToggleEnabled, isDemoData } from '@/lib/demo-mode';
 import { isViewingAs, viewAsEnabled } from '@/lib/view-as';
 import { DataModeBanner } from '@/components/ui';
+import { currentDataSource, currentSourceKind } from '@/lib/data/current-source';
 import {
   IconBudget,
   IconChangeOrders,
@@ -30,11 +33,12 @@ export default async function PortalLayout({ children }: { children: React.React
 
   // The context bar names the project the client is looking at — the demo puts
   // it top-left and it's the fastest orientation cue on the page.
-  const db = getDataSource();
+  const db = await currentDataSource();
   let contextTitle = 'Your project';
   let contextSubtitle: string | undefined;
 
   const viewing = isViewingAs(session);
+  const demo = await isDemoData();
 
   if (session.role === 'client' && session.contactId !== undefined) {
     const projects = await db.listProjectsForContact(session.contactId);
@@ -70,14 +74,17 @@ export default async function PortalLayout({ children }: { children: React.React
       nav={nav}
       userName={session.name}
       headerExtra={
-        viewAsEnabled() && (session.role === 'contractor' || viewing) ? (
-          <ViewSwitcher current={session.role} viewing={viewing} />
+        session.role === 'contractor' || viewing ? (
+          <>
+            {demoToggleEnabled() && <DemoToggle on={demo} returnTo="/portal" />}
+            {viewAsEnabled() && <ViewSwitcher current={session.role} viewing={viewing} />}
+          </>
         ) : null
       }
       banner={
         <>
           {viewing && <ViewingAsBanner persona={session.name} role={session.role} />}
-          <DataModeBanner kind={activeSourceKind()} />
+          <DataModeBanner kind={await currentSourceKind()} />
           {session.role === 'contractor' && (
             <div className="bg-navy-900 px-4 py-1.5 text-center text-xs text-navy-100">
               Contractor preview — showing exactly what the client is served, through the same gate.

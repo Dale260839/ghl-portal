@@ -1,8 +1,9 @@
 import { currentPortalProject, clientStageFor } from '@/lib/portal-data';
-import { getDataSource } from '@/lib/data/source';
+
 import { scopeOfProject } from '@/lib/scope';
 import { toClientMilestones } from '@/lib/client-view';
 import { Badge, Card, PortalEmpty, shortDate } from '@/components/ui';
+import { currentDataSource } from '@/lib/data/current-source';
 
 export default async function PortalTimeline({
   searchParams,
@@ -12,7 +13,7 @@ export default async function PortalTimeline({
   const { project } = await currentPortalProject(await searchParams);
   if (project === null) return <PortalEmpty title="No project" body="Nothing is shared with this account yet." />;
 
-  const all = await getDataSource().listMilestones(scopeOfProject(project), project.buildsuiteProjectId);
+  const all = await (await currentDataSource()).listMilestones(scopeOfProject(project), project.buildsuiteProjectId);
   const milestones = toClientMilestones(all, project);
 
   return (

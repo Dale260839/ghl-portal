@@ -1,11 +1,14 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/session';
 import { requireTenantScope } from '@/lib/scope';
-import { getDataSource, activeSourceKind } from '@/lib/data/source';
+
 import { AppShell, type NavItem } from '@/components/app-shell';
+import { DemoToggle } from '@/components/demo-toggle';
 import { ViewSwitcher } from '@/components/view-switcher';
+import { demoToggleEnabled, isDemoData } from '@/lib/demo-mode';
 import { viewAsEnabled } from '@/lib/view-as';
 import { DataModeBanner } from '@/components/ui';
+import { currentDataSource, currentSourceKind } from '@/lib/data/current-source';
 import {
   IconBuildSuite,
   IconDashboard,
@@ -19,8 +22,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (session === null) redirect('/');
   if (session.role !== 'contractor') redirect('/');
 
+  const demo = await isDemoData();
   const scope = await requireTenantScope();
-  const db = getDataSource(scope);
+  const db = await currentDataSource(scope);
 
   // Badge counts make the sidebar a worklist rather than a menu — a PM should
   // see from the nav alone that three updates are waiting.
@@ -46,8 +50,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
       contextSubtitle={`${session.name} · Project Manager`}
       nav={nav}
       userName={session.name}
-      headerExtra={viewAsEnabled() ? <ViewSwitcher current="contractor" viewing={false} /> : null}
-      banner={<DataModeBanner kind={activeSourceKind()} />}
+      headerExtra={
+        <>
+          {demoToggleEnabled() && <DemoToggle on={demo} returnTo="/dashboard" />}
+          {viewAsEnabled() && <ViewSwitcher current="contractor" viewing={false} />}
+        </>
+      }
+      banner={<DataModeBanner kind={await currentSourceKind()} />}
     >
       {children}
     </AppShell>

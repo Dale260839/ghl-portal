@@ -1,8 +1,9 @@
 import { submitFieldUpdate } from '@/lib/actions';
-import { getDataSource } from '@/lib/data/source';
+
 import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, CardHeader, shortDate } from '@/components/ui';
 import { stageLabel } from '@/lib/data/types';
+import { currentDataSource } from '@/lib/data/current-source';
 
 /**
  * Field Interface (§12.2). Mobile-first, large tap targets, minimal typing.
@@ -19,7 +20,7 @@ export default async function FieldToday({
 }) {
   const { submitted } = await searchParams;
   const scope = await requireTenantScope();
-  const db = getDataSource(scope);
+  const db = await currentDataSource(scope);
   const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
 
   // §12.2 / §9.4 — a field user sees only assigned projects. Fixtures assign by

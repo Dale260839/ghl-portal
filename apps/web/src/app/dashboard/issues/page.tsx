@@ -1,6 +1,7 @@
-import { getDataSource } from '@/lib/data/source';
+
 import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, CardHeader, InternalOnly, StatTile, shortDate } from '@/components/ui';
+import { currentDataSource } from '@/lib/data/current-source';
 
 /**
  * Issues (§6.7) — where WF3's blockers and WF7's escalations land.
@@ -15,7 +16,7 @@ import { Badge, Card, CardHeader, InternalOnly, StatTile, shortDate } from '@/co
  */
 export default async function Issues() {
   const scope = await requireTenantScope();
-  const db = getDataSource(scope);
+  const db = await currentDataSource(scope);
   const [issues, projects] = await Promise.all([db.listIssues(scope), db.listProjects(scope)]);
 
   const open = issues.filter((i) => i.status !== 'Resolved' && i.status !== 'Closed');

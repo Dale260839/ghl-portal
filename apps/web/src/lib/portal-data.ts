@@ -4,7 +4,7 @@ import { DOCUMENTS, MESSAGES, PHOTOS, SCHEDULE_ITEMS } from './data/portal-fixtu
 import { PROJECTS } from './data/fixtures.ts';
 import type { Message, Project, ProjectDocument, ProjectPhoto, ScheduleItem } from './data/types.ts';
 import { getSession } from './session.ts';
-import { getDataSource } from './data/source.ts';
+import { currentDataSource } from './data/current-source.ts';
 
 /**
  * Client-portal reads for the Phase A screens.
@@ -128,7 +128,7 @@ export async function currentPortalProject(params: {
   preview?: string;
 }): Promise<{ project: Project | null; allProjects: Project[] }> {
   const session = await getSession();
-  const db = getDataSource();
+  const db = await currentDataSource();
 
   if (session?.role === 'client' && session.contactId !== undefined) {
     const allProjects = await db.listProjectsForContact(session.contactId);

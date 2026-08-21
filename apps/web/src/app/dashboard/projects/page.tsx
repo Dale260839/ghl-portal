@@ -1,12 +1,13 @@
 import Link from 'next/link';
-import { getDataSource } from '@/lib/data/source';
+
 import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, HealthBadge, ProgressBar, currency, shortDate } from '@/components/ui';
 import { hasOperationalDetail, moneyLabel, stageLabel } from '@/lib/data/types';
+import { currentDataSource } from '@/lib/data/current-source';
 
 export default async function ProjectsList() {
   const scope = await requireTenantScope();
-  const projects = await getDataSource(scope).listProjects(scope);
+  const projects = await (await currentDataSource(scope)).listProjects(scope);
 
   return (
     <div className="space-y-6">

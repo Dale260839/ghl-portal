@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { getSession } from '@/lib/session';
-import { getDataSource } from '@/lib/data/source';
+
 import { scopeOfProject } from '@/lib/scope';
 import { toClientMilestones, toClientProject, toClientUpdates } from '@/lib/client-view';
 import { Badge, Card, CardHeader, ProgressBar, currency, shortDate } from '@/components/ui';
 import type { Contact } from '@/lib/data/types';
+import { currentDataSource } from '@/lib/data/current-source';
 
 /**
  * Client Portal. Every value on this page has passed through the §9.1 gate and
@@ -19,7 +20,7 @@ export default async function ClientPortal({
 }) {
   const session = await getSession();
   const params = await searchParams;
-  const db = getDataSource();
+  const db = await currentDataSource();
 
   // Resolve the requesting contact. A client resolves it from their session —
   // never from the URL. A contractor previewing resolves it from the project.

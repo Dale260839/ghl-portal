@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getDataSource } from '@/lib/data/source';
+
 import { requireTenantScope } from '@/lib/scope';
 import { hasFinancials, hasOperationalDetail, stageLabel } from '@/lib/data/types';
+import { currentDataSource } from '@/lib/data/current-source';
 import {
   Badge,
   Card,
@@ -17,7 +18,7 @@ import {
 export default async function ProjectOverview({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const scope = await requireTenantScope();
-  const db = getDataSource(scope);
+  const db = await currentDataSource(scope);
   const project = await db.getProject(scope, id);
   if (project === null) notFound();
 

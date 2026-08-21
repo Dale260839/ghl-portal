@@ -1,6 +1,7 @@
 import Link from 'next/link';
-import { getDataSource } from '@/lib/data/source';
+
 import { requireTenantScope } from '@/lib/scope';
+import { currentDataSource } from '@/lib/data/current-source';
 import {
   hasFinancials,
   hasOperationalDetail,
@@ -19,7 +20,7 @@ import {
 
 export default async function PortfolioOverview() {
   const scope = await requireTenantScope();
-  const db = getDataSource(scope);
+  const db = await currentDataSource(scope);
   const [projects, updates] = await Promise.all([db.listProjects(scope), db.listDailyUpdates(scope)]);
 
   const active = projects.filter(isActiveProject);

@@ -1,7 +1,8 @@
 import { reviewUpdate } from '@/lib/actions';
-import { getDataSource } from '@/lib/data/source';
+
 import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, CardHeader, InternalOnly, shortDate } from '@/components/ui';
+import { currentDataSource } from '@/lib/data/current-source';
 
 /**
  * Daily Update Review (§12.1). The seven verbatim actions, and the one rule
@@ -10,7 +11,7 @@ import { Badge, Card, CardHeader, InternalOnly, shortDate } from '@/components/u
  */
 export default async function ReviewQueue() {
   const scope = await requireTenantScope();
-  const db = getDataSource(scope);
+  const db = await currentDataSource(scope);
   const [updates, projects] = await Promise.all([db.listDailyUpdates(scope), db.listProjects(scope)]);
 
   const queue = updates.filter(

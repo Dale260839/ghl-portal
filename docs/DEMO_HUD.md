@@ -128,10 +128,29 @@ the Hub tables, still not created. Those screens are empty rather than
 fixture-filled, on purpose: mixing invented updates into a list of real projects
 is indistinguishable from the product working.
 
-So on the call: the project list, client names and dates are real. The Field
-Updates queue will be **empty**, which breaks the walkthrough's spine (steps
-9-14). Run that part against fixtures by unsetting `SUPABASE_URL` locally, or say
-plainly that updates arrive with the Hub tables.
+So on the call: the project list, client names and dates are real — but the
+Field Updates queue is **empty**, because BuildSuite has no updates. That would
+break the walkthrough's spine (steps 9-14).
+
+### The Demo data toggle
+
+There is a **Demo data** switch in the header, left of the "Viewing as"
+dropdown. Flip it on and the whole app runs on fixtures: six projects, a review
+queue with pending updates, documents, photos — everything the walkthrough needs.
+Flip it off and you are back on the tenant's real projects.
+
+**It is loud on purpose.** When it is on the pill turns amber and the banner says
+"Demo data". A contractor who forgets it is flipped would read sample content as
+their own book of work.
+
+Demo mode also swaps the tenant to the fixtures' own agency — otherwise a
+GoHighLevel session would see only the fixtures that happen to share a profile id
+with it. Every read is still scoped and still filtered; the identity behind it is
+simply pretend.
+
+**For the call:** run steps 9-14 with the toggle **on**, then flip it **off** for
+step 19 so "what is live" lands on their actual database. That contrast is worth
+more than either state alone.
 
 ### The one caveat you must not drop
 

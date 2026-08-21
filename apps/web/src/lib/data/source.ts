@@ -39,7 +39,7 @@ export interface ProjectDataSource {
   listProjectsForContact(contactId: string): Promise<Project[]>;
 }
 
-class FixtureDataSource implements ProjectDataSource {
+export class FixtureDataSource implements ProjectDataSource {
   readonly kind = 'fixture' as const;
 
   /** The tenant predicate. Built here from the asserted scope, never passed in. */
@@ -201,6 +201,14 @@ export function isLiveData(): boolean {
  * are different things to be looking at, and telling a contractor the wrong one
  * is how a demo gets contradicted by its own screen.
  */
+export function fixtureDataSource(): ProjectDataSource {
+  const existing = sources.get(FIXTURE_KEY);
+  if (existing !== undefined) return existing;
+  const created: ProjectDataSource = new FixtureDataSource();
+  sources.set(FIXTURE_KEY, created);
+  return created;
+}
+
 export function activeSourceKind(): DataSourceKind {
   const result = readGhlConfig();
   if (result.configured && canReadProjectObject(result.config)) return 'ghl';

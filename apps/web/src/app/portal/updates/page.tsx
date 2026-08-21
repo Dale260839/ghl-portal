@@ -1,8 +1,9 @@
 import { currentPortalProject, photosFor } from '@/lib/portal-data';
-import { getDataSource } from '@/lib/data/source';
+
 import { scopeOfProject } from '@/lib/scope';
 import { toClientUpdates } from '@/lib/client-view';
 import { Card, PortalEmpty, shortDate } from '@/components/ui';
+import { currentDataSource } from '@/lib/data/current-source';
 
 /**
  * Daily Updates, client view.
@@ -21,7 +22,7 @@ export default async function PortalUpdates({
     return <PortalEmpty title="No project" body="Nothing is shared with this account yet." />;
   }
 
-  const all = await getDataSource().listDailyUpdates(
+  const all = await (await currentDataSource()).listDailyUpdates(
     scopeOfProject(project),
     project.buildsuiteProjectId,
   );

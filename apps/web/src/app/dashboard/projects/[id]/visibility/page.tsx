@@ -2,11 +2,12 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { INTERNAL_FIELD_DENY_LIST } from '@buildsuite/contracts';
 import { updateVisibility } from '@/lib/actions';
-import { getDataSource } from '@/lib/data/source';
+
 import { requireTenantScope } from '@/lib/scope';
 import { VISIBILITY_LABELS, VISIBILITY_SWITCHES } from '@/lib/data/mutations';
 import { toClientProject } from '@/lib/client-view';
 import { Badge, Card, CardHeader, currency } from '@/components/ui';
+import { currentDataSource } from '@/lib/data/current-source';
 
 /**
  * Client Visibility Settings (§12.1) — the sixth and last Phase-3 screen.
@@ -25,7 +26,7 @@ export default async function VisibilitySettings({
 }) {
   const { id } = await params;
   const scope = await requireTenantScope();
-  const db = getDataSource(scope);
+  const db = await currentDataSource(scope);
   const project = await db.getProject(scope, id);
   if (project === null) notFound();
 
