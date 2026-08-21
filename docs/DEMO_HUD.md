@@ -1,8 +1,8 @@
 # Running the client walkthrough
 
-Two things were built for this: a **presenter HUD** at `/hud`, and a **view
-switcher** in the app header so one person can show all three experiences in one
-sitting.
+Two things were built for this: a **presenter HUD** you open as a file, and a
+**view switcher** in the app header so one person can show all three experiences
+in one sitting.
 
 ---
 
@@ -23,7 +23,7 @@ npm run hud          # rebuild docs/demo-hud.html after editing the script
 npm run hud:maps     # ALSO re-scrape the hover maps (needs the dev server up)
 ```
 
-The words live in `apps/web/src/app/hud/script.ts`. Edit them and run
+The words live in `apps/web/src/lib/hud/script.ts`. Edit them and run
 `npm run hud`.
 
 **The hover maps are generated, not drawn.** `wireframes.ts` is scraped from the
@@ -38,8 +38,6 @@ hand.
 **Twenty-two steps, thirty-two minutes of talking.** With questions, expect an
 hour — which is why step 0 promises forty. If they only have twenty minutes, do
 the nine **★** steps and skip everything else; they carry the argument alone.
-
-### What each step gives you
 
 ### Modes
 
@@ -76,16 +74,16 @@ Two annex steps carry names that must **not** be said on a client call —
 
 ### Controls
 
-- **← →** move between steps (space and page up/down work too)
-- **T** starts and pauses the clock
+- **← →** move between steps (space and page-up/down work too)
+- **P** flips between Full Guide and Presenter
+- **T** or clicking the clock starts and pauses it
 - Click any step in the left list to jump
 - The step is kept in the URL, so a refresh mid-call doesn't lose your place
-- **Print** lays every step out linearly on paper — worth having if you are
+- **Ctrl+P** prints every step laid out linearly — worth having if you are
   presenting from a single screen and cannot keep the HUD open
 
-The clock turns amber when you are more than a minute past where you should be.
-"by here:" in the footer is the time you should be at by the end of the current
-step — that is the number to glance at, not the total.
+The clock turns amber once you are more than a minute past where you should be
+by the end of the current step.
 
 ### The shape of the call
 
@@ -132,8 +130,7 @@ plainly that updates arrive with the Hub tables.
 
 The annex step *The two we are waiting on* says the project list **shows more
 than it should**. That is true: we read every project BuildSuite holds for the
-account, with no way yet to narrow it to signed work. Two things are blocking that, both covered in the annex step
-*The two we are waiting on*:
+account, with no way yet to narrow it to signed work. Two things block it:
 
 1. **The client-to-contractor matching** is unfinished on the BuildSuite side, so
    there is no reliable join from a contractor to the deal they closed.
