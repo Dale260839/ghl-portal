@@ -121,6 +121,17 @@ h1.title{font-size:27px;line-height:1.15;margin:4px 0 0;font-weight:700;letter-s
   color:var(--accent);white-space:nowrap}
 .primary .v{font-size:15px;color:var(--tx);font-weight:500}
 
+/* Two columns: the screen you are looking at on the left, the words on the
+   right. The left column is sticky so the view stays put while you read down
+   the script — on a call the picture is the thing you keep glancing back to. */
+.cols{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(0,1fr);gap:18px;align-items:start;margin-top:18px}
+.colL{position:sticky;top:59px}
+.colR{min-width:0}
+.colL .sec,.colR .sec{margin-top:0}
+.colR>*+*{margin-top:14px}
+.colR .mouse,.colR .say,.colR .watch,.colR .then{margin-top:0}
+@media (max-width:1180px){.cols{grid-template-columns:1fr}.colL{position:static}}
+
 .sec{margin-top:18px}
 .sec>.label{display:flex;align-items:center;gap:8px;margin-bottom:9px}
 .sec>.label .tag{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
@@ -228,7 +239,9 @@ body.presenter .say p{font-size:27px;line-height:1.45}
 body.presenter .mouse p{font-size:19px}
 body.presenter .watch li{font-size:17px}
 body.presenter h1.title{font-size:33px}
-body.presenter .viewport{max-width:720px}
+body.presenter .viewport{max-width:none}
+body.presenter .cols{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:22px}
+body.presenter .app{min-height:240px}
 
 ::-webkit-scrollbar{width:10px;height:10px}
 ::-webkit-scrollbar-thumb{background:#222a38;border-radius:6px;border:2px solid var(--panel)}
@@ -354,10 +367,15 @@ function mainHTML(){
 
   h += '<div class="primary"><span class="k">Primary message</span><span class="v">' + esc(s.primary) + '</span></div>';
 
+  // Left column: the picture. Right column: everything you say.
+  h += '<div class="cols"><div class="colL">';
+
   h += '<div class="sec view-tag"><div class="label"><span class="tag">System view \\u2014 what to show</span><span class="rule"></span></div>' +
        '<div class="viewport"><div class="vchrome"><span class="tl"><i></i><i></i><i></i></span>' +
        '<span class="url">' + esc(screen.route) + '</span></div>' + appHTML(s) + '</div>' +
        '<div class="route"><span class="rk">Screen</span><span class="rv">' + esc(screen.name) + '</span></div></div>';
+
+  h += '</div><div class="colR">';
 
   h += '<div class="mouse"><div class="ico">' + I.mouse + '</div><div><div class="mh">Put the mouse here</div>' +
        '<p>' + esc(s.hover) + '</p></div></div>';
@@ -389,6 +407,8 @@ function mainHTML(){
 
   h += '<div class="then"><div class="ico">' + I.then + '</div><div><div class="tl">Then</div>' +
        '<p>' + esc(s.then) + '</p></div></div>';
+
+  h += '</div></div>';
 
   return h;
 }

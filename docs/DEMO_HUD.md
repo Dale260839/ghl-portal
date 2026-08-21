@@ -39,6 +39,13 @@ hand.
 hour — which is why step 0 promises forty. If they only have twenty minutes, do
 the nine **★** steps and skip everything else; they carry the argument alone.
 
+### The layout
+
+The panel is two columns: **the screen on the left, the words on the right.**
+The left column is sticky, so the picture of the page stays put while you read
+down the script — on a call that picture is the thing you keep glancing back to.
+Below about 1180px wide it stacks into one column.
+
 ### Modes
 
 **Full Guide** is everything. **Presenter** strips it to the four things you need
