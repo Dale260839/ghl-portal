@@ -182,18 +182,18 @@ export default async function FieldToday({
           </label>
 
           {/* §12.2 — two separate areas. Only the second is a publish candidate. */}
-          <div className="rounded-lg bg-red-50 px-3 py-3">
-            <label htmlFor="internalNotes" className="text-xs font-semibold text-red-700">
+          <div className="rounded-lg border-l-2 border-amber-accent bg-amber-soft px-3 py-3">
+            <label htmlFor="internalNotes" className="text-xs font-semibold text-amber-accent">
               Internal field notes
             </label>
-            <p className="mt-0.5 text-xs text-red-700/80">
+            <p className="mt-0.5 text-xs text-amber-900/70">
               Your PM only. Never shown to the client.
             </p>
             <textarea
               id="internalNotes"
               name="internalNotes"
               rows={2}
-              className="mt-2 w-full rounded-lg border border-red-200 bg-white px-3 py-2.5 text-sm"
+              className="mt-2 w-full rounded-lg border border-amber-accent/30 bg-white px-3 py-2.5 text-sm"
             />
           </div>
 

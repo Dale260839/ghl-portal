@@ -171,11 +171,53 @@ export function InternalOnly({ children }: { children: ReactNode }) {
       {children}
       <span
         title="Internal only — never serialized into a client response (§9.3)"
-        className="inline-flex items-center rounded px-1 py-0.5 text-[10px] font-semibold tracking-wide text-red-700 uppercase ring-1 ring-red-600/20 ring-inset"
+        className="inline-flex items-center rounded px-1 py-0.5 text-[10px] font-semibold tracking-wide text-amber-accent uppercase ring-1 ring-amber-accent/30 ring-inset"
       >
         Internal
       </span>
     </span>
+  );
+}
+
+/**
+ * A block of text the client will never see.
+ *
+ * **Amber, not red.** These notes are the system working exactly as intended —
+ * a crew member being candid, a permit delay recorded honestly. Red says
+ * something has broken, which sends a contractor looking for a fault that is not
+ * there, and makes a demo of the withholding feature read as a page full of
+ * errors. The left rule and the Internal tag carry the meaning; the colour only
+ * has to say "handle differently".
+ *
+ * Red stays reserved for actual failures — an unreachable database, a refused
+ * sign-in.
+ *
+ * One component rather than four copies, so the next change to how internal
+ * content looks happens in one place.
+ */
+export function InternalNote({
+  label,
+  children,
+  footnote,
+  size = 'sm',
+}: {
+  label: string;
+  children: ReactNode;
+  /** Optional line under the body — e.g. why it cannot be published. */
+  footnote?: string;
+  size?: 'sm' | 'xs';
+}) {
+  const body = size === 'sm' ? 'text-sm' : 'text-xs';
+  return (
+    <div className="rounded-md border-l-2 border-amber-accent bg-amber-soft px-3 py-2">
+      <InternalOnly>
+        <span className="text-xs font-semibold tracking-wide text-amber-accent uppercase">
+          {label}
+        </span>
+      </InternalOnly>
+      <p className={`mt-1.5 ${body} text-amber-900`}>{children}</p>
+      {footnote !== undefined && <p className="mt-2 text-xs text-amber-900/70">{footnote}</p>}
+    </div>
   );
 }
 

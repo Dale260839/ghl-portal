@@ -8,15 +8,7 @@ import {
   isActiveProject,
   stageLabel,
 } from '@/lib/data/types';
-import {
-  Card,
-  CardHeader,
-  HealthBadge,
-  ProgressBar,
-  StatTile,
-  currency,
-  shortDate,
-} from '@/components/ui';
+import { Card, CardHeader, HealthBadge, InternalNote, ProgressBar, StatTile, currency, shortDate } from '@/components/ui';
 
 export default async function PortfolioOverview() {
   const scope = await requireTenantScope();
@@ -107,9 +99,10 @@ export default async function PortfolioOverview() {
                     {hasOperationalDetail(p) && <ProgressBar value={p.progressPercentage} />}
                   </div>
                   {p.delayReason !== '' && (
-                    <div className="mt-2.5 rounded-md bg-red-50 px-2.5 py-1.5 text-xs text-red-700">
-                      <span className="font-semibold">Internal · </span>
-                      {p.delayReason}
+                    <div className="mt-2.5">
+                      <InternalNote label="Internal" size="xs">
+                        {p.delayReason}
+                      </InternalNote>
                     </div>
                   )}
                 </Link>

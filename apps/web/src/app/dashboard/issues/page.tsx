@@ -1,6 +1,6 @@
 
 import { requireTenantScope } from '@/lib/scope';
-import { Badge, Card, CardHeader, InternalOnly, StatTile, shortDate } from '@/components/ui';
+import { Badge, Card, CardHeader, InternalNote, StatTile, shortDate } from '@/components/ui';
 import { currentDataSource } from '@/lib/data/current-source';
 
 /**
@@ -81,14 +81,9 @@ export default async function Issues() {
               <p className="mt-2.5 text-sm text-navy-700">{issue.description}</p>
 
               <div className="mt-3 grid gap-2.5 md:grid-cols-2">
-                <div className="rounded-md bg-red-50 px-3 py-2">
-                  <InternalOnly>
-                    <span className="text-xs font-semibold tracking-wide text-red-700 uppercase">
-                      Internal notes
-                    </span>
-                  </InternalOnly>
-                  <p className="mt-1 text-xs text-red-800">{issue.internalNotes}</p>
-                </div>
+                <InternalNote label="Internal notes" size="xs">
+                  {issue.internalNotes}
+                </InternalNote>
                 <div className="rounded-md bg-navy-100/60 px-3 py-2">
                   <span className="text-xs font-semibold tracking-wide text-navy-600 uppercase">
                     Client update

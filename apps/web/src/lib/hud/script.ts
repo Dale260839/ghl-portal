@@ -253,7 +253,7 @@ export const STEPS: Step[] = [
     say: 'Your superintendent files an update from their phone on site. It arrives here. Notice what has not happened: your client has not been told anything.',
     watch:
       'There must be at least one pending update before the call, or the next three steps have nothing to stand on. Two are seeded — check they are still there.',
-    then: 'On the Johnson card, point at the red internal notes block.',
+    then: 'On the Johnson card, point at the amber Internal field notes block.',
     backend:
       'An update moves through a small state machine and the names matter: Pending, Approved Internally, Approved & Published. Only the last is visible to a client. Approved Internally reads like approval and deliberately is not.',
   },
@@ -268,10 +268,10 @@ export const STEPS: Step[] = [
     screen: 'updates',
     hotspot: 'sec-johnson-kitchen-remodel',
     star: true,
-    hover: 'The red internal-notes block, then the client summary box under it.',
-    say: 'Two boxes. The red one is what the crew wrote — the tile came in wrong, the supplier let us down, we lost a day. The one below is what the client reads, and your PM edits it before it goes. Same event, two audiences. The crew never has to be diplomatic; the client never reads a raw complaint about a supplier.',
+    hover: 'The amber "Internal field notes" block, then the client summary box under it.',
+    say: 'Two boxes. The amber one is what the crew wrote — the tile came in wrong, the supplier let us down, we lost a day. The one below is what the client reads, and your PM edits it before it goes. Same event, two audiences. The crew never has to be diplomatic; the client never reads a raw complaint about a supplier.',
     watch:
-      'Read a line of the red text out loud. Then actually type an edit into the client summary. This is where the call turns, and it turns on it being live rather than described.',
+      'Read a line of the amber text out loud. Then actually type an edit into the client summary. This is where the call turns, and it turns on it being live rather than described.',
     then: 'Move to the four buttons underneath.',
     backend:
       'Two separate fields on the record, not one field shown twice. No code path copies the internal note into the client summary. That is why the portal screen later can prove the complaint was not sent — it was never in the field that gets published.',

@@ -4,16 +4,7 @@ import { notFound } from 'next/navigation';
 import { requireTenantScope } from '@/lib/scope';
 import { hasFinancials, hasOperationalDetail, stageLabel } from '@/lib/data/types';
 import { currentDataSource } from '@/lib/data/current-source';
-import {
-  Badge,
-  Card,
-  CardHeader,
-  HealthBadge,
-  InternalOnly,
-  ProgressBar,
-  currency,
-  shortDate,
-} from '@/components/ui';
+import { Badge, Card, CardHeader, HealthBadge, InternalNote, InternalOnly, ProgressBar, currency, shortDate } from '@/components/ui';
 
 export default async function ProjectOverview({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -147,11 +138,10 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm text-navy-600">{u.clientSummary}</p>
-                  <div className="mt-2.5 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
-                    <InternalOnly>
-                      <span className="font-semibold">Internal notes</span>
-                    </InternalOnly>
-                    <p className="mt-1">{u.internalNotes}</p>
+                  <div className="mt-2.5">
+                    <InternalNote label="Internal notes" size="xs">
+                      {u.internalNotes}
+                    </InternalNote>
                   </div>
                 </li>
               ))}

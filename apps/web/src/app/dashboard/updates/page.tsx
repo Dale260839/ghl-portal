@@ -1,7 +1,7 @@
 import { reviewUpdate } from '@/lib/actions';
 
 import { requireTenantScope } from '@/lib/scope';
-import { Badge, Card, CardHeader, InternalOnly, shortDate } from '@/components/ui';
+import { Badge, Card, CardHeader, InternalNote, shortDate } from '@/components/ui';
 import { currentDataSource } from '@/lib/data/current-source';
 
 /**
@@ -57,17 +57,12 @@ export default async function ReviewQueue() {
                   <p className="mt-1 text-sm text-navy-700">{u.workCompleted}</p>
                 </div>
 
-                <div className="rounded-lg bg-red-50 px-4 py-3">
-                  <InternalOnly>
-                    <span className="text-xs font-semibold tracking-wide text-red-700 uppercase">
-                      Internal field notes
-                    </span>
-                  </InternalOnly>
-                  <p className="mt-1.5 text-sm text-red-800">{u.internalNotes}</p>
-                  <p className="mt-2 text-xs text-red-700/80">
-                    Cannot be published. Not readable from any client-facing response.
-                  </p>
-                </div>
+                <InternalNote
+                  label="Internal field notes"
+                  footnote="Cannot be published. Not readable from any client-facing response."
+                >
+                  {u.internalNotes}
+                </InternalNote>
 
                 <form action={reviewUpdate} className="space-y-3">
                   <input type="hidden" name="updateId" value={u.id} />
