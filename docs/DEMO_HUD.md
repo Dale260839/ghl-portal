@@ -15,9 +15,8 @@ a phone and it still works.
 Put it on your **second monitor**. It is not part of the product and must not
 appear on the shared screen.
 
-The same thing is also served at **`/hud`** when the app is running, if you would
-rather have it in a browser tab alongside everything else. Both are generated
-from the same source, so they cannot drift:
+There is no longer a `/hud` route in the app. Two implementations of the same
+screen drift, and the stale one is the dangerous one — the file is the only HUD.
 
 ```bash
 npm run hud          # rebuild docs/demo-hud.html after editing the script
@@ -42,13 +41,21 @@ the nine **★** steps and skip everything else; they carry the argument alone.
 
 ### What each step gives you
 
+### Modes
+
+**Full Guide** is everything. **Presenter** strips it to the four things you need
+while actually talking — the system view, where to hover, what to say, and what
+to watch out for — in large type, sidebar hidden. Press **P** to flip between
+them, or use the toggle top-right.
+
 | Panel | What it is |
 |---|---|
-| **Where to hover** | A schematic of the screen you should be on, with the target lit in amber. Glanceable — you should not have to read it. |
+| **System view** | A rough drawing of the real screen — its actual sidebar, headings and buttons, in their real order — with the target ringed in amber and labelled "point here". Recognise the shape, do not read it. |
+| **Primary message** | The one sentence they should remember. If you read nothing else on the panel, read this. |
 | **Put the mouse here** | The same thing in a sentence, for when the map is ambiguous. |
 | **Watch out** | What goes wrong on this step. Read these *before* the call, not during. |
 | **Say** | The words. Spoken language, short sentences — say it in your own voice, don't recite it. |
-| **Under the hood** | What is actually happening server-side. **Not for reading out** — it is there for when someone technical asks "where is that coming from", which is a question you answer badly if you improvise it. |
+| **Under the hood** | Collapsed by default. **Simple answer** is what you say to a non-technical person; **Technical answer** is for when someone who owns the database asks. Never read either out unprompted. |
 | **If they ask** | The objection that lands on this step specifically. |
 | **Then** | The action that ends the step. |
 

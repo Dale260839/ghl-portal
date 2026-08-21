@@ -1,5 +1,5 @@
 /**
- * Generates `apps/web/src/app/hud/wireframes.ts` from the RUNNING app.
+ * Generates `apps/web/src/lib/hud/wireframes.ts` from the RUNNING app.
  *
  *   npm run dev            # in another terminal
  *   node scripts/build-wireframes.mjs
@@ -23,7 +23,7 @@ import { dirname, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(here, '..');
-const OUT = resolve(REPO, 'apps/web/src/app/hud/wireframes.ts');
+const OUT = resolve(REPO, 'apps/web/src/lib/hud/wireframes.ts');
 const BASE = process.env.HUD_BASE_URL ?? 'http://localhost:3000';
 
 const cookies = JSON.parse(readFileSync(resolve(REPO, '.hud-cookies.json'), 'utf8'));

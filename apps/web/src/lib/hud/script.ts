@@ -42,6 +42,22 @@ export interface Step {
   /** The moments the call is for. */
   star?: boolean;
   /**
+   * The one thing they should remember from this step.
+   *
+   * Sits at the top of the panel so a presenter who reads nothing else still
+   * says the right sentence. Everything below it is elaboration.
+   */
+  primary: string;
+  /** Steps where a wrong move costs something. Flagged in the sequence list. */
+  risk?: boolean;
+  /**
+   * The client-friendly half of "under the hood" — what you say when a
+   * non-technical person asks how it works. `backend` is the technical half.
+   */
+  hoodSimple?: string;
+  /** Block ids to mark AVOID on the map: on screen, but not to be pointed at. */
+  avoid?: string[];
+  /**
    * What is happening server-side. **Not for reading out** — it is for when
    * someone technical asks where the data comes from, which is a question you
    * answer badly if you improvise it.
@@ -62,6 +78,9 @@ export const SUBTITLE = 'client walkthrough · second screen only — not the sh
 export const STEPS: Step[] = [
   {
     title: 'Before you share',
+    risk: true,
+    primary:
+      'Set the stage so nothing embarrassing is on screen when you hit share.',
     seconds: 45,
     screen: 'signin',
     hover: 'Nothing yet. Hands off until the share starts.',
@@ -73,6 +92,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'It lives inside GoHighLevel',
+    primary:
+      'It lives inside the tool your team already uses — no new login, no new habit.',
+    hoodSimple:
+      'It\'s a menu item inside GoHighLevel that opens the Hub already signed in as your company.',
     seconds: 75,
     screen: 'systems',
     hotspot: 'ghl',
@@ -93,6 +116,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'The sign-in check',
+    primary:
+      'We verify with GoHighLevel that it\'s really your account before showing a single row.',
+    hoodSimple:
+      'Before showing anything, we ask GoHighLevel to confirm the account is real and ours to serve. If we can\'t reach them, we refuse rather than let someone through.',
     seconds: 40,
     screen: 'signin',
     hover: 'Nothing. Let it land on its own.',
@@ -105,6 +132,11 @@ export const STEPS: Step[] = [
 
   {
     title: 'The contractor dashboard',
+    risk: true,
+    primary:
+      'The whole company\'s pulse in one screen, instead of five tools and a spreadsheet.',
+    hoodSimple:
+      'The dashboard reads the project data straight from the database, so there\'s no second copy of the numbers to keep in sync.',
     seconds: 100,
     screen: 'dashboard',
     hotspot: 'sec-projects-needing-attention',
@@ -126,6 +158,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'Projects — and whose they are',
+    primary:
+      'You see your jobs and nobody else\'s — enforced in the data, not hidden in the page.',
+    hoodSimple:
+      'Every request carries who you are, and the database only returns rows belonging to your company. Other contractors are in the same system and never appear here.',
     seconds: 70,
     screen: 'projects',
     hotspot: 'title',
@@ -139,6 +175,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'One project, one record',
+    primary:
+      'One record holds the whole job — including the money the client must never see.',
+    hoodSimple:
+      'Everything about a job lives on one record, so the crew, the office and the homeowner are all looking at the same source rather than their own copies.',
     seconds: 90,
     screen: 'project',
     hotspot: 'sec-financials',
@@ -152,6 +192,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'Client Visibility Settings',
+    primary:
+      'You decide, switch by switch, what your homeowner is allowed to see — per project.',
+    hoodSimple:
+      'Each switch is stored on the project and checked every time the client portal builds a page. The preview panel runs the same check the real portal does, so it can\'t promise something the portal wouldn\'t do.',
     seconds: 160,
     screen: 'visibility',
     hotspot: 'sec-switches',
@@ -173,6 +217,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'What no switch can turn on',
+    primary:
+      'Cost, markup and margin have no switch at all — they\'re removed before the page is built.',
+    hoodSimple:
+      'For the sensitive fields we don\'t rely on a setting being off. We build the client\'s page from a named list of allowed fields, so anything not on that list can\'t appear even by mistake.',
     seconds: 80,
     screen: 'visibility',
     hotspot: 'sec-never-visible-whatever-the-switches-',
@@ -193,6 +241,11 @@ export const STEPS: Step[] = [
 
   {
     title: 'The review queue',
+    risk: true,
+    primary:
+      'Nothing reaches your client until a human decides it should.',
+    hoodSimple:
+      'A field update arrives in a pending state. Nothing is sent to the homeowner until someone approves and publishes it.',
     seconds: 70,
     screen: 'updates',
     hotspot: 'sec-johnson-kitchen-remodel',
@@ -207,6 +260,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'Two boxes — the argument',
+    primary:
+      'The crew writes what happened; the PM writes what the client reads. Same event, two audiences.',
+    hoodSimple:
+      'They\'re two separate fields on the record. Nothing copies the internal note into the client\'s version — which is why it can\'t leak later.',
     seconds: 150,
     screen: 'updates',
     hotspot: 'sec-johnson-kitchen-remodel',
@@ -228,6 +285,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'Four ways to answer',
+    primary:
+      'Approve internally is the button nobody else gives you — recorded, not reported.',
+    hoodSimple:
+      'Publishing runs a defined workflow rather than ad-hoc updates: it sets the status, notifies the client and stamps the date as one unit, so it can\'t half-happen.',
     seconds: 80,
     screen: 'updates',
     hotspot: 'btn-approve-and-publish',
@@ -242,6 +303,11 @@ export const STEPS: Step[] = [
 
   {
     title: 'Switch to their side',
+    risk: true,
+    primary:
+      'Same browser, other side of the gate — say out loud that this is a demo shortcut.',
+    hoodSimple:
+      'It swaps the signed-in view to the client\'s, keeping your real identity underneath so you can switch back. Real clients will get their own invited login.',
     seconds: 55,
     screen: 'updates',
     hotspot: 'switcher',
@@ -263,6 +329,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'Thirteen screens',
+    primary:
+      'Thirteen screens — this is the client portal you asked to see last time.',
+    hoodSimple:
+      'Every nav item is a real route; four of them are designed placeholders and I\'ll show you one.',
     seconds: 100,
     screen: 'portal',
     hotspot: 'nav-completion-warranty',
@@ -277,6 +347,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'Their project, their language',
+    primary:
+      'Your nineteen pipeline stages become plain English for the homeowner.',
+    hoodSimple:
+      'The same project record is translated for the client: your detailed stages collapse into a handful they\'d actually understand.',
     seconds: 90,
     screen: 'portal',
     hotspot: 'title',
@@ -298,6 +372,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'The same update, transformed',
+    primary:
+      'The supplier complaint isn\'t hidden here — it was never sent.',
+    hoodSimple:
+      'Before this page is built we check the portal is on, the item is marked client-visible, it\'s been published, and this homeowner owns the project. Then internal fields are stripped from what\'s left.',
     seconds: 110,
     screen: 'portalUpdates',
     hotspot: 'title',
@@ -313,6 +391,11 @@ export const STEPS: Step[] = [
 
   {
     title: 'Documents — proof by absence',
+    risk: true,
+    primary:
+      'The list is short on purpose — that\'s the feature, not a gap.',
+    hoodSimple:
+      'Nothing is visible unless it\'s explicitly marked visible, so a document uploaded and never reviewed can\'t reach a client by sitting there.',
     seconds: 100,
     screen: 'portalDocuments',
     hotspot: 'title',
@@ -328,6 +411,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'Photos, and the one held back',
+    primary:
+      'You decide when a problem becomes a conversation — not the system.',
+    hoodSimple:
+      'Same rule as documents: the crew shoots everything, the client sees what\'s been approved.',
     seconds: 70,
     screen: 'portalPhotos',
     hotspot: 'title',
@@ -339,6 +426,11 @@ export const STEPS: Step[] = [
 
   {
     title: 'What is not built yet',
+    risk: true,
+    primary:
+      'Show them a gap before they find one — it buys more trust than a flawless pitch.',
+    hoodSimple:
+      'These are real routes with the design in place, waiting on the data layer. A client clicking a dead link concludes the product is broken; this tells them what\'s coming.',
     seconds: 85,
     screen: 'portalDesigns',
     hotspot: 'title',
@@ -358,6 +450,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'The field interface',
+    primary:
+      'Thirty seconds on a phone in a driveway — and the same two boxes from the other end.',
+    hoodSimple:
+      'Submitting notifies the project manager and never the client. There\'s no path from the crew\'s phone to your homeowner.',
     seconds: 90,
     screen: 'field',
     hotspot: 'sec-add-daily-update',
@@ -373,6 +469,11 @@ export const STEPS: Step[] = [
 
   {
     title: 'What is live, what is not',
+    risk: true,
+    primary:
+      'Be blunt about what\'s real. It decides whether they believe everything else.',
+    hoodSimple:
+      'Sign-in and this screen read your live systems. The rest runs on sample content until our tables are created in your database.',
     seconds: 110,
     screen: 'buildsuite',
     hotspot: 'sec-active-projects',
@@ -388,6 +489,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'The two asks',
+    primary:
+      'Two asks, not five. A short list reads as a project waiting on a decision.',
+    hoodSimple:
+      'We need the client stages confirmed by someone who runs jobs, and their team to create our tables.',
     seconds: 100,
     screen: 'buildsuite',
     hover: 'Nothing on screen. Have the two asks written down in front of you.',
@@ -399,6 +504,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'Close',
+    primary:
+      'Concede the last meeting in one sentence, then ask for the next thing.',
+    hoodSimple:
+      'Ask for time with whoever runs jobs day to day.',
     seconds: 50,
     screen: 'buildsuite',
     hover: 'Stop the screen share before the goodbyes, not after.',
@@ -412,6 +521,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'How the three systems fit',
+    primary:
+      'A loop, not a line — and we\'re reading the far end of their own pipeline.',
+    hoodSimple:
+      'Leads start in GoHighLevel, cross into BuildSuite to be bid, and hand back to GoHighLevel at signing. The Hub sits on top of all three.',
     seconds: 100,
     screen: 'systems',
     hotspot: 'inbound',
@@ -427,6 +540,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'Where the data lives',
+    primary:
+      'We hold nothing they can\'t see, and we haven\'t touched their database.',
+    hoodSimple:
+      'Contacts and messaging stay in GoHighLevel, estimates in BuildSuite. Our own tables are written and waiting for their team to create them.',
     seconds: 90,
     screen: 'stack',
     hotspot: 'data',
@@ -440,6 +557,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'Why the gate is not a UI rule',
+    primary:
+      'It was never sent to their browser — not merely hidden in the page.',
+    hoodSimple:
+      'Most systems hide sensitive fields in the page, where a curious person can still find them. We remove them one layer below every screen, so they never leave the server.',
     seconds: 90,
     screen: 'stack',
     hotspot: 'gate',
@@ -454,6 +575,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'How one agency cannot see another',
+    primary:
+      'Code that forgets to scope a query doesn\'t build.',
+    hoodSimple:
+      'Every request carries who you are, and reads that don\'t include it fail at build time rather than quietly returning everyone\'s data.',
     seconds: 80,
     screen: 'stack',
     hotspot: 'data',
@@ -469,6 +594,10 @@ export const STEPS: Step[] = [
 
   {
     title: 'When something breaks',
+    primary:
+      'An outage must never become an open door.',
+    hoodSimple:
+      'If GoHighLevel can\'t be reached at sign-in we refuse rather than guess. If our app is down, their other systems carry on — nothing is stored only with us.',
     seconds: 80,
     screen: 'systems',
     hotspot: 'hub',
@@ -482,6 +611,11 @@ export const STEPS: Step[] = [
 
   {
     title: 'What is left',
+    risk: true,
+    primary:
+      'The known gaps, said the same way whether they ask or not.',
+    hoodSimple:
+      'Four portal screens, the field and client logins, our tables, and multi-company sign-in before the second client.',
     seconds: 100,
     screen: 'stack',
     section: 'annex',
@@ -496,6 +630,11 @@ export const STEPS: Step[] = [
 
   {
     title: 'The two we are waiting on',
+    risk: true,
+    primary:
+      'These decide which projects appear — and they\'re owed by another team, not by us.',
+    hoodSimple:
+      'We\'re showing every project on the account because we can\'t yet tell which deals were actually won. That needs two pieces from the BuildSuite side.',
     seconds: 110,
     screen: 'systems',
     hotspot: 'inbound',
