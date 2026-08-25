@@ -1,4 +1,4 @@
-import type { Message, ProjectDocument, ProjectPhoto, ScheduleItem } from './types';
+import type { ChangeOrder, Message, ProjectDocument, ProjectPhoto, ScheduleItem } from './types';
 
 /**
  * Fixtures for the Phase A client-portal screens.
@@ -195,5 +195,106 @@ export const MESSAGES: Message[] = [
       'Thanks for approving that. No need to be home — Tony will be on site to let the electricians in using the lockbox. Have a good weekend!',
     sentDate: '2026-08-14',
     clientVisible: true,
+  },
+];
+
+/**
+ * Change orders for Johnson Kitchen Remodel.
+ *
+ * The figures reconcile with the project's financials on the contractor side:
+ * `approvedChangeOrders` $3,200 and `pendingChangeOrders` $1,850. A client
+ * seeing a different total from the PM is worse than showing none at all.
+ *
+ * CO-003 carries a credit rather than a cost, and CO-004 is deliberately not
+ * client-visible — it is priced but not yet published, which is what the §9.1
+ * gate looks like on this screen.
+ */
+export const CHANGE_ORDERS: ChangeOrder[] = [
+  {
+    id: 'co-1',
+    projectId: PROJECT,
+    changeOrderNumber: '001',
+    title: 'Additional electrical outlets — island',
+    description:
+      'Add four outlets to the island cabinetry, two per side, on a dedicated 20-amp circuit.',
+    reason: 'Requested during the framing walkthrough to suit small appliances on the island.',
+    requestedBy: 'Dana Johnson',
+    createdDate: '2026-07-24',
+    addedCost: 1450,
+    creditAmount: 0,
+    scheduleImpactDays: 2,
+    revisedCompletionDate: '2026-09-14',
+    approvalDeadline: '2026-07-31',
+    status: 'Approved',
+    clientComments: '',
+    approvedBy: 'Dana Johnson',
+    approvalDate: '2026-07-26',
+    internalNotes: 'Electrician quoted 1,150. Held margin at standard.',
+    clientVisible: true,
+  },
+  {
+    id: 'co-2',
+    projectId: PROJECT,
+    changeOrderNumber: '002',
+    title: 'Upgrade to full-height backsplash',
+    description:
+      'Extend tile from counter to the underside of the upper cabinets across the sink and range walls.',
+    reason: 'Selected as an upgrade from the 4-inch splash in the original scope.',
+    requestedBy: 'Dana Johnson',
+    createdDate: '2026-08-02',
+    addedCost: 2150,
+    creditAmount: 400,
+    scheduleImpactDays: 1,
+    revisedCompletionDate: '2026-09-15',
+    approvalDeadline: '2026-08-09',
+    status: 'Approved',
+    clientComments: '',
+    approvedBy: 'Dana Johnson',
+    approvalDate: '2026-08-05',
+    internalNotes: 'Credit is the deleted 4-inch splash material.',
+    clientVisible: true,
+  },
+  {
+    id: 'co-3',
+    projectId: PROJECT,
+    changeOrderNumber: '003',
+    title: 'Countertop edge profile — upgrade to mitred',
+    description:
+      'Change the island edge from eased to a mitred 2-inch profile. Perimeter runs stay eased.',
+    reason: 'Confirmed at the countertop template appointment.',
+    requestedBy: 'Marcus Reyes',
+    createdDate: '2026-08-15',
+    addedCost: 1850,
+    creditAmount: 0,
+    scheduleImpactDays: 0,
+    revisedCompletionDate: null,
+    approvalDeadline: '2026-08-22',
+    status: 'Pending',
+    clientComments: '',
+    approvedBy: null,
+    approvalDate: null,
+    internalNotes: 'Fabricator holds the slab until this is signed.',
+    clientVisible: true,
+  },
+  {
+    id: 'co-4',
+    projectId: PROJECT,
+    changeOrderNumber: '004',
+    title: 'Under-cabinet lighting',
+    description: 'Continuous LED strip under the upper cabinets, switched at the entry.',
+    reason: 'Raised on site. Priced, not yet issued.',
+    requestedBy: 'Marcus Reyes',
+    createdDate: '2026-08-18',
+    addedCost: 890,
+    creditAmount: 0,
+    scheduleImpactDays: 0,
+    revisedCompletionDate: null,
+    approvalDeadline: null,
+    status: 'Pending',
+    clientComments: '',
+    approvedBy: null,
+    approvalDate: null,
+    internalNotes: 'Do not publish until Marcus confirms the switch location with the electrician.',
+    clientVisible: false,
   },
 ];

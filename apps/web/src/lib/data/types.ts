@@ -279,3 +279,96 @@ export function isActiveProject(project: Project): boolean {
   const status = project.sourceStatus ?? '';
   return status !== 'completed' && status !== 'cancelled' && status !== 'canceled';
 }
+
+/**
+ * §6.6 `Change Order`. The client-facing half of a scope change.
+ *
+ * Field names follow §6.6 verbatim. Two notes:
+ *
+ * **`changeOrderNumber` is the reference people say out loud** — "we signed off
+ * on change order two". It is a per-project sequence, not a global id, so it is
+ * a string and it is assigned on creation, never recomputed from array order.
+ *
+ * **`status` is the gate.** Only `Approved` has moved money. `Pending` is
+ * awaiting the client; `Question Asked` is with the contractor. Nothing here is
+ * client-visible until the contractor publishes it (§9.1) — `clientVisible`
+ * carries that, exactly as `ScheduleItem` does.
+ *
+ * PROVISIONAL: §6.6 names `Payment Requirement`, `Terms`, `Invoice Status` and
+ * `Payment Status`. Those belong to the billing side (D-019 — payment routes to
+ * the contractor's own Stripe through GHL), so they are deliberately absent from
+ * the client projection until that flow is wired.
+ */
+export interface ChangeOrder {
+  id: string;
+  projectId: string;
+  /** §6.6 Change Order Number — per-project sequence, e.g. "001". */
+  changeOrderNumber: string;
+  title: string;
+  description: string;
+  /** §6.6 Reason — why the change arose, in client-safe language. */
+  reason: string;
+  requestedBy: string;
+  createdDate: string;
+  /** §6.6 Added Cost, in dollars. Zero for a no-cost change. */
+  addedCost: number;
+  /** §6.6 Credit Amount — a reduction, expressed positive. */
+  creditAmount: number;
+  /** §6.6 Schedule Impact, in days. Zero when the date does not move. */
+  scheduleImpactDays: number;
+  revisedCompletionDate: string | null;
+  /** §6.6 Approval Deadline — after which the PM chases it. */
+  approvalDeadline: string | null;
+  status: ChangeOrderStatus;
+  /** What the client wrote back when asking rather than approving. */
+  clientComments: string;
+  approvedBy: string | null;
+  approvalDate: string | null;
+  /** §9.3 — never client-facing. */
+  internalNotes: string;
+  /** §9.1 — the contractor publishes deliberately. */
+  clientVisible: boolean;
+}
+
+/**
+ * §6.6 Status.
+ *
+ * Kept as one exported list so a rename from Chris's change-work-order approval
+ * workflow is a single edit rather than a hunt through screens.
+ */
+export const CHANGE_ORDER_STATUSES = [
+  'Pending',
+  'Approved',
+  'Question Asked',
+  'Declined',
+] as const;
+
+export type ChangeOrderStatus = (typeof CHANGE_ORDER_STATUSES)[number];
+
+/** The only status that has moved money or the completion date. */
+export const CHANGE_ORDER_APPROVED: ChangeOrderStatus = 'Approved';
+
+/** Net effect on the contract, in dollars. Added cost less any credit. */
+export function changeOrderNet(co: ChangeOrder): number {
+  return co.addedCost - co.creditAmount;
+}
+
+/**
+ * Rolls a project's change orders into the three figures a client needs:
+ * what is already in the contract, what is still awaiting them, and the total.
+ *
+ * Only `Approved` counts toward `approved` — a pending change has not moved the
+ * contract and must never be presented as though it has.
+ */
+export function changeOrderTotals(
+  orders: readonly ChangeOrder[],
+): { approved: number; pending: number; net: number } {
+  let approved = 0;
+  let pending = 0;
+  for (const co of orders) {
+    const net = changeOrderNet(co);
+    if (co.status === CHANGE_ORDER_APPROVED) approved += net;
+    else if (co.status === 'Pending') pending += net;
+  }
+  return { approved, pending, net: approved };
+}

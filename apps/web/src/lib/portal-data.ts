@@ -1,8 +1,8 @@
 import 'server-only';
 
-import { DOCUMENTS, MESSAGES, PHOTOS, SCHEDULE_ITEMS } from './data/portal-fixtures.ts';
+import { CHANGE_ORDERS, DOCUMENTS, MESSAGES, PHOTOS, SCHEDULE_ITEMS } from './data/portal-fixtures.ts';
 import { PROJECTS } from './data/fixtures.ts';
-import type { Message, Project, ProjectDocument, ProjectPhoto, ScheduleItem } from './data/types.ts';
+import type { ChangeOrder, Message, Project, ProjectDocument, ProjectPhoto, ScheduleItem } from './data/types.ts';
 import { getSession } from './session.ts';
 import { currentDataSource } from './data/current-source.ts';
 
@@ -51,6 +51,17 @@ export function photosFor(project: Project): ProjectPhoto[] {
   return PHOTOS.filter((p) => p.projectId === project.buildsuiteProjectId && p.clientVisible).sort(
     (a, b) => b.takenDate.localeCompare(a.takenDate),
   );
+}
+
+export function changeOrdersFor(project: Project): ChangeOrder[] {
+  if (!portalOpen(project)) return [];
+  // §9.1 — a change order is a priced scope change, so it rides the same
+  // switch as the rest of the budget. A contractor who hides pricing has not
+  // agreed to show the cost of every change either.
+  if (!project.showBudgetToClient) return [];
+  return CHANGE_ORDERS.filter(
+    (c) => c.projectId === project.buildsuiteProjectId && c.clientVisible,
+  ).sort((a, b) => a.changeOrderNumber.localeCompare(b.changeOrderNumber));
 }
 
 export function messagesFor(project: Project): Message[] {
