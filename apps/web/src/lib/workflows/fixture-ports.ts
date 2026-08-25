@@ -1,4 +1,5 @@
 import { DAILY_UPDATES, ISSUES, PROJECTS } from '../data/fixtures.ts';
+import { CHANGE_ORDERS, SELECTIONS } from '../data/portal-fixtures.ts';
 import type { Effect } from './effects.ts';
 import type { EffectHandlers } from './ports.ts';
 
@@ -22,6 +23,14 @@ const log = (effect: Effect, detail = '') => {
 
 function update(updateId: string) {
   return DAILY_UPDATES.find((u) => u.id === updateId);
+}
+
+function selection(selectionId: string) {
+  return SELECTIONS.find((x) => x.id === selectionId);
+}
+
+function changeOrder(changeOrderId: string) {
+  return CHANGE_ORDERS.find((x) => x.id === changeOrderId);
 }
 
 function project(buildsuiteProjectId: string) {
@@ -76,6 +85,51 @@ export const fixturePorts: EffectHandlers = {
   NotifyTeam: (e) => log(e, e.message),
   NotifyClient: (e) => log(e, e.message),
   RecordActivity: (e) => log(e, e.activity),
+
+  // ── WF5 / WF6 ──────────────────────────────────────────────────────────────
+  // The two totals WF6 computes ARE written to the fixture project, because the
+  // client portal reads them: an approved change order that does not move the
+  // contract total on screen would make the workflow look like it did nothing.
+  RecordSelectionApproval: (e) => {
+    const row = selection(e.selectionId);
+    if (row !== undefined) {
+      row.status = 'Approved';
+      row.clientDecision = e.clientDecision;
+      row.approvedDate = e.approvedDate;
+    }
+  },
+  UpdateSelectionAmounts: (e) => {
+    const row = selection(e.selectionId);
+    if (row !== undefined) {
+      row.upgradeAmount = e.upgradeAmount;
+      row.creditAmount = e.creditAmount;
+    }
+  },
+  UpdateRelatedTask: (e) => log(e, `${e.taskId} -> ${e.status}`),
+  CreateChangeOrderFromSelection: (e) => log(e, `${e.title} (${e.addedCost})`),
+  RecordChangeOrderApproval: (e) => {
+    const row = changeOrder(e.changeOrderId);
+    if (row !== undefined) {
+      row.status = 'Approved';
+      row.approvedBy = e.approvedBy;
+      row.approvalDate = e.approvalDate;
+    }
+  },
+  UpdateApprovedChangeOrders: (e) => {
+    const row = project(e.buildsuiteProjectId);
+    if (row !== undefined) row.approvedChangeOrders = e.total;
+  },
+  RecalculateProjectTotal: (e) => {
+    const row = project(e.buildsuiteProjectId);
+    if (row !== undefined) row.currentProjectTotal = e.currentProjectTotal;
+  },
+  AdjustCompletionDate: (e) => {
+    const row = project(e.buildsuiteProjectId);
+    if (row !== undefined) row.estimatedCompletionDate = e.revisedCompletionDate;
+  },
+  CreateInvoice: (e) => log(e, `${e.changeOrderId} for ${e.amount}`),
+  NotifyAccounting: (e) => log(e, e.message),
+  UpdatePortal: (e) => log(e, e.reason),
 
   // ── WF1 / WF2 — no fixture write path; they run against GHL when it exists ─
   CreateProject: (e) => log(e, e.buildsuiteProjectId),

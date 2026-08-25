@@ -39,6 +39,19 @@ export type Effect =
   | { type: 'PublishClientSummary'; buildsuiteProjectId: string; updateId: string; clientSummary: string; publishDate: string }
   | { type: 'SetProjectLastUpdated'; buildsuiteProjectId: string; date: string }
   | { type: 'AddToPortalFeed'; buildsuiteProjectId: string; updateId: string }
+  // ── WF5 ────────────────────────────────────────────────────────────────────
+  | { type: 'RecordSelectionApproval'; buildsuiteProjectId: string; selectionId: string; approvedDate: string; clientDecision: string }
+  | { type: 'UpdateSelectionAmounts'; buildsuiteProjectId: string; selectionId: string; upgradeAmount: number; creditAmount: number }
+  | { type: 'UpdateRelatedTask'; buildsuiteProjectId: string; taskId: string; status: string }
+  | { type: 'CreateChangeOrderFromSelection'; buildsuiteProjectId: string; selectionId: string; title: string; addedCost: number }
+  // ── WF6 ────────────────────────────────────────────────────────────────────
+  | { type: 'RecordChangeOrderApproval'; buildsuiteProjectId: string; changeOrderId: string; approvedBy: string; approvalDate: string }
+  | { type: 'UpdateApprovedChangeOrders'; buildsuiteProjectId: string; total: number }
+  | { type: 'RecalculateProjectTotal'; buildsuiteProjectId: string; currentProjectTotal: number }
+  | { type: 'AdjustCompletionDate'; buildsuiteProjectId: string; revisedCompletionDate: string }
+  | { type: 'CreateInvoice'; buildsuiteProjectId: string; changeOrderId: string; amount: number }
+  | { type: 'NotifyAccounting'; buildsuiteProjectId: string; message: string }
+  | { type: 'UpdatePortal'; buildsuiteProjectId: string; reason: string }
   // ── WF7 ────────────────────────────────────────────────────────────────────
   | { type: 'AssignIssueNumber'; buildsuiteProjectId: string; issueId: string; issueNumber: string }
   | { type: 'AssignIssue'; buildsuiteProjectId: string; issueId: string; assignTo: string }

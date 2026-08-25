@@ -232,6 +232,82 @@ export interface ScheduleItem {
 }
 
 /**
+ * §6.5 `Material Selection`.
+ *
+ * `actualCost` is the internal one — §9.3 deny-list. It lives on the type
+ * because the contractor's own screens need it; every client-facing read must
+ * drop it, and `clientSelection()` is what does that.
+ */
+export interface MaterialSelection {
+  id: string;
+  projectId: string;
+  selectionName: string;
+  category: string;
+  roomOrArea: string;
+  manufacturer: string;
+  product: string;
+  colorFinish: string;
+  supplier: string;
+  allowance: number;
+  /** §9.3 — NEVER serialized into a client response. */
+  actualCost: number;
+  upgradeAmount: number;
+  creditAmount: number;
+  leadTime: string;
+  approvalDeadline: string;
+  status: 'Pending' | 'Awaiting Client' | 'Approved' | 'Rejected' | 'Ordered' | 'Installed';
+  clientDecision: string;
+  clientComments: string;
+  approvedDate: string;
+  clientVisible: boolean;
+}
+
+/** §6.6 `Change Order`. */
+export interface ChangeOrder {
+  id: string;
+  projectId: string;
+  changeOrderNumber: string;
+  title: string;
+  description: string;
+  reason: string;
+  requestedBy: string;
+  createdDate: string;
+  addedCost: number;
+  creditAmount: number;
+  tax: number;
+  scheduleImpactDays: number;
+  revisedCompletionDate: string;
+  approvalDeadline: string;
+  paymentRequirement: string;
+  status: 'Draft' | 'Awaiting Client' | 'Approved' | 'Rejected';
+  clientComments: string;
+  approvedBy: string;
+  approvalDate: string;
+  invoiceStatus: string;
+  paymentStatus: string;
+  clientVisible: boolean;
+}
+
+/**
+ * A line on the client-facing budget.
+ *
+ * Only the §9.3 allow-list appears here: there is no cost, markup or margin
+ * field on this type at all. That is the point — a value the type cannot hold
+ * cannot be leaked by a screen that forgets to filter.
+ */
+export interface BudgetLine {
+  id: string;
+  projectId: string;
+  category: string;
+  /** Contract amount for this category. */
+  contracted: number;
+  /** Approved change orders attributed to it. */
+  changeOrders: number;
+  invoiced: number;
+  paid: number;
+}
+
+/**
  * What to show where a stage would go.
  *
  * A BuildSuite project has no §7 stage, so this falls back to the status

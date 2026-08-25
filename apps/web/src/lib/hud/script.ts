@@ -332,7 +332,7 @@ export const STEPS: Step[] = [
     primary:
       'Thirteen screens — this is the client portal you asked to see last time.',
     hoodSimple:
-      'Every nav item is a real route; four of them are designed placeholders and I\'ll show you one.',
+      'Every nav item is a real route; two of them are designed placeholders and I\'ll show you one.',
     seconds: 100,
     screen: 'portal',
     hotspot: 'nav-completion-warranty',
@@ -436,7 +436,7 @@ export const STEPS: Step[] = [
     hotspot: 'title',
     star: true,
     hover: 'The "coming shortly" panel. Do not click away quickly.',
-    say: 'Straight with you on this one. Designs, budget, change orders and payments are designed and not built. They are in the navigation because your client should see what is coming rather than hit a dead end. Roughly two weeks.',
+    say: 'Straight with you on this one. Payments and the completion and warranty screen are designed and not built — they are in the navigation because your client should see what is coming rather than hit a dead end. Everything else in this list is real.',
     watch:
       'Do not skip this and do not rush it. You lost trust by them finding a gap themselves; you get it back by showing them one first. Only give the two-week estimate if you can stand behind it.',
     then: 'Switch back to your account. Narrow the window, then go to the field view.',
@@ -615,17 +615,17 @@ export const STEPS: Step[] = [
     primary:
       'The known gaps, said the same way whether they ask or not.',
     hoodSimple:
-      'Four portal screens, the field and client logins, our tables, and multi-company sign-in before the second client.',
+      'Two portal screens, the field and client logins, our tables, and multi-company sign-in before the second client.',
     seconds: 100,
     screen: 'stack',
     section: 'annex',
     hover: 'Nothing. Eye contact.',
-    say: 'Four portal screens designed and not built: designs, budget, change orders, payments. Field and client logins designed and not built. Our tables need creating in your database. Multi-tenant sign-in needs a GoHighLevel Marketplace app before the second client, not after. Two more things we are waiting on from the BuildSuite side. Everything else is real.',
+    say: 'Two portal screens designed and not built: payments, and completion and warranty. Field and client logins designed and not built. Our tables need creating in your database. Multi-tenant sign-in needs a GoHighLevel Marketplace app before the second client, not after. Two more things we are waiting on from the BuildSuite side. Everything else is real.',
     watch:
       'Say this list the same way whether asked or not. Do not name individuals to the client — "the BuildSuite side" is enough.',
     then: 'Go to the two dependencies.',
     backend:
-      'The four screens are placeholders with designs behind them, not missing routes, so the nav is honest about what is coming. Multi-tenant is the real dependency: the token we authenticate with is scoped to one sub-account, so a second client needs the Marketplace app.',
+      'The two remaining screens are placeholders with designs behind them, not missing routes, so the nav is honest about what is coming. Multi-tenant is the real dependency: the token we authenticate with is scoped to one sub-account, so a second client needs the Marketplace app.',
   },
 
   {
