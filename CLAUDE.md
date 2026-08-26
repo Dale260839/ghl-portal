@@ -15,6 +15,26 @@ suggestions. They apply to every session.
 3. **Never invent a fallback that writes.** If a read fails, report it. Do not
    "repair" live data to make a task complete.
 
+## Source of truth (updated 2026-08-22)
+
+Four documents are canonical, reconciled in `docs/SOURCE-OF-TRUTH.md`:
+D1 Portal build and validation strategy · D2 Three-Experience Architecture ·
+D3 Sing's technical review (2026-07-17) · D4 Project Hub build context (2026-08-21).
+
+**D4 is the newest and wins where it disagrees with `docs/ARCHITECTURE.md`** — it is the only
+one written after the client meeting and after the code existed. Six conflicts are logged in
+`SOURCE-OF-TRUTH.md`; four need Chris and are marked. Do not resolve them by choosing.
+
+### Five rules from D4 — violating one is a defect
+
+1. **Stage completion is never set from the Hub.** GHL owns stage movement; the Hub reflects it.
+2. **The field crew never touches GoHighLevel.** They only ever see the Hub.
+3. **Never key a cross-system link off a job title or name.** Dedicated ID field only — a rename
+   breaks the link silently and shows the wrong data on a job site.
+4. **The Hub owns exactly one write: the PM's publish decision.** Everything else it reflects.
+5. **Operational records belong to GHL after handoff** — milestones, tasks, updates, selections,
+   change orders, invoices. The Hub does not keep a second copy.
+
 ## The rule that overrides everything else
 
 **`docs/ARCHITECTURE.md` v1.0 is canonical.** When code, a prompt, another doc,
