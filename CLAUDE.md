@@ -37,8 +37,13 @@ one written after the client meeting and after the code existed. Six conflicts a
 
 ## The rule that overrides everything else
 
-**`docs/ARCHITECTURE.md` v1.0 is canonical.** When code, a prompt, another doc,
-or your own reasoning disagrees with it, the architecture wins (§0).
+**The four source documents above are canonical, D4 first.** Below them,
+**`docs/ARCHITECTURE.md` v1.0 still governs everything they do not cover** — it is
+the detailed transcription of §1–§16, and when code, a prompt, or your own
+reasoning disagrees with it, the architecture wins (§0).
+
+Order of precedence: **D4 → D1/D2/D3 → ARCHITECTURE.md → KICKOFF.md → code.**
+ARCHITECTURE predates the client meeting; where D4 speaks, D4 is newer.
 
 Field names, object names, stage names, and the shared-ID format are **verbatim
 contracts** — match casing and spelling exactly. `Approved & Published` is not
