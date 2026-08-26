@@ -1,6 +1,9 @@
 # Refreshed phasing, and the one-week sprint
 
-**Date:** 2026-08-22 · **Sprint:** Mon 25 Aug → Fri 29 Aug
+**Written:** 2026-08-25 · **Sprint:** Wed 26 Aug → Tue 1 Sep (five working days)
+
+> Days below are **sprint days**, not weekdays — day 1 ran Wed 26 Aug.
+
 **Source of truth:** the four documents reconciled in [`SOURCE-OF-TRUTH.md`](SOURCE-OF-TRUTH.md)
 
 ---
@@ -48,13 +51,13 @@ So the phases are re-cut around what is actually left.
 
 ---
 
-## 3. The sprint — Mon 25 → Fri 29 Aug
+## 3. The sprint — Wed 26 Aug → Tue 1 Sep
 
 Five days, ~40 hours. **Every item is unblocked**, deliberately: four decisions are outstanding
 and none of this waits on them. Where a decision would change the work, I build the half that is
 true either way and stop at the seam.
 
-### Monday · Correct the foundation (8h)
+### Day 1 · Wed 26 Aug — correct the foundation (8h) ✅ **done**
 
 | | h |
 |---|---|
@@ -68,7 +71,7 @@ from it. The migration is unrun, so this correction is free today and expensive 
 
 ---
 
-### Tuesday · The third wire (8h)
+### Day 2 · Thu 27 Aug — the third wire (8h)
 
 | | h |
 |---|---|
@@ -84,7 +87,7 @@ Verifying that GHL is really the one calling us is the part that needs building.
 
 ---
 
-### Wednesday · Field interface to spec (8h)
+### Day 3 · Fri 28 Aug — field interface to spec (8h)
 
 D4 §5 asks for four things ours lacks. Nothing here is blocked.
 
@@ -99,7 +102,7 @@ D4 §5 asks for four things ours lacks. Nothing here is blocked.
 
 ---
 
-### Thursday · Client login mechanics (8h)
+### Day 4 · Mon 31 Aug — client login mechanics (8h)
 
 C-2 is undecided, so I build **the half that is true under either answer**: the token.
 
@@ -118,7 +121,7 @@ rather ask than assume where it lives.
 
 ---
 
-### Friday · Completion & Warranty, then close (8h)
+### Day 5 · Tue 1 Sep — Completion & Warranty, then close (8h)
 
 | | h |
 |---|---|
@@ -147,14 +150,14 @@ deliberately so.
 
 ## 5. What I need, and by when
 
-**From Chris — Monday, so the week is not spent hedging:**
+**From Chris — as early as possible, so the week is not spent hedging:**
 
 1. Verification link is the credential (C-2) → unblocks Thursday shipping live rather than staged
 2. Shared key: BuildSuite ID or GHL opportunity id (C-3) → unblocks Sing
 3. Payments rail: GHL native or Stripe (C-4) → unblocks the last screen
 4. Media: contractor's GHL storage or Supabase → unblocks uploads
 
-**From Chris + Pat — this week, ideally Monday:**
+**From Chris + Pat — this week:**
 
 5. **Does the Alliance sub-account tier support Custom Objects?** The gate. Ten minutes to check
    and it decides whether the operational model in every one of these four documents is
