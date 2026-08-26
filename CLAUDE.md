@@ -32,8 +32,14 @@ one written after the client meeting and after the code existed. Six conflicts a
 3. **Never key a cross-system link off a job title or name.** Dedicated ID field only — a rename
    breaks the link silently and shows the wrong data on a job site.
 4. **The Hub owns exactly one write: the PM's publish decision.** Everything else it reflects.
-5. **Operational records belong to GHL after handoff** — milestones, tasks, updates, selections,
-   change orders, invoices. The Hub does not keep a second copy.
+5. **GoHighLevel is the operational system of record after handoff.** The Hub reads that state;
+   it does not originate it. This is a boundary rule, **not a schema rule** — where the Hub
+   stores what it reads is an engineering decision and stays ours.
+
+**Read all four documents as requirements, not as technical specification.** They define what
+each role sees, the privacy rule, the approval flow and the system boundary. When one appears to
+dictate an implementation detail, that is a reading error — this exact mistake was made on
+2026-08-26 and reverted.
 
 ## The rule that overrides everything else
 

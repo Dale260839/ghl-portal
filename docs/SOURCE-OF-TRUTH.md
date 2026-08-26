@@ -37,35 +37,33 @@ are that rule taken further. That part needs no change.
 
 ## 1. Conflicts that change what we build
 
-### C-1 · Operational records: GHL owns them, but we wrote tables for them 🔴
+### C-1 · Operational records: GHL owns them — but that is not a schema instruction ⚪ **resolved**
 
-**The conflict.** D1 p2, D2 §Step 5 and D3 §3 all say the same thing: after handoff, **GHL**
-owns milestones, tasks, daily updates, selections, change orders, documents and invoices. D4 §2
-says GHL "owns operational *state*" and gives Supabase only **media storage and tagging**.
+**What I got wrong.** D1 p2, D2 §5, D3 §3 and D4 §2 all say GoHighLevel owns milestones, tasks,
+daily updates, selections, change orders and invoices after handoff. I read that as an
+instruction about *our database* and cut `0001_hub_tables.sql` from eleven tables to three.
 
-Our unrun migration `0001_hub_tables.sql` creates `hub_milestones`, `hub_schedule_items`,
-`hub_daily_updates`, `hub_messages`, `hub_documents`, `hub_photos`, plus selections, change
-orders, issues and punch list.
+**These documents are requirements, not technical specification.** They define what each role
+sees, the privacy rule, the approval flow and the system boundary. Where the Hub stores what it
+reads is an engineering decision, and it stays ours.
 
-**That is a second home for records the source of truth gives to GHL.** Two systems owning the
-same operational record is how a project ends up in two states with no way to say which is
-right — the same reason D1 makes the handoff one-directional.
+**The engineering answer is the original one.** GHL custom objects are not reachable: no object
+key, and the sub-account tier is unconfirmed. Blocking every client-facing screen on an
+unanswered tier question is the wrong trade. So GHL is the system of record; these tables are
+the working store until it is reachable, and the migration source when it is. That was D-014 and
+it was right.
 
-**Resolution (mine, needs no decision):** shrink the migration to what the Hub legitimately
-owns and GHL does not model:
+**Reverted.** The tables are back. Two things from that pass were kept because they were real:
 
-| Keep | Why |
-|---|---|
-| `hub_publication_decisions` | The PM's approve/edit/publish choice. D4 §5: *"the PM decision buttons live in the Hub only — nothing in GHL."* This is the one thing the Hub owns. |
-| `hub_visibility_settings` | The per-project client-visibility switches, if GHL's custom object cannot hold them |
-| `hub_media` | Photos and documents tagged per contractor — D4 §2 and §8 |
+- **`hub_visibility_settings`** — the §6.1 switches had no home at all. The app enforces them, so
+  the app should store them.
+- **A missing tenancy key.** `hub_update_acknowledgements` and `hub_update_comments` carried
+  `project_id` but not `auth_profile_id`, so their tenant was only reachable by joining
+  `hub_daily_updates` — while the migration's own rule 4 says every table carries both. Caught by
+  a guardrail test, not by anyone reading it.
 
-Drop the rest. They become reads against GHL custom objects.
-
-**Cost of getting this wrong:** the migration is **not yet run**, so fixing it now costs
-nothing. Running it as written would put us in the position the architecture exists to prevent.
-
----
+**Standing correction:** treat the four documents as requirements. When one appears to dictate
+an implementation, that is a reading error.
 
 ### C-2 · Client login: D4's model is the one the other three prohibit 🔴
 

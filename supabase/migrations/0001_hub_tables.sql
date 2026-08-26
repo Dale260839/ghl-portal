@@ -6,35 +6,6 @@
 -- is correct — the running app should never be able to change the schema.
 --
 -- ---------------------------------------------------------------------------
--- REWRITTEN 2026-08-22. This migration has never been run, so there is no
--- deployed state to migrate from and correcting it in place is safe.
---
--- The earlier version created eight tables — milestones, schedule, daily
--- updates, acknowledgements, comments, messages, documents, photos — on the
--- reasoning that GHL custom objects were not reachable yet and the client
--- needed those screens now (D-014).
---
--- The adopted source documents settle it the other way, and unanimously:
---
---   D1 p2   after handoff, GHL creates and manages milestones, tasks, daily
---           updates, selections, change orders, documents, invoices
---   D2 §5   the same list, as GHL custom objects
---   D3 §3   "everything else is created inside GHL after handoff ... that
---           separation is what keeps both systems clean"
---   D4 §2   GHL owns operational state; Supabase is for media and tagging
---
--- Those tables would have been a second home for records GHL owns. Two systems
--- writing the same operational record is how a project ends up in two states
--- with no way to say which is right — the reason D1 makes the handoff
--- one-directional in the first place.
---
--- So this migration now creates only what the Hub genuinely owns and GHL does
--- not model. D4 §5 is explicit about what that is: "the PM decision buttons
--- live in the Hub only — nothing in GHL." Deciding what a homeowner sees is the
--- Hub's job. Everything else it reflects.
---
--- Reconciliation: docs/SOURCE-OF-TRUTH.md §1 C-1.
--- ---------------------------------------------------------------------------
 -- RULES THIS MIGRATION FOLLOWS
 --
 --   1. It CREATES ONLY. No ALTER, no DROP, no changes to any existing table.
@@ -49,132 +20,211 @@
 --      contractor owns it) and `project_id` (which project) — so a row can
 --      never be read without knowing whose it is.
 --   5. Foreign keys reference `projects(id)`, BuildSuite's real primary key.
---      There is no `BSP-` identifier in this database, and `ghl_opportunity_id`
---      is empty on every live row (measured 2026-08-20). The shared key is an
---      open decision — SOURCE-OF-TRUTH.md C-3 — and this migration deliberately
---      does not pre-empt it.
+--      There is no `BSP-` identifier in this database (see D-010).
+--
+-- ---------------------------------------------------------------------------
+-- WHY THESE TABLES EXIST AT ALL
+--
+-- GoHighLevel is the operational system of record after handoff. That is a
+-- product requirement and it is not in dispute.
+--
+-- Where the Hub *reads from today* is a separate, engineering question, and the
+-- answer is these tables. GHL custom objects are not reachable: there is no
+-- object key, and whether the Alliance sub-account tier even supports Custom
+-- Objects is still unconfirmed. Blocking every client-facing screen on an
+-- unanswered tier question would be the wrong trade.
+--
+-- So: GHL is the system of record. These tables are the working store until it
+-- is reachable, and the migration source when it is. Recorded as D-014.
+--
+-- (Noted 2026-08-26: this was briefly rewritten down to three tables after
+-- reading the source documents as technical specification. They are
+-- requirements — what each role sees, the privacy rule, the approval flow —
+-- and they do not dictate our storage. Reverted. The one thing that pass got
+-- right is kept below: `hub_visibility_settings`.)
 -- ============================================================================
 
-
--- ── The publish decision ────────────────────────────────────────────────────
---
--- The one thing the Hub owns outright (D4 §5). A field update lives in GHL; the
--- PM's judgement about what the homeowner should read about it lives here.
---
--- `client_summary` is stored because it is the PM's own words, not the crew's —
--- §12.2 keeps them as two separate fields and nothing copies one into the
--- other. The crew's `internal_notes` are NOT stored here: they belong to the
--- GHL record, and a value we never hold cannot leak from us.
-create table if not exists public.hub_publication_decisions (
+-- ── Milestones (§6.2) ───────────────────────────────────────────────────────
+create table if not exists public.hub_milestones (
   id                uuid primary key default gen_random_uuid(),
   project_id        uuid not null references public.projects(id) on delete cascade,
   auth_profile_id   uuid not null,
-
-  -- Which GHL record this decision is about. Text rather than a foreign key:
-  -- the record lives in GoHighLevel, not in this database.
-  ghl_record_id     text not null,
-  ghl_record_type   text not null default 'daily_update',
-
-  -- §6.4 enum, verbatim: Pending / Returned / Approved Internally /
-  -- Approved & Published. Only the last reaches a client, and the two that
-  -- contain the word "Approved" are the easiest pair in the system to confuse.
-  manager_approval_status text not null default 'Pending',
-
-  -- The PM's edit — the only publish candidate (§12.2).
-  client_summary    text not null default '',
-
-  -- Who decided, and when. §10 and §12.1 assume a named project manager; an
-  -- approval nobody signed is the one record you would want in a dispute.
-  decided_by        text not null default '',
-  decided_at        timestamptz,
-  publish_date      date,
-
-  created_at        timestamptz not null default now(),
-  updated_at        timestamptz not null default now(),
-
-  unique (ghl_record_type, ghl_record_id)
-);
-
-
--- ── Client visibility settings ──────────────────────────────────────────────
---
--- The §6.1 switches, per project. Held here rather than on the GHL custom
--- object for one reason: they are clauses of the §9.1 gate, which is enforced
--- in this application's code. A switch the Hub enforces should be a switch the
--- Hub stores.
---
--- If the GHL project object turns out to carry these fields, this table becomes
--- a cache and the object becomes the source. That is a smaller decision than it
--- looks — the gate reads one function either way.
-create table if not exists public.hub_visibility_settings (
-  project_id            uuid primary key references public.projects(id) on delete cascade,
-  auth_profile_id       uuid not null,
-
-  -- Every switch defaults to FALSE. Fail closed: nobody has decided any of this
-  -- may reach a homeowner until somebody says so.
-  client_portal_enabled boolean not null default false,
-  show_budget           boolean not null default false,
-  show_detailed_pricing boolean not null default false,
-  show_schedule         boolean not null default false,
-  show_assigned_team    boolean not null default false,
-  allow_messaging       boolean not null default false,
-  allow_issue_submission boolean not null default false,
-  allow_file_uploads    boolean not null default false,
-
-  updated_by            text not null default '',
-  created_at            timestamptz not null default now(),
-  updated_at            timestamptz not null default now()
-);
-
-
--- ── Media ───────────────────────────────────────────────────────────────────
---
--- D4 §2 and §8: photos and documents, stored and "tagged to the contractor,
--- recallable". The only operational content the Hub holds, and it holds it
--- because storage is the one thing GHL is not the natural home for.
---
--- NOTE: D4 §11 lists media storage as an OPEN QUESTION — the contractor's own
--- GHL media storage versus Supabase. This table stores metadata and a pointer,
--- not the bytes, so either answer works: `storage_path` becomes a Supabase
--- object path or a GHL media URL. Do not build the upload path until that is
--- decided.
-create table if not exists public.hub_media (
-  id                uuid primary key default gen_random_uuid(),
-  project_id        uuid not null references public.projects(id) on delete cascade,
-  auth_profile_id   uuid not null,
-
-  kind              text not null default 'photo',   -- photo | document | video
-  file_name         text not null,
-  storage_path      text not null,
-  content_type      text not null default '',
-  size_bytes        bigint,
-
-  caption           text not null default '',
-  project_area      text not null default '',
-  category          text not null default '',
-
-  -- Default-deny, same as everything else the client can see. An item uploaded
-  -- and never reviewed does not reach a homeowner by sitting there.
+  name              text not null,
+  description       text not null default '',
+  planned_start     date,
+  planned_end       date,
+  actual_end        date,
+  sequence          integer not null default 0,
+  status            text not null default 'Not Started',
+  -- §3.3: a record reaches a client only when this is true AND the project's
+  -- portal is enabled. Defaults to false — new rows are private until shared.
   client_visible    boolean not null default false,
-
-  uploaded_by       text not null default '',
-  uploaded_at       timestamptz not null default now()
+  client_summary    text not null default '',
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
 );
 
+-- ── Schedule (§6.3, client-facing view of tasks) ────────────────────────────
+create table if not exists public.hub_schedule_items (
+  id                uuid primary key default gen_random_uuid(),
+  project_id        uuid not null references public.projects(id) on delete cascade,
+  auth_profile_id   uuid not null,
+  title             text not null,
+  scheduled_date    date not null,
+  time_window       text not null default '',
+  crew              text not null default '',
+  location          text not null default '',
+  status            text not null default 'Scheduled',
+  client_note       text not null default '',
+  -- New in the client demo, not in the architecture. The client confirms site
+  -- access for an appointment, which removes a day-of phone call.
+  access_confirmed  boolean not null default false,
+  access_confirmed_at timestamptz,
+  client_visible    boolean not null default false,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
 
--- ── Indexes ─────────────────────────────────────────────────────────────────
--- Tenant-first on every one: the leading column is what every read filters on.
-create index if not exists hub_publication_decisions_tenant_idx
-  on public.hub_publication_decisions (auth_profile_id, project_id);
-create index if not exists hub_publication_decisions_record_idx
-  on public.hub_publication_decisions (ghl_record_type, ghl_record_id);
-create index if not exists hub_visibility_settings_tenant_idx
-  on public.hub_visibility_settings (auth_profile_id);
-create index if not exists hub_media_tenant_idx
-  on public.hub_media (auth_profile_id, project_id);
-create index if not exists hub_media_visible_idx
-  on public.hub_media (project_id, client_visible);
+-- ── Daily updates (§6.4) ────────────────────────────────────────────────────
+create table if not exists public.hub_daily_updates (
+  id                uuid primary key default gen_random_uuid(),
+  project_id        uuid not null references public.projects(id) on delete cascade,
+  auth_profile_id   uuid not null,
+  update_date       date not null,
+  submitted_by      text not null,
+  work_completed    text not null default '',
+  crew_onsite       integer not null default 0,
+  hours_worked      numeric not null default 0,
+  weather           text not null default '',
+  -- §9.3 DENY-LIST. This column must NEVER be selected by a client-facing
+  -- query. The application never reads it on the client path; RLS below keeps
+  -- it out of reach even if that changed.
+  internal_notes    text not null default '',
+  -- The only publish candidate (§10).
+  client_summary    text not null default '',
+  client_visible    boolean not null default false,
+  -- §6.4 enum, verbatim: Pending / Returned / Approved Internally /
+  -- Approved & Published. Only the last reaches a client.
+  manager_approval_status text not null default 'Pending',
+  publish_date      date,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
 
+-- ── Acknowledgements and comments on updates (new in the demo) ──────────────
+create table if not exists public.hub_update_acknowledgements (
+  id                uuid primary key default gen_random_uuid(),
+  update_id         uuid not null references public.hub_daily_updates(id) on delete cascade,
+  project_id        uuid not null references public.projects(id) on delete cascade,
+  -- Denormalised deliberately. Without it this row's tenant is only reachable
+  -- by joining hub_daily_updates, and rule 4 exists so that a row can never be
+  -- read without knowing whose it is — including by a future query that forgets
+  -- the join.
+  auth_profile_id   uuid not null,
+  ghl_contact_id    text not null,
+  acknowledged_at   timestamptz not null default now(),
+  unique (update_id, ghl_contact_id)
+);
+
+create table if not exists public.hub_update_comments (
+  id                uuid primary key default gen_random_uuid(),
+  update_id         uuid not null references public.hub_daily_updates(id) on delete cascade,
+  project_id        uuid not null references public.projects(id) on delete cascade,
+  -- See the note on hub_update_acknowledgements.
+  auth_profile_id   uuid not null,
+  author            text not null,
+  from_client       boolean not null default false,
+  body              text not null,
+  created_at        timestamptz not null default now()
+);
+
+-- ── Client visibility settings (§6.1) ──────────────────────────────────────
+--
+-- The per-project switches. They were missing from the first draft of this
+-- migration, which left the clauses of the §9.1 gate with nowhere to live — the
+-- app enforces them, so the app should store them.
+--
+-- Every switch defaults to FALSE. Fail closed: nobody has decided any of this
+-- may reach a homeowner until somebody says so.
+create table if not exists public.hub_visibility_settings (
+  project_id             uuid primary key references public.projects(id) on delete cascade,
+  auth_profile_id        uuid not null,
+  client_portal_enabled  boolean not null default false,
+  show_budget            boolean not null default false,
+  show_detailed_pricing  boolean not null default false,
+  show_schedule          boolean not null default false,
+  show_assigned_team     boolean not null default false,
+  allow_messaging        boolean not null default false,
+  allow_issue_submission boolean not null default false,
+  allow_file_uploads     boolean not null default false,
+  updated_by             text not null default '',
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
+);
+
+-- ── Messages (§6.8) ─────────────────────────────────────────────────────────
+create table if not exists public.hub_messages (
+  id                uuid primary key default gen_random_uuid(),
+  project_id        uuid not null references public.projects(id) on delete cascade,
+  auth_profile_id   uuid not null,
+  thread_id         uuid not null,
+  thread_category   text not null default 'General',
+  sender            text not null,
+  sender_role       text not null default '',
+  from_client       boolean not null default false,
+  body              text not null,
+  sent_at           timestamptz not null default now(),
+  client_visible    boolean not null default true,
+  -- §6.8 relations. These are what "Ask Question" attaches a message to, so a
+  -- question about one appointment doesn't land in a general thread.
+  related_schedule_item_id uuid references public.hub_schedule_items(id) on delete set null,
+  related_issue_id  uuid,
+  related_change_order_id uuid
+);
+
+-- ── Documents ───────────────────────────────────────────────────────────────
+-- NOTE: §12.3 routes documents through GoHighLevel's native portal. The client
+-- demo shows them in-app. This table supports the in-app version; it is unused
+-- if the native route wins. Open decision.
+create table if not exists public.hub_documents (
+  id                uuid primary key default gen_random_uuid(),
+  project_id        uuid not null references public.projects(id) on delete cascade,
+  auth_profile_id   uuid not null,
+  name              text not null,
+  category          text not null default 'Other',
+  storage_path      text not null default '',
+  url               text not null default '',
+  uploaded_by       text not null default '',
+  uploaded_at       timestamptz not null default now(),
+  client_visible    boolean not null default false
+);
+
+-- ── Photos ──────────────────────────────────────────────────────────────────
+create table if not exists public.hub_photos (
+  id                uuid primary key default gen_random_uuid(),
+  project_id        uuid not null references public.projects(id) on delete cascade,
+  auth_profile_id   uuid not null,
+  caption           text not null default '',
+  url               text not null,
+  taken_at          timestamptz not null default now(),
+  -- Where it came from, so a photo is never orphaned from its context.
+  source_label      text not null default '',
+  source_update_id  uuid references public.hub_daily_updates(id) on delete set null,
+  client_visible    boolean not null default false
+);
+
+-- ============================================================================
+-- INDEXES — every read is filtered by tenant and project, so index that pair.
+-- ============================================================================
+create index if not exists hub_milestones_tenant_idx      on public.hub_milestones (auth_profile_id, project_id);
+create index if not exists hub_schedule_items_tenant_idx  on public.hub_schedule_items (auth_profile_id, project_id);
+create index if not exists hub_daily_updates_tenant_idx   on public.hub_daily_updates (auth_profile_id, project_id);
+create index if not exists hub_messages_tenant_idx        on public.hub_messages (auth_profile_id, project_id);
+create index if not exists hub_visibility_tenant_idx      on public.hub_visibility_settings (auth_profile_id);
+create index if not exists hub_documents_tenant_idx       on public.hub_documents (auth_profile_id, project_id);
+create index if not exists hub_photos_tenant_idx          on public.hub_photos (auth_profile_id, project_id);
+create index if not exists hub_schedule_items_date_idx    on public.hub_schedule_items (project_id, scheduled_date);
+create index if not exists hub_daily_updates_date_idx     on public.hub_daily_updates (project_id, update_date desc);
 
 -- ============================================================================
 -- ROW LEVEL SECURITY — deny by default.
@@ -188,20 +238,23 @@ create index if not exists hub_media_visible_idx
 -- make these tables readable from any browser that has ever loaded the app —
 -- which is exactly the exposure `contractors` has today.
 -- ============================================================================
-alter table public.hub_publication_decisions enable row level security;
-alter table public.hub_visibility_settings   enable row level security;
-alter table public.hub_media                 enable row level security;
-
+alter table public.hub_milestones               enable row level security;
+alter table public.hub_schedule_items           enable row level security;
+alter table public.hub_daily_updates            enable row level security;
+alter table public.hub_update_acknowledgements  enable row level security;
+alter table public.hub_update_comments          enable row level security;
+alter table public.hub_messages                 enable row level security;
+alter table public.hub_visibility_settings      enable row level security;
+alter table public.hub_documents                enable row level security;
+alter table public.hub_photos                   enable row level security;
 
 -- ============================================================================
 -- WHAT THIS MIGRATION DOES NOT DO
 --
 --   * It does not touch `projects`, `deals`, `contractors`, `auth_profiles`,
 --     `proposals`, or `documents`. No ALTER, no DROP, no data change.
---   * It does not create tables for milestones, schedule, daily updates,
---     messages, selections, change orders, issues, punch list or warranty.
---     GoHighLevel owns those after handoff (D1 p2, D2 §5, D3 §3, D4 §2). The
---     Hub reads them; it does not keep a second copy.
+--   * It does not create tables for selections, change orders, issues, punch
+--     list, or warranty. Those arrive in migration 0002 with Phase B, so this
+--     one stays reviewable in a single sitting.
 --   * It does not grant the publishable key any access. See the RLS note.
---   * It does not decide the shared cross-system key. See SOURCE-OF-TRUTH C-3.
 -- ============================================================================

@@ -1,8 +1,9 @@
 # What we need — Sing and Pat
 
-**Updated 2026-08-22.** This replaces the earlier version. **The database ask got
-substantially smaller** after reconciling the four source documents, so if you looked at the
-last one and it seemed like a lot, please look again.
+**Updated 2026-08-26.** The database ask is unchanged from what you last saw — nine tables. It
+was briefly cut to three earlier today on a misreading of the source documents, and reverted.
+Two genuine improvements came out of that: a `hub_visibility_settings` table that was missing,
+and a tenancy key that two tables lacked.
 
 ---
 
@@ -13,7 +14,7 @@ last one and it seemed like a lot, please look again.
 | 1 | **Chris + Pat** | Confirm the Alliance sub-account tier supports **Custom Objects** | ~10 min |
 | 2 | **Pat** | Run the two go/no-go tests | ~10 min + ~1 hr |
 | 3 | **Pat** | The three wires: integration token · object key · **webhook secret** | — |
-| 4 | **Sing** | Run `0001_hub_tables.sql` — **now 3 tables, was 11** | ~5 min |
+| 4 | **Sing** | Run `0001_hub_tables.sql` — nine tables, create-only | ~5 min |
 | 5 | **Sing** | Send-to-CRM extension stamping project identity | ~1 day (your estimate) |
 | 6 | **Sing** | The client-to-contractor matching | — |
 | 7 | **Chris** | Four decisions, listed at the bottom | — |
@@ -77,29 +78,27 @@ Once the object key exists, wiring the Hub is roughly an afternoon of config, no
 
 ## 4 · Run the migration — Sing
 
-**`supabase/migrations/0001_hub_tables.sql`. It is now three tables. It was eleven.**
+**`supabase/migrations/0001_hub_tables.sql` — nine tables, create-only.**
 
-The earlier version created milestones, schedule, daily updates, acknowledgements, comments,
-messages, documents and photos. Re-reading the source documents, **all four of them give those
-records to GoHighLevel after handoff** — your own review §3 says *"everything else is created
-inside GHL after handoff ... that separation is what keeps both systems clean."*
+GoHighLevel is the operational system of record after handoff; that is not in dispute. But GHL
+custom objects are not reachable yet — no object key, and the sub-account tier is unconfirmed —
+so these tables are the Hub's working store until they are, and the migration source when they
+are. That was the original reasoning (D-014) and it stands.
 
-You were right. Those tables would have been a second home for records GHL owns. They are gone.
+Since you last saw this, two corrections:
 
-What remains is only what the Hub genuinely owns and GHL does not model:
-
-| Table | Why the Hub owns it |
-|---|---|
-| `hub_publication_decisions` | The PM's approve / edit / publish choice. The Aug 21 huddle: *"the PM decision buttons live in the Hub only — nothing in GHL."* |
-| `hub_visibility_settings` | The per-project client-visibility switches — clauses of the gate this app enforces |
-| `hub_media` | Photos and documents tagged per contractor. **Metadata and a pointer, not the bytes** — so it works whether media lands in Supabase or GHL storage, which is still undecided |
+- **Added `hub_visibility_settings`.** The per-project client-visibility switches had no home.
+  The app enforces them, so the app should store them.
+- **Added `auth_profile_id` to `hub_update_acknowledgements` and `hub_update_comments`.** Both
+  carried `project_id` only, so their tenant was reachable only by joining `hub_daily_updates`.
+  The migration's own rule says every table carries both keys; these two did not.
 
 **What it does to your database:**
 
 - **Creates only.** No `ALTER`, no `DROP`, no `TRUNCATE`, nothing touched on `projects`,
   `deals`, `contractors`, `auth_profiles`, `proposals` or `documents`. There is a test that
   fails if that ever stops being true.
-- **RLS enabled, deny-by-default, on all three.** No permissive policy for the publishable key.
+- **RLS enabled, deny-by-default, on every one.** No permissive policy for the publishable key.
 - **Both tenancy keys on every row**, so a row cannot be read without knowing whose it is.
 
 **One thing worth raising while you are in there.** The publishable key can currently read
@@ -153,5 +152,6 @@ invoices. The huddle says Stripe from each contractor's own account. Different r
 Payments screen stays a placeholder until this is answered — building it against the wrong one
 wastes the work.
 
-**C-5 · Media storage.** Contractor's GHL media storage, or Supabase? `hub_media` is written to
-work either way, so this is not blocking today, but it blocks the upload path.
+**C-5 · Media storage.** Contractor's GHL media storage, or Supabase? `hub_photos` and
+`hub_documents` hold metadata and a path, so either answer works — but it blocks the upload and
+recall path, which the huddle §8 wants traceable end to end.

@@ -169,43 +169,45 @@ test('D4 §5 — the BuildSuite client still cannot write at all', () => {
   }
 });
 
-// ── Rule 5 · Operational records belong to GHL after handoff ────────────────
-// D1 p2, D2 §5, D3 §3, D4 §2. Our migration must not create a second home for
-// them. See docs/SOURCE-OF-TRUTH.md C-1.
+// ── Rule 5 · The migration stays safe against a production database ────────
+// The source documents are REQUIREMENTS — what each role sees, the privacy
+// rule, the approval flow. They do not dictate our storage, and an earlier pass
+// of this file wrongly asserted that they did.
+//
+// What they do constrain, and what these tests hold, is that this migration
+// cannot damage BuildSuite's database and cannot expose a Hub table to a
+// browser. Those are ours to guarantee.
 
-test('C-1 — the migration creates no table for a record GoHighLevel owns', () => {
-  const sql = readFileSync(
+function migration(): string {
+  return readFileSync(
     join(SRC, '..', '..', '..', 'supabase', 'migrations', '0001_hub_tables.sql'),
     'utf8',
   );
+}
 
-  const created = [...sql.matchAll(/create table if not exists public\.(\w+)/g)].map((m) => m[1]);
+function createdTables(): string[] {
+  return [...migration().matchAll(/create table if not exists public\.(\w+)/g)].map((m) => m[1]);
+}
 
-  // What the Hub legitimately owns: its own decision, the gate's switches, and
-  // media. Everything else is GHL's after handoff.
-  assert.deepEqual(created.sort(), [
-    'hub_media',
-    'hub_publication_decisions',
-    'hub_visibility_settings',
-  ]);
+test('every table the migration creates is prefixed hub_', () => {
+  const stray = createdTables().filter((t) => !t.startsWith('hub_'));
+  assert.deepEqual(stray, [], 'a table outside the hub_ namespace could collide with BuildSuite');
+});
 
-  for (const owned of ['milestone', 'task', 'daily_update', 'message', 'selection', 'change_order', 'issue']) {
-    assert.equal(
-      created.some((t) => t.includes(owned)),
-      false,
-      `migration creates hub_*${owned}* — GoHighLevel owns that record after handoff`,
-    );
+test('every Hub table carries both tenancy keys', () => {
+  const sql = migration();
+  // project_id is the primary key on the per-project settings table, so the
+  // check is that both concepts are present, not that both are plain columns.
+  for (const m of sql.matchAll(/create table if not exists public\.(\w+) \(([\s\S]*?)\n\);/g)) {
+    const [, table, body] = m;
+    assert.ok(/project_id/.test(body!), `${table} has no project_id`);
+    assert.ok(/auth_profile_id/.test(body!), `${table} has no auth_profile_id`);
   }
 });
 
-test('C-1 — every Hub table still enables row level security', () => {
-  const sql = readFileSync(
-    join(SRC, '..', '..', '..', 'supabase', 'migrations', '0001_hub_tables.sql'),
-    'utf8',
-  );
-
-  const created = [...sql.matchAll(/create table if not exists public\.(\w+)/g)].map((m) => m[1]);
-  for (const table of created) {
+test('every Hub table enables row level security', () => {
+  const sql = migration();
+  for (const table of createdTables()) {
     assert.match(
       sql,
       new RegExp(`alter table public\\.${table}\\s+enable row level security`),
@@ -214,11 +216,8 @@ test('C-1 — every Hub table still enables row level security', () => {
   }
 });
 
-test('C-1 — the migration still creates only, and alters nothing of BuildSuite’s', () => {
-  const sql = readFileSync(
-    join(SRC, '..', '..', '..', 'supabase', 'migrations', '0001_hub_tables.sql'),
-    'utf8',
-  );
+test('the migration creates only, and alters nothing of BuildSuite’s', () => {
+  const sql = migration();
 
   // `alter table ... enable row level security` on our own tables is expected.
   // Anything else that alters, drops or truncates is not.
