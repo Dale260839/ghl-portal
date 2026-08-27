@@ -20,6 +20,8 @@ import { fixturePorts } from './workflows/fixture-ports';
 import { planFieldUpdateSubmitted } from './workflows/wf3-update-submitted';
 import { planFieldUpdateApproved } from './workflows/wf4-update-approved';
 import { currentDataSource } from './data/current-source.ts';
+import { TASKS } from './data/fixtures';
+import { MESSAGES } from './data/portal-fixtures';
 
 export async function signIn(_prev: { error?: string } | undefined, formData: FormData) {
   const email = String(formData.get('email') ?? '');
@@ -244,4 +246,67 @@ export async function toggleDemoData(formData: FormData) {
   // Every surface reads through the data source, so all of them change.
   revalidatePath('/', 'layout');
   redirect(String(formData.get('returnTo') ?? homeFor(session.role)));
+}
+
+/**
+ * Mark an assigned task as seen — this is what clears the "ding" (D4 §5).
+ *
+ * Field-or-contractor only, checked server-side. It writes nothing but a
+ * timestamp on a task the caller is already assigned to, so it does not widen
+ * what the Hub owns.
+ */
+export async function markTaskSeen(formData: FormData) {
+  const session = await getSession();
+  if (session?.role !== 'field' && session?.role !== 'contractor') {
+    throw new Error('§9.4: only an assigned field user may clear their own task');
+  }
+
+  const taskId = String(formData.get('taskId') ?? '');
+  const task = TASKS.find((t) => t.id === taskId);
+
+  // Only your own assignment. Without this check, a field user could clear
+  // somebody else's ding by posting their task id.
+  if (task !== undefined && task.assignedTo === session.name) {
+    task.seenAt = new Date().toISOString();
+  }
+
+  revalidatePath('/field');
+  revalidatePath('/field/tasks');
+}
+
+/**
+ * A message from the crew to their PM (D2 Step 3).
+ *
+ * Written `clientVisible: false` and `fromClient: false` — internal in both
+ * directions. Nothing a crew member types here can reach the homeowner, which
+ * is the whole reason the field interface has its own thread rather than
+ * sharing the client's.
+ */
+export async function sendFieldMessage(formData: FormData) {
+  const session = await getSession();
+  if (session?.role !== 'field' && session?.role !== 'contractor') {
+    throw new Error('§9.4: only a field user may post to the internal thread');
+  }
+
+  const projectId = String(formData.get('projectId') ?? '');
+  const body = String(formData.get('body') ?? '').trim();
+  if (projectId === '' || body === '') return;
+
+  MESSAGES.push({
+    id: `msg-field-${MESSAGES.length + 1}`,
+    projectId,
+    threadId: `field-${projectId}`,
+    threadCategory: 'Field',
+    sender: session.name,
+    senderRole: 'Field',
+    fromClient: false,
+    message: body,
+    sentDate: new Date().toISOString().slice(0, 10),
+    // Never client-visible. A crew note is not a client update; the only route
+    // to a homeowner is a PM publishing one.
+    clientVisible: false,
+  });
+
+  revalidatePath('/field/messages');
+  redirect('/field/messages?sent=1');
 }

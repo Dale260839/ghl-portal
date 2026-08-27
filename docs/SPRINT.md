@@ -87,7 +87,7 @@ Verifying that GHL is really the one calling us is the part that needs building.
 
 ---
 
-### Day 3 · Fri 28 Aug — field interface to spec (8h)
+### Day 3 · Fri 28 Aug — field interface to spec (8h) ✅ **done**
 
 D4 §5 asks for four things ours lacks. Nothing here is blocked.
 

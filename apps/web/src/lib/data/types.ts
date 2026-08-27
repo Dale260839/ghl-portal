@@ -113,6 +113,22 @@ export interface Task {
   scheduledDate: string;
   status: TaskStatus;
   clientVisible: boolean;
+
+  // ── Assignment (D4 §5) ────────────────────────────────────────────────────
+  // "Contractor can assign tasks in the notes; the field person gets a
+  // notification/ding." All three fields exist for that one sentence.
+
+  /** Who on the crew owns it. Null means unassigned — nobody's Today screen. */
+  assignedTo: string | null;
+  /** The contractor's instruction. This is the "in the notes" part. */
+  pmNote: string;
+  /** When it was assigned. Drives ordering, so the newest ding is at the top. */
+  assignedAt: string;
+  /**
+   * When the field user opened it. Null is the ding: unseen assignments are
+   * what the badge counts, and seeing one is what clears it.
+   */
+  seenAt: string | null;
 }
 
 export interface DailyUpdate {

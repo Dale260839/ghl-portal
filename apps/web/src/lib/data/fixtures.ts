@@ -319,13 +319,91 @@ export const MILESTONES: Milestone[] = [
 ];
 
 export const TASKS: Task[] = [
-  { id: 'task-1', projectId: 'BSP-2026-000184', taskName: 'Set upper cabinets — north wall', assignedTrade: 'Carpentry', scheduledDate: '2026-08-04', status: 'In Progress', clientVisible: true },
-  { id: 'task-2', projectId: 'BSP-2026-000184', taskName: 'Install cabinet hardware', assignedTrade: 'Carpentry', scheduledDate: '2026-08-04', status: 'Not Started', clientVisible: true },
-  { id: 'task-3', projectId: 'BSP-2026-000184', taskName: 'Countertop template measure', assignedTrade: 'Stone', scheduledDate: '2026-08-05', status: 'Scheduled', clientVisible: true },
-  { id: 'task-4', projectId: 'BSP-2026-000177', taskName: 'Framing inspection walkthrough', assignedTrade: 'General', scheduledDate: '2026-08-04', status: 'Waiting on Inspection', clientVisible: false },
-  { id: 'task-5', projectId: 'BSP-2026-000203', taskName: 'Confirm shingle color with client', assignedTrade: 'Roofing', scheduledDate: '2026-08-04', status: 'Waiting on Client', clientVisible: true },
-  { id: 'task-6', projectId: 'BSP-2026-000168', taskName: 'Punch list — stain touch-up', assignedTrade: 'Finish', scheduledDate: '2026-08-04', status: 'Ready for Review', clientVisible: true },
+  {
+    id: 'task-1',
+    projectId: 'BSP-2026-000184',
+    taskName: 'Set upper cabinets — north wall',
+    assignedTrade: 'Carpentry',
+    scheduledDate: '2026-08-04',
+    status: 'In Progress',
+    clientVisible: true,
+    assignedTo: 'Tony Alvarez',
+    pmNote:
+      'Uppers first, then the run by the window. Shim before you fasten — that wall is out about 6mm at the top.',
+    assignedAt: '2026-08-19T07:10:00Z',
+    seenAt: '2026-08-19T07:40:00Z',
+  },
+  {
+    id: 'task-2',
+    projectId: 'BSP-2026-000184',
+    taskName: 'Install cabinet hardware',
+    assignedTrade: 'Carpentry',
+    scheduledDate: '2026-08-04',
+    status: 'Not Started',
+    clientVisible: true,
+    assignedTo: 'Tony Alvarez',
+    pmNote: 'Hardware arrived Tuesday, it is in the garage. Jig is in the van.',
+    assignedAt: '2026-08-21T06:50:00Z',
+    // Unseen — this is one of the two the badge counts.
+    seenAt: null,
+  },
+  {
+    id: 'task-3',
+    projectId: 'BSP-2026-000184',
+    taskName: 'Countertop template measure',
+    assignedTrade: 'Stone',
+    scheduledDate: '2026-08-05',
+    status: 'Scheduled',
+    clientVisible: true,
+    assignedTo: 'Tony Alvarez',
+    pmNote:
+      'Stone crew needs the cabinets level and fixed before they template. Do not let them measure early.',
+    assignedAt: '2026-08-21T06:55:00Z',
+    seenAt: null,
+  },
+  {
+    id: 'task-4',
+    projectId: 'BSP-2026-000177',
+    taskName: 'Framing inspection walkthrough',
+    assignedTrade: 'General',
+    scheduledDate: '2026-08-04',
+    status: 'Waiting on Inspection',
+    clientVisible: false,
+    assignedTo: 'Tony Alvarez',
+    pmNote: 'Inspector is booked 9am. Be on site by 8:30 with the framing plans.',
+    assignedAt: '2026-08-18T15:00:00Z',
+    seenAt: '2026-08-18T15:20:00Z',
+  },
+  // Unassigned — §9.4 says a field user never sees these. They exist in the
+  // fixtures precisely so the filter has something to exclude.
+  {
+    id: 'task-5',
+    projectId: 'BSP-2026-000203',
+    taskName: 'Confirm shingle color with client',
+    assignedTrade: 'Roofing',
+    scheduledDate: '2026-08-04',
+    status: 'Waiting on Client',
+    clientVisible: true,
+    assignedTo: null,
+    pmNote: '',
+    assignedAt: '2026-08-17T09:00:00Z',
+    seenAt: null,
+  },
+  {
+    id: 'task-6',
+    projectId: 'BSP-2026-000168',
+    taskName: 'Punch list — stain touch-up',
+    assignedTrade: 'Finish',
+    scheduledDate: '2026-08-04',
+    status: 'Ready for Review',
+    clientVisible: true,
+    assignedTo: null,
+    pmNote: '',
+    assignedAt: '2026-08-17T09:00:00Z',
+    seenAt: null,
+  },
 ];
+
 
 export const DAILY_UPDATES: DailyUpdate[] = [
   {

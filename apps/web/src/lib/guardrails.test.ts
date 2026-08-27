@@ -141,6 +141,11 @@ test('D4 §5 — the mutating server actions are only the publish decision and s
     'reviewUpdate', // the decision itself
     'updateVisibility', // which clauses of the gate are open
     'submitFieldUpdate', // the crew proposes; it never publishes
+    // Both of these originate in the Hub and GoHighLevel does not model them:
+    // a read receipt on an assignment, and an internal crew↔PM note. Neither
+    // touches project state, and neither can reach a homeowner.
+    'markTaskSeen',
+    'sendFieldMessage',
     'signIn',
     'signOut',
     'viewAs',
