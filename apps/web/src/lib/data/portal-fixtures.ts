@@ -4,6 +4,7 @@ import type {
   Message,
   ProjectDocument,
   ProjectPhoto,
+  PunchListItem,
   ScheduleItem,
 } from './types';
 
@@ -519,6 +520,93 @@ export const DESIGN_SELECTIONS: DesignSelection[] = [
     clientComments: '',
     // Priced and staged, not yet published — the §9.1 gate on this screen.
     internalNotes: 'Hold until the vendor quote firms up; do not surface the pro package yet.',
+    clientVisible: false,
+  },
+];
+
+/**
+ * Punch list for Johnson Kitchen Remodel (Artifact 90).
+ *
+ * A closeout list part-way through: two items done (one verified), one scheduled,
+ * one still open and raised by the homeowner on a walkthrough. PL-005 is withheld
+ * (clientVisible: false) — an internal touch-up the crew is handling without
+ * surfacing it — which is what the §9.1 gate looks like on this screen.
+ */
+export const PUNCH_LIST: PunchListItem[] = [
+  {
+    id: 'pl-1',
+    projectId: PROJECT,
+    itemNumber: '001',
+    title: 'Touch up paint at pantry door casing',
+    location: 'Pantry',
+    description: 'Minor scuffing on the casing from the appliance delivery.',
+    status: 'Verified',
+    reportedBy: 'Marcus Reyes',
+    raisedByClient: false,
+    targetDate: '2026-08-18',
+    completedDate: '2026-08-17',
+    internalNotes: 'Painter touched up during the same visit as the trim work.',
+    clientVisible: true,
+  },
+  {
+    id: 'pl-2',
+    projectId: PROJECT,
+    itemNumber: '002',
+    title: 'Adjust cabinet door alignment above range',
+    location: 'Main Kitchen',
+    description: 'Upper cabinet door sits slightly proud of its neighbour.',
+    status: 'Completed',
+    reportedBy: 'Tony Alvarez',
+    raisedByClient: false,
+    targetDate: '2026-08-20',
+    completedDate: '2026-08-19',
+    internalNotes: 'Hinge re-set; awaiting client walkthrough to verify.',
+    clientVisible: true,
+  },
+  {
+    id: 'pl-3',
+    projectId: PROJECT,
+    itemNumber: '003',
+    title: 'Silicone bead along backsplash edge',
+    location: 'Main Kitchen',
+    description: 'Final sealant bead where the backsplash meets the countertop.',
+    status: 'Scheduled',
+    reportedBy: 'Marcus Reyes',
+    raisedByClient: false,
+    targetDate: '2026-08-28',
+    completedDate: null,
+    internalNotes: 'Booked with the tile crew for the 28th.',
+    clientVisible: true,
+  },
+  {
+    id: 'pl-4',
+    projectId: PROJECT,
+    itemNumber: '004',
+    title: 'Cabinet drawer soft-close feels stiff',
+    location: 'Main Kitchen',
+    description: 'Island drawer next to the sink does not glide as smoothly as the others.',
+    status: 'Open',
+    reportedBy: 'Dana Johnson',
+    raisedByClient: true,
+    targetDate: '2026-08-30',
+    completedDate: null,
+    internalNotes: 'Client flagged on the 26th; likely a slide adjustment.',
+    clientVisible: true,
+  },
+  {
+    id: 'pl-5',
+    projectId: PROJECT,
+    itemNumber: '005',
+    title: 'Re-seat toe-kick panel under sink base',
+    location: 'Main Kitchen',
+    description: 'Toe-kick worked loose during plumbing connection.',
+    status: 'Open',
+    reportedBy: 'Tony Alvarez',
+    raisedByClient: false,
+    targetDate: '2026-08-29',
+    completedDate: null,
+    // Internal — the crew is handling it without surfacing a cosmetic item.
+    internalNotes: 'Handle on the next visit; no need to put in front of the client.',
     clientVisible: false,
   },
 ];

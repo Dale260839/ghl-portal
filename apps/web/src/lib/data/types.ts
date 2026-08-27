@@ -494,3 +494,78 @@ export function designSelectionTotals(
   }
   return { confirmed, pending };
 }
+
+/**
+ * Artifact 90 `Punch List Item`. A closeout task — the small fixes and touch-ups
+ * agreed near the end of a project — as the client sees it.
+ *
+ * **`itemNumber` is the reference people say out loud**, per-project sequence,
+ * a string, assigned on creation.
+ *
+ * **`raisedByClient` matters on this screen.** A homeowner walking the finished
+ * space and flagging a scuff is the punch list working as intended; showing who
+ * raised each item is what makes the client trust the list is theirs too.
+ *
+ * A punch item is not priced — closeout fixes are inside the contract — so this
+ * screen rides only the master portal switch and the per-item publish flag, not
+ * the budget switches.
+ */
+export interface PunchListItem {
+  id: string;
+  projectId: string;
+  /** Artifact 90 Item Number — per-project sequence, e.g. "001". */
+  itemNumber: string;
+  title: string;
+  /** Where the work is — "Main Kitchen". */
+  location: string;
+  description: string;
+  status: PunchListStatus;
+  /** Who flagged it — a crew member or the client. */
+  reportedBy: string;
+  /** True when the homeowner raised it on a walkthrough. */
+  raisedByClient: boolean;
+  targetDate: string | null;
+  completedDate: string | null;
+  /** §9.3 — never client-facing. */
+  internalNotes: string;
+  /** §9.1 — the contractor publishes deliberately. */
+  clientVisible: boolean;
+}
+
+/**
+ * Artifact 90 Punch status — the client-facing lifecycle of a closeout item.
+ *
+ * PROVISIONAL. Artifact 90 describes a punch list but does not publish a
+ * verbatim status list; these are the standard closeout states, flagged for
+ * confirmation alongside W1–W3. `Completed` and `Verified` are both "done" for
+ * progress — `Verified` adds that the contractor (or client) signed it off.
+ */
+export const PUNCH_LIST_STATUSES = ['Open', 'Scheduled', 'Completed', 'Verified'] as const;
+
+export type PunchListStatus = (typeof PUNCH_LIST_STATUSES)[number];
+
+/** The statuses that count as finished work on the closeout progress bar. */
+export const PUNCH_DONE_STATUSES: readonly PunchListStatus[] = ['Completed', 'Verified'];
+
+/** Whether a punch item counts as finished. */
+export function punchItemDone(item: PunchListItem): boolean {
+  return PUNCH_DONE_STATUSES.includes(item.status);
+}
+
+/**
+ * Rolls a project's punch list into the closeout progress a client needs:
+ * how many items, how many are finished, how many remain, and a percentage.
+ *
+ * An empty list is 100% — there is nothing left to close out — rather than 0%
+ * or a divide-by-zero. A client at handoff with a clean list should see "done",
+ * not "0% complete".
+ */
+export function punchListProgress(
+  items: readonly PunchListItem[],
+): { total: number; done: number; remaining: number; percent: number } {
+  const total = items.length;
+  const done = items.filter(punchItemDone).length;
+  const remaining = total - done;
+  const percent = total === 0 ? 100 : Math.round((done / total) * 100);
+  return { total, done, remaining, percent };
+}

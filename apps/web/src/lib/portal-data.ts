@@ -6,6 +6,7 @@ import {
   DOCUMENTS,
   MESSAGES,
   PHOTOS,
+  PUNCH_LIST,
   SCHEDULE_ITEMS,
 } from './data/portal-fixtures.ts';
 import { PROJECTS } from './data/fixtures.ts';
@@ -16,6 +17,7 @@ import type {
   Project,
   ProjectDocument,
   ProjectPhoto,
+  PunchListItem,
   ScheduleItem,
 } from './data/types.ts';
 import { getSession } from './session.ts';
@@ -99,6 +101,16 @@ export function designSelectionsFor(project: Project): DesignSelection[] {
   return DESIGN_SELECTIONS.filter(
     (s) => s.projectId === project.buildsuiteProjectId && s.clientVisible,
   ).sort((a, b) => a.selectionNumber.localeCompare(b.selectionNumber));
+}
+
+export function punchListFor(project: Project): PunchListItem[] {
+  if (!portalOpen(project)) return [];
+  // Artifact 90 — a punch item is a closeout task inside the contract, not a
+  // priced change, so it rides only the master portal switch and its own
+  // publish flag. Sorted oldest-number first so the list reads as a sequence.
+  return PUNCH_LIST.filter(
+    (p) => p.projectId === project.buildsuiteProjectId && p.clientVisible,
+  ).sort((a, b) => a.itemNumber.localeCompare(b.itemNumber));
 }
 
 export function messagesFor(project: Project): Message[] {
