@@ -123,7 +123,23 @@ ID alone admits someone, that is a decision to overrule D1 and D3 and I need it 
 
 ---
 
-### C-3 · The shared key: three answers, and the data supports none of them 🟠
+### C-3 · The shared key — **proposed resolution, 2026-08-28** 🟡
+
+**Measured since this was written:** `ghl_opportunity_id` is empty on **all 182 deals** and all
+101 projects. It cannot be the key today.
+
+**The ownership split resolves it.** GoHighLevel ingests the client; BuildSuite matches the
+contractor and builds the proposal. So **the project is born in BuildSuite** — it is not a
+project until a contractor is matched to a client. Whoever creates a record owns its identifier.
+
+**Therefore: BuildSuite generates the id, GoHighLevel stores and copies it.** That is D4 §6's
+first sentence, and it overrules D4 §6's own second sentence naming the GHL opportunity id as
+the matching key. The opportunity id stays a useful secondary link on the sales side.
+
+Detail and the measured join chain: `docs/kb/two-system-model.md`. **Chris still confirms**, but
+there is now a reasoned default rather than three competing answers.
+
+### C-3 (original) · The shared key: three answers, and the data supports none of them 🟠
 
 | Source | Says |
 |---|---|

@@ -129,9 +129,14 @@ Still the thing that stops us narrowing the project list to signed work. Today t
 reads every project on the account, including work that is not signed, because there is no
 reliable join from a contractor to the deal they closed.
 
-Related and separate: **we cannot find how a contractor bid is classified.** We have been
-through the columns and cannot identify the field or value that marks a bid as won. If you or
-Pat can point at it, we can filter today.
+**Found it — we were looking in the wrong table.** "How is a bid classified as won" is not on
+`projects`; it is on **`deals`**: `signature_status`, `signature_signed_at`, `sent_to_crm_at`,
+`signed_pdf_url`, `adobe_agreement_id`. Joined to a project by `deals.source_project_id`.
+
+So the filter is writable today. **What stops it is that the columns are empty:** of 182 deals,
+5 are matched to a contractor, 2 have been sent to CRM, 1 signature has been sent and **none has
+been signed**. Confirm we have the right column and we will filter on it the moment real data
+arrives — `docs/kb/two-system-model.md` has the full funnel.
 
 ---
 
