@@ -430,13 +430,13 @@ export const STEPS: Step[] = [
     primary:
       'Show them a gap before they find one — it buys more trust than a flawless pitch.',
     hoodSimple:
-      'These are real routes with the design in place, waiting on the data layer. A client clicking a dead link concludes the product is broken; this tells them what\'s coming.',
+      'One real route with the design in place, waiting on a decision rather than on us. A client clicking a dead link concludes the product is broken; this tells them what\'s coming.',
     seconds: 85,
-    screen: 'portalDesigns',
-    hotspot: 'title',
+    screen: 'portal',
+    hotspot: 'nav-payments',
     star: true,
-    hover: 'The "coming shortly" panel. Do not click away quickly.',
-    say: 'Straight with you on this one. Payments and the completion and warranty screen are designed and not built — they are in the navigation because your client should see what is coming rather than hit a dead end. Everything else in this list is real.',
+    hover: 'The Payments nav item. Do not click away quickly.',
+    say: 'Straight with you on this one. Payments is designed and not built — it is in the navigation because your client should see what is coming rather than hit a dead end. It stays unbuilt on purpose until you tell me whether payments run through GoHighLevel\'s own invoicing or through Stripe, because building it against the wrong one throws the work away. Everything else in this list is real.',
     watch:
       'Do not skip this and do not rush it. You lost trust by them finding a gap themselves; you get it back by showing them one first. Only give the two-week estimate if you can stand behind it.',
     then: 'Switch back to your account. Narrow the window, then go to the field view.',
@@ -615,17 +615,17 @@ export const STEPS: Step[] = [
     primary:
       'The known gaps, said the same way whether they ask or not.',
     hoodSimple:
-      'Two portal screens, the field and client logins, our tables, and multi-company sign-in before the second client.',
+      'One portal screen, the front door for the client link, the field login, our tables, and multi-company sign-in before the second client.',
     seconds: 100,
     screen: 'stack',
     section: 'annex',
     hover: 'Nothing. Eye contact.',
-    say: 'Two portal screens designed and not built: payments, and completion and warranty. Field and client logins designed and not built. Our tables need creating in your database. Multi-tenant sign-in needs a GoHighLevel Marketplace app before the second client, not after. Two more things we are waiting on from the BuildSuite side. Everything else is real.',
+    say: 'One portal screen designed and not built: payments, and that one is waiting on your answer about the rail. The client sign-in link itself is built — single use, it expires, and an email address plus a project number on its own gets nobody in. What is not built is the branded page that sends it, because where that page lives is your call. The field login is not built. Our tables need creating in your database. Multi-tenant sign-in needs a GoHighLevel Marketplace app before the second client, not after. Two more things we are waiting on from the BuildSuite side. Everything else is real.',
     watch:
-      'Say this list the same way whether asked or not. Do not name individuals to the client — "the BuildSuite side" is enough.',
+      'Say this list the same way whether asked or not. Do not name individuals to the client — "the BuildSuite side" is enough. If he asks whether a homeowner can log in today: the mechanism works, the page that emails the link does not.',
     then: 'Go to the two dependencies.',
     backend:
-      'The two remaining screens are placeholders with designs behind them, not missing routes, so the nav is honest about what is coming. Multi-tenant is the real dependency: the token we authenticate with is scoped to one sub-account, so a second client needs the Marketplace app.',
+      'Payments is a placeholder with a design behind it, not a missing route, so the nav stays honest about what is coming. Client sign-in is a signed single-use token and a /verify landing that mints the same session the contractor path does; the gap is the branded front door and the email send, plus his confirmation that the link — not the project number — is the credential. Multi-tenant is the real dependency: the token we authenticate with is scoped to one sub-account, so a second client needs the Marketplace app.',
   },
 
   {
