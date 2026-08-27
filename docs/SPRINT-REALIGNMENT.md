@@ -59,7 +59,7 @@ BuildSuite's `deals` is the matching and proposal engine and the Hub has never r
 |---|---|
 | `BuildSuiteDealsReader` — tenant-scoped `select` on `deals`, narrow column list, read-only like the projects reader | 2.5 |
 | `Deal` type + `toDeal` mapping. Measured fill rates decide which fields are trustworthy | 1.5 |
-| `dealFunnel(scope)` — counts per lifecycle stage, one `count` request per stage rather than pulling rows | 2.0 |
+| `dealFunnel(scope)` — counts per lifecycle stage, from one scoped read counted in memory | 2.0 |
 | Tests: tenancy refused without a scope, the funnel arithmetic, an empty tenant returns zeros not a crash | 2.0 |
 
 **Column list** (narrow, same discipline as `PROJECT_COLUMNS`): `id`, `status`, `source`,
@@ -70,6 +70,11 @@ BuildSuite's `deals` is the matching and proposal engine and the Hub has never r
 **Deliberately NOT selected:** `access_token`, `client_email`, `client_phone`, `photo_urls`,
 `photo_analysis`, `metadata`, `signed_pdf_url`. The Hub has no screen that needs them, and the
 narrowest select is our half of the publishable-key exposure.
+
+**Changed while building:** the funnel does **one** scoped read and counts in memory, not a `count`
+request per stage. A per-stage count can only ask about stages this file already knows, so a status
+BuildSuite invents would be silently missing from the total — which is exactly the failure the open
+vocabulary rule exists to prevent. One read of ~1000 rows is also cheaper than six round trips.
 
 **Ships:** the Hub can see the pipeline for the first time.
 
