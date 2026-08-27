@@ -1,8 +1,23 @@
 import 'server-only';
 
-import { CHANGE_ORDERS, DOCUMENTS, MESSAGES, PHOTOS, SCHEDULE_ITEMS } from './data/portal-fixtures.ts';
+import {
+  CHANGE_ORDERS,
+  DESIGN_SELECTIONS,
+  DOCUMENTS,
+  MESSAGES,
+  PHOTOS,
+  SCHEDULE_ITEMS,
+} from './data/portal-fixtures.ts';
 import { PROJECTS } from './data/fixtures.ts';
-import type { ChangeOrder, Message, Project, ProjectDocument, ProjectPhoto, ScheduleItem } from './data/types.ts';
+import type {
+  ChangeOrder,
+  DesignSelection,
+  Message,
+  Project,
+  ProjectDocument,
+  ProjectPhoto,
+  ScheduleItem,
+} from './data/types.ts';
 import { getSession } from './session.ts';
 import { currentDataSource } from './data/current-source.ts';
 
@@ -24,6 +39,17 @@ import { currentDataSource } from './data/current-source.ts';
 
 function portalOpen(project: Project): boolean {
   return project.clientPortalEnabled;
+}
+
+/**
+ * Whether dollar figures may be shown to the client.
+ *
+ * The same rule the staff→client gate applies in `client-projection.ts` —
+ * either budget switch opens pricing. Kept here so the portal read layer and the
+ * projection agree; if one changes, this is where the portal side follows.
+ */
+export function budgetVisible(project: Project): boolean {
+  return project.showBudgetToClient || project.showDetailedPricing;
 }
 
 export function projectFor(buildsuiteProjectId: string): Project | null {
@@ -62,6 +88,17 @@ export function changeOrdersFor(project: Project): ChangeOrder[] {
   return CHANGE_ORDERS.filter(
     (c) => c.projectId === project.buildsuiteProjectId && c.clientVisible,
   ).sort((a, b) => a.changeOrderNumber.localeCompare(b.changeOrderNumber));
+}
+
+export function designSelectionsFor(project: Project): DesignSelection[] {
+  if (!portalOpen(project)) return [];
+  // Artifact 87 — a selection is a *choice*, not only a price, so it rides the
+  // master portal switch and its own publish flag but NOT the budget switch: a
+  // client must be able to see and make a choice even when pricing is hidden.
+  // The dollar price impact is gated separately in the view by `budgetVisible`.
+  return DESIGN_SELECTIONS.filter(
+    (s) => s.projectId === project.buildsuiteProjectId && s.clientVisible,
+  ).sort((a, b) => a.selectionNumber.localeCompare(b.selectionNumber));
 }
 
 export function messagesFor(project: Project): Message[] {

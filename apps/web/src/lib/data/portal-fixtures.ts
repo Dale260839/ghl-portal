@@ -1,4 +1,11 @@
-import type { ChangeOrder, Message, ProjectDocument, ProjectPhoto, ScheduleItem } from './types';
+import type {
+  ChangeOrder,
+  DesignSelection,
+  Message,
+  ProjectDocument,
+  ProjectPhoto,
+  ScheduleItem,
+} from './types';
 
 /**
  * Fixtures for the Phase A client-portal screens.
@@ -295,6 +302,223 @@ export const CHANGE_ORDERS: ChangeOrder[] = [
     approvedBy: null,
     approvalDate: null,
     internalNotes: 'Do not publish until Marcus confirms the switch location with the electrician.',
+    clientVisible: false,
+  },
+];
+
+/**
+ * Design selections for Johnson Kitchen Remodel (Artifact 87).
+ *
+ * The set walks the full client-facing lifecycle: two Confirmed choices, one
+ * Selection Submitted (awaiting the contractor's confirmation), and one still
+ * Awaiting Your Selection with a decision deadline. Each carries a baseline
+ * allowance option at $0 and one or more priced upgrades, so the "price impact
+ * over your allowance" idea has something to show.
+ *
+ * DS-005 is deliberately not client-visible — priced and staged internally but
+ * not yet published, which is what the §9.1 gate looks like on this screen.
+ * (Revision Requested is a valid status but is exercised in the unit tests
+ * rather than a fixture, the way Rejected is for change orders.)
+ */
+export const DESIGN_SELECTIONS: DesignSelection[] = [
+  {
+    id: 'ds-1',
+    projectId: PROJECT,
+    selectionNumber: '001',
+    category: 'Countertops',
+    title: 'Countertop material',
+    location: 'Main Kitchen',
+    description: 'Choose the countertop surface for the perimeter runs and the island.',
+    options: [
+      {
+        id: 'ds-1-a',
+        name: 'Laminate (allowance)',
+        detail: 'Included in the original scope. Matte finish, square edge.',
+        priceImpact: 0,
+        isBaseline: true,
+        imageUrl: '',
+      },
+      {
+        id: 'ds-1-b',
+        name: 'Quartz — Calacatta',
+        detail: 'Engineered stone, honed. Consistent veining, low maintenance.',
+        priceImpact: 2400,
+        isBaseline: false,
+        imageUrl: '',
+      },
+      {
+        id: 'ds-1-c',
+        name: 'Natural marble',
+        detail: 'Carrara. Sealed; will patina with use.',
+        priceImpact: 4100,
+        isBaseline: false,
+        imageUrl: '',
+      },
+    ],
+    selectedOptionId: 'ds-1-b',
+    status: 'Confirmed',
+    decisionDeadline: '2026-07-12',
+    decidedBy: 'Dana Johnson',
+    decidedDate: '2026-07-10',
+    clientComments: 'Love the low-maintenance option — quartz it is.',
+    internalNotes: 'Fabricator lead time 3 weeks from confirmation. Slab reserved.',
+    clientVisible: true,
+  },
+  {
+    id: 'ds-2',
+    projectId: PROJECT,
+    selectionNumber: '002',
+    category: 'Tile & Backsplash',
+    title: 'Backsplash tile',
+    location: 'Main Kitchen',
+    description: 'Full-height tile across the sink and range walls.',
+    options: [
+      {
+        id: 'ds-2-a',
+        name: 'Ceramic subway 3x6 (allowance)',
+        detail: 'Included in the original scope. Gloss white, straight set.',
+        priceImpact: 0,
+        isBaseline: true,
+        imageUrl: '',
+      },
+      {
+        id: 'ds-2-b',
+        name: 'Zellige handmade',
+        detail: 'Moroccan clay, glossy, variegated. Each tile slightly irregular.',
+        priceImpact: 1150,
+        isBaseline: false,
+        imageUrl: '',
+      },
+      {
+        id: 'ds-2-c',
+        name: 'Marble hex mosaic',
+        detail: 'Carrara hexagon on mesh sheets.',
+        priceImpact: 1650,
+        isBaseline: false,
+        imageUrl: '',
+      },
+    ],
+    selectedOptionId: 'ds-2-b',
+    status: 'Confirmed',
+    decisionDeadline: '2026-07-28',
+    decidedBy: 'Dana Johnson',
+    decidedDate: '2026-07-26',
+    clientComments: '',
+    internalNotes: 'Zellige needs a wider grout allowance; flagged to the tile crew.',
+    clientVisible: true,
+  },
+  {
+    id: 'ds-3',
+    projectId: PROJECT,
+    selectionNumber: '003',
+    category: 'Cabinetry',
+    title: 'Cabinet finish',
+    location: 'Main Kitchen',
+    description: 'Door style and colour for the perimeter and island cabinetry.',
+    options: [
+      {
+        id: 'ds-3-a',
+        name: 'White shaker (allowance)',
+        detail: 'Included in the original scope. Painted MDF, satin.',
+        priceImpact: 0,
+        isBaseline: true,
+        imageUrl: '',
+      },
+      {
+        id: 'ds-3-b',
+        name: 'Two-tone — navy island, white perimeter',
+        detail: 'Same shaker door, island painted deep navy.',
+        priceImpact: 680,
+        isBaseline: false,
+        imageUrl: '',
+      },
+    ],
+    selectedOptionId: 'ds-3-b',
+    status: 'Selection Submitted',
+    decisionDeadline: '2026-08-20',
+    decidedBy: null,
+    decidedDate: null,
+    clientComments: 'Going with the two-tone if the navy matches the sample we saw.',
+    internalNotes: 'Confirm navy sheen with the paint shop before ordering doors.',
+    clientVisible: true,
+  },
+  {
+    id: 'ds-4',
+    projectId: PROJECT,
+    selectionNumber: '004',
+    category: 'Flooring',
+    title: 'Kitchen flooring',
+    location: 'Main Kitchen',
+    description: 'Surface for the kitchen floor, continuing to the pantry doorway.',
+    options: [
+      {
+        id: 'ds-4-a',
+        name: 'Luxury vinyl plank (allowance)',
+        detail: 'Included in the original scope. Waterproof, click-lock.',
+        priceImpact: 0,
+        isBaseline: true,
+        imageUrl: '',
+      },
+      {
+        id: 'ds-4-b',
+        name: 'Engineered oak',
+        detail: 'Wire-brushed, matte. 7-inch planks.',
+        priceImpact: 1900,
+        isBaseline: false,
+        imageUrl: '',
+      },
+      {
+        id: 'ds-4-c',
+        name: 'Porcelain wood-look tile',
+        detail: 'Rectified plank tile, through-body.',
+        priceImpact: 2600,
+        isBaseline: false,
+        imageUrl: '',
+      },
+    ],
+    selectedOptionId: null,
+    status: 'Awaiting Your Selection',
+    decisionDeadline: '2026-08-29',
+    decidedBy: null,
+    decidedDate: null,
+    clientComments: '',
+    internalNotes: 'Needed before the flooring crew mobilises the week of 1 Sep.',
+    clientVisible: true,
+  },
+  {
+    id: 'ds-5',
+    projectId: PROJECT,
+    selectionNumber: '005',
+    category: 'Fixtures',
+    title: 'Appliance package',
+    location: 'Main Kitchen',
+    description: 'Range, hood, and dishwasher package.',
+    options: [
+      {
+        id: 'ds-5-a',
+        name: 'Standard stainless (allowance)',
+        detail: 'Included in the original scope.',
+        priceImpact: 0,
+        isBaseline: true,
+        imageUrl: '',
+      },
+      {
+        id: 'ds-5-b',
+        name: 'Pro-style gas range package',
+        detail: '36-inch range with matching hood insert.',
+        priceImpact: 3200,
+        isBaseline: false,
+        imageUrl: '',
+      },
+    ],
+    selectedOptionId: null,
+    status: 'Awaiting Your Selection',
+    decisionDeadline: null,
+    decidedBy: null,
+    decidedDate: null,
+    clientComments: '',
+    // Priced and staged, not yet published — the §9.1 gate on this screen.
+    internalNotes: 'Hold until the vendor quote firms up; do not surface the pro package yet.',
     clientVisible: false,
   },
 ];

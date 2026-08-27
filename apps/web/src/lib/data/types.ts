@@ -377,3 +377,120 @@ export function changeOrderTotals(
   }
   return { approved, pending, net: approved };
 }
+
+/**
+ * Artifact 87 `Design Selection`. A material, finish, or layout the client
+ * chooses from a set of options, each with a price impact over the allowance.
+ *
+ * The shape mirrors `ChangeOrder` on purpose — both are "a decision the client
+ * makes that can move money", and keeping them parallel means the gate, the
+ * publish flag and the internal-notes handling read the same on both screens.
+ *
+ * **`selectionNumber` is the reference people say out loud** — per-project
+ * sequence assigned on creation, a string, never recomputed from array order.
+ *
+ * **A selection is a *choice*, not only a price.** So its options and status ride
+ * the master portal switch and the per-item publish flag, and are shown to the
+ * client even when pricing is hidden. Only the dollar *price impact* is gated by
+ * the budget switches — see `budgetVisible` in `portal-data.ts`, which mirrors
+ * the budget rule in `client-projection.ts`.
+ */
+export interface DesignSelection {
+  id: string;
+  projectId: string;
+  /** Artifact 87 Selection Number — per-project sequence, e.g. "001". */
+  selectionNumber: string;
+  /** The trade or area this selection covers, e.g. "Countertops". Free text — Artifact 87 does not fix a category list. */
+  category: string;
+  title: string;
+  /** Where it applies — "Main Kitchen". */
+  location: string;
+  description: string;
+  /** The choices offered. At least one is the baseline/allowance option. */
+  options: DesignOption[];
+  /** Which option the client picked. Null until they choose (Awaiting). */
+  selectedOptionId: string | null;
+  status: DesignSelectionStatus;
+  /** After which the selection blocks the schedule; the PM chases it. */
+  decisionDeadline: string | null;
+  /** Set when the contractor confirms the choice, not when the client submits it. */
+  decidedBy: string | null;
+  decidedDate: string | null;
+  /** What the client wrote alongside their choice. Their words, client-facing. */
+  clientComments: string;
+  /** §9.3 — never client-facing. */
+  internalNotes: string;
+  /** §9.1 — the contractor publishes deliberately. */
+  clientVisible: boolean;
+}
+
+/** One choice within a `DesignSelection`. */
+export interface DesignOption {
+  id: string;
+  name: string;
+  /** Spec/finish detail — "3x6 handmade, matte glaze". */
+  detail: string;
+  /**
+   * Dollar impact over the allowance baseline. Zero for the baseline option
+   * itself; positive for an upgrade; may be negative for a downgrade credit.
+   */
+  priceImpact: number;
+  /** The allowance/standard option — the one included in the original scope. */
+  isBaseline: boolean;
+  /** '' when there is no swatch image yet. */
+  imageUrl: string;
+}
+
+/**
+ * Artifact 87 Selection status — the client-facing lifecycle of a choice.
+ *
+ * PROVISIONAL. Artifact 87 names "approval" but does not publish a verbatim
+ * selection-status list the way Artifact 89 does for change orders. This is a
+ * reading of the client-facing states, not a transcribed spec — flagged for
+ * confirmation alongside W1–W3. Kept as one exported list so a rename is a
+ * single edit rather than a hunt through screens.
+ */
+export const DESIGN_SELECTION_STATUSES = [
+  'Awaiting Your Selection',
+  'Selection Submitted',
+  'Confirmed',
+  'Revision Requested',
+] as const;
+
+export type DesignSelectionStatus = (typeof DESIGN_SELECTION_STATUSES)[number];
+
+/** The only status that has committed a choice — and therefore its price impact. */
+export const DESIGN_SELECTION_CONFIRMED: DesignSelectionStatus = 'Confirmed';
+
+/** The chosen option, or null when the client has not selected one yet. */
+export function selectedOption(sel: DesignSelection): DesignOption | null {
+  if (sel.selectedOptionId === null) return null;
+  return sel.options.find((o) => o.id === sel.selectedOptionId) ?? null;
+}
+
+/** Price impact of the chosen option over the allowance. Zero when none is chosen. */
+export function selectionPriceImpact(sel: DesignSelection): number {
+  const opt = selectedOption(sel);
+  return opt === null ? 0 : opt.priceImpact;
+}
+
+/**
+ * Rolls a project's selections into committed vs still-pending upgrade cost.
+ *
+ * Only `Confirmed` counts toward `confirmed` — a submitted-but-unconfirmed
+ * choice has not moved anything, exactly as a pending change order has not.
+ * These are upgrades *over the allowance*, a different quantity from the
+ * contract total, so they are never folded into `currentProjectTotal`.
+ */
+export function designSelectionTotals(
+  selections: readonly DesignSelection[],
+): { confirmed: number; pending: number } {
+  let confirmed = 0;
+  let pending = 0;
+  for (const sel of selections) {
+    const impact = selectionPriceImpact(sel);
+    if (sel.status === DESIGN_SELECTION_CONFIRMED) confirmed += impact;
+    else if (sel.status === 'Selection Submitted') pending += impact;
+  }
+  return { confirmed, pending };
+}
