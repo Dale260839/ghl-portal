@@ -331,16 +331,21 @@ export interface ChangeOrder {
 }
 
 /**
- * §6.6 Status.
+ * §6.6 Status — the client-facing subset of Artifact 89's change-order lifecycle.
  *
- * Kept as one exported list so a rename from Chris's change-work-order approval
- * workflow is a single edit rather than a hunt through screens.
+ * Names are Artifact 89's verbatim (D-021 — Chris's artifacts win on naming):
+ * `Client Review Pending` → `Approved` / `Rejected` / `Revision Requested`. The
+ * internal-only states (Draft, Internal QA Required, Ready for Client Review,
+ * Escalated…) never reach the client projection, so they are not modelled here.
+ *
+ * Kept as one exported list so any further rename is a single edit rather than a
+ * hunt through screens.
  */
 export const CHANGE_ORDER_STATUSES = [
-  'Pending',
+  'Client Review Pending',
   'Approved',
-  'Question Asked',
-  'Declined',
+  'Rejected',
+  'Revision Requested',
 ] as const;
 
 export type ChangeOrderStatus = (typeof CHANGE_ORDER_STATUSES)[number];
@@ -368,7 +373,7 @@ export function changeOrderTotals(
   for (const co of orders) {
     const net = changeOrderNet(co);
     if (co.status === CHANGE_ORDER_APPROVED) approved += net;
-    else if (co.status === 'Pending') pending += net;
+    else if (co.status === 'Client Review Pending') pending += net;
   }
   return { approved, pending, net: approved };
 }

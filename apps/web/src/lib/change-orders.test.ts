@@ -28,7 +28,7 @@ function co(over: Partial<ChangeOrder> = {}): ChangeOrder {
     scheduleImpactDays: 0,
     revisedCompletionDate: null,
     approvalDeadline: null,
-    status: 'Pending',
+    status: 'Client Review Pending',
     clientComments: '',
     approvedBy: null,
     approvalDate: null,
@@ -50,9 +50,9 @@ test('§6.6 a credit-only change order reduces the contract', () => {
 test('only Approved counts toward the approved total', () => {
   const totals = changeOrderTotals([
     co({ status: 'Approved', addedCost: 1450 }),
-    co({ status: 'Pending', addedCost: 1850 }),
-    co({ status: 'Question Asked', addedCost: 900 }),
-    co({ status: 'Declined', addedCost: 5000 }),
+    co({ status: 'Client Review Pending', addedCost: 1850 }),
+    co({ status: 'Revision Requested', addedCost: 900 }),
+    co({ status: 'Rejected', addedCost: 5000 }),
   ]);
   assert.equal(totals.approved, 1450);
   assert.equal(totals.pending, 1850);
@@ -62,16 +62,16 @@ test('the net total never includes pending money', () => {
   // A client who reads a pending figure as agreed will dispute the invoice.
   const totals = changeOrderTotals([
     co({ status: 'Approved', addedCost: 1000 }),
-    co({ status: 'Pending', addedCost: 9999 }),
+    co({ status: 'Client Review Pending', addedCost: 9999 }),
   ]);
   assert.equal(totals.net, totals.approved);
   assert.equal(totals.net, 1000);
 });
 
-test('Question Asked and Declined are counted as neither approved nor pending', () => {
+test('Revision Requested and Rejected are counted as neither approved nor pending', () => {
   const totals = changeOrderTotals([
-    co({ status: 'Question Asked', addedCost: 400 }),
-    co({ status: 'Declined', addedCost: 700 }),
+    co({ status: 'Revision Requested', addedCost: 400 }),
+    co({ status: 'Rejected', addedCost: 700 }),
   ]);
   assert.equal(totals.approved, 0);
   assert.equal(totals.pending, 0);
@@ -144,7 +144,7 @@ test('an approved change order records who approved it and when', () => {
 });
 
 test('a pending change order records neither approver nor approval date', () => {
-  for (const order of CHANGE_ORDERS.filter((c) => c.status === 'Pending')) {
+  for (const order of CHANGE_ORDERS.filter((c) => c.status === 'Client Review Pending')) {
     assert.equal(order.approvedBy, null);
     assert.equal(order.approvalDate, null);
   }

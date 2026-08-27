@@ -41,14 +41,14 @@ function longDate(iso: string): string {
 
 function statusTone(status: ChangeOrder['status']): 'good' | 'warn' | 'neutral' {
   if (status === 'Approved') return 'good';
-  if (status === 'Pending') return 'warn';
+  if (status === 'Client Review Pending') return 'warn';
   return 'neutral';
 }
 
-/** What the client is being asked to do, in their words rather than ours. */
+/** What the client is being asked to do, in their words rather than the status code. */
 function statusLabel(status: ChangeOrder['status']): string {
-  if (status === 'Pending') return 'Awaiting your approval';
-  if (status === 'Question Asked') return 'Question with your project manager';
+  if (status === 'Client Review Pending') return 'Awaiting your approval';
+  if (status === 'Revision Requested') return 'Revision requested';
   return status;
 }
 
@@ -69,7 +69,7 @@ function ImpactCell({ label, value, muted }: { label: string; value: string; mut
 
 function ChangeOrderCard({ co }: { co: ChangeOrder }) {
   const net = changeOrderNet(co);
-  const awaiting = co.status === 'Pending';
+  const awaiting = co.status === 'Client Review Pending';
 
   return (
     <Card className="p-5">
