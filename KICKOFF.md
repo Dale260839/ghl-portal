@@ -440,6 +440,56 @@ Not decisions — carried forward so they do not get lost.
 
 ---
 
+### D-023 · Dale owns the GHL build end to end; has super admin
+**Decided:** 2026-08-25 (call with Chris + Sing)
+
+Chris: *"you own it… I don't want somebody intricate into tags or custom values
+without screwing something else up."* He explicitly does **not** want Julius or
+Pat near objects/fields/tags. Dale confirmed **super admin** on the Alliance
+sub-account (*"I think you already gave me that" — "yeah"*), so there is no
+access blocker on the GHL side.
+
+**Operating model going forward:** Dale directs, the others execute on request —
+Chris's words: *"just let me know, Chris I need you to do this, or Pat, or Sing."*
+Dale is also cleared to **create the Project custom object himself** — creating
+it is still a live-production write, so the schema gets confirmed with Chris
+before it is created (CLAUDE.md guardrail #2 stands even under this ownership).
+
+New people, for context: **Julius** (GHL back-end, possibly covering for CJ, out
+sick) and **Cherry** (SEO, with Maki). Not yet trusted with the object/field
+layer.
+
+---
+
+### D-024 · One new project pipeline — not 46
+**Recorded:** 2026-08-25 (call with Chris)
+
+Chris had read the discovery as "we need to make 46 pipelines." Corrected: the
+46 pipelines already in the sub-account are all sales/funnel (lead intake,
+membership sales, digital services, onboarding) — none is a project/construction
+pipeline. The build is **one** new project pipeline. Its stage list is still the
+open decision (see D-022 / the stage conflict in
+`docs/kb/phase-6-artifacts-crossref.md` C-2): Artifact 88's 16 statuses vs the
+architecture's 19.
+
+---
+
+### D-025 · Change-order status names follow Artifact 89
+**Decided:** 2026-08-25 · **Resolves the C-3 naming question**
+
+Per D-021, Chris's Change Order / Approval Workflow (Artifact 89) is the naming
+authority. The client-facing change-order statuses are its verbatim vocabulary:
+`Client Review Pending` → `Approved` / `Rejected` / `Revision Requested`.
+Implemented on `feat/change-orders`. The full 11-step lifecycle (Triggered →
+Under Review → Draft → Internal QA → Ready for Client → …) is the target for WF6
+when the change-order workflow is built.
+
+**The full Phase 6 reconciliation** — what is aligned, the C-1 ID conflict, the
+C-2 stage conflict, and every gap — now lives in
+`docs/kb/phase-6-artifacts-crossref.md`, the authoritative build reference.
+
+---
+
 ### D-001 · Front-end is built in this repo, not GHL AI Studio
 **Decided:** 2026-07-31 · **Resolves:** F1
 
