@@ -40,8 +40,8 @@ So the phases are re-cut around what is actually left.
 
 **What changed from the old plan:**
 
-- **Deleted:** the `hub_*` operational tables as designed. GHL owns those records (C-1). The
-  migration shrinks to the Hub's own decisions plus media.
+- **Kept:** the `hub_*` operational tables. GHL is the system of record, but it is not reachable,
+  so these stay the working store — see C-1, which records a wrong turn and the revert.
 - **Added:** P2's webhook secret. D4 §3 is the only document that says it plainly — *"custom
   values alone do not trigger anything"* — and nothing in our build verifies a webhook today.
 - **Promoted:** P0 above everything. D3 and D4 both name it the gate; we have been building
@@ -61,8 +61,8 @@ true either way and stop at the seam.
 
 | | h |
 |---|---|
-| Shrink `0001_hub_tables.sql` to Hub-owned records + media (C-1). Drop the eight tables GHL owns. | 3.0 |
-| Rewrite the ask to Sing/Pat against the corrected set — smaller, and easier to say yes to | 1.0 |
+| Migration work. Cut to three tables on a misreading of the documents, then reverted — net result: `hub_visibility_settings` added, and a missing tenancy key on two tables found | 3.0 |
+| Rewrite the ask to Sing/Pat | 1.0 |
 | Guardrail tests for the four D4 rules: no Hub-originated stage completion, no field→GHL path, no title-keyed matching, publish is the only Hub-owned write | 3.0 |
 | Carry the D4 rules into `CLAUDE.md` | 1.0 |
 
@@ -71,7 +71,7 @@ from it. The migration is unrun, so this correction is free today and expensive 
 
 ---
 
-### Day 2 · Thu 27 Aug — the third wire (8h)
+### Day 2 · Thu 27 Aug — the third wire (8h) ✅ **done**
 
 | | h |
 |---|---|
