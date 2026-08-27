@@ -65,6 +65,34 @@ it was right.
 **Standing correction:** treat the four documents as requirements. When one appears to dictate
 an implementation, that is a reading error.
 
+### C-6 · "The Hub owns one write" was a misreading ⚪ **resolved**
+
+**What I got wrong.** D4 §5 says the PM decision buttons *"live in the Hub only — nothing in
+GHL … this is the one place the Hub owns the action."* I read that as a hard cap: one write,
+everything else read-only.
+
+It means the publish decision is not **duplicated** in GoHighLevel. It does not mean the Hub
+writes once. §12.1 says the opposite in plain terms — the contractor dashboard *"creates and
+controls everything the other two experiences display"* — and D2 lists create-forms for
+projects, milestones, tasks, selections, change orders, issues, messages, punch list and
+warranty.
+
+**Resolved as a matrix**, in `lib/permissions.ts`, with four real exceptions:
+
+| | |
+|---|---|
+| **Contractor** | Full CRUD on every operational record, plus publish and the gate switches |
+| **Field** | Creates updates, progresses **its own** tasks, raises issues, uploads photos, messages the PM. Never publishes, never deletes, never sees money |
+| **Client** | Approves selections and change orders, comments, messages, raises issues and warranty requests. Never edits terms, never deletes |
+| **Nobody** | `completeStage`. GoHighLevel owns stage movement; the Hub reflects it (D4 §5) |
+
+Permission and **ownership** are separate questions and both must pass — "may a field user
+update a task" is the matrix, "may they update *this* task" is `ownsTask`. Conflating them is
+how a crew member ends up able to close somebody else's work.
+
+**Second instance of the same error.** C-1 was the first. Both came from reading a requirements
+document as a technical constraint.
+
 ### C-2 · Client login: D4's model is the one the other three prohibit 🔴
 
 **The conflict.**

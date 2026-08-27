@@ -88,17 +88,18 @@ test('D4 §5 — a field user has no publish action available', () => {
   const actions = FILES.find((f) => rel(f.path) === 'lib/actions.ts');
   assert.ok(actions);
 
-  // The publish path checks for a contractor explicitly. If that check ever
-  // widens to include 'field', the approval model is gone.
+  // The publish path asks the matrix, and the matrix grants `publish` to a
+  // contractor alone. Asserting the CALL rather than a role string means this
+  // keeps working when the matrix changes and keeps failing if the call goes.
   assert.match(
     actions.text,
-    /reviewUpdate[\s\S]{0,400}role !== 'contractor'/,
-    'reviewUpdate must refuse anyone who is not a contractor',
+    /reviewUpdate[\s\S]{0,400}assertCan\([^)]*'publish',\s*'dailyUpdate'\)/,
+    'reviewUpdate must ask permission before publishing',
   );
   assert.match(
     actions.text,
-    /updateVisibility[\s\S]{0,400}role !== 'contractor'/,
-    'updateVisibility must refuse anyone who is not a contractor',
+    /updateVisibility[\s\S]{0,400}assertCan\([^)]*'update',\s*'visibilitySettings'\)/,
+    'updateVisibility must ask permission before moving a gate switch',
   );
 });
 
@@ -123,29 +124,23 @@ test('§3.6 / D4 §6 — no lookup matches a project by name, title or address',
   assert.deepEqual(offenders, [], 'a lookup is keyed on a name or address, not an id');
 });
 
-// ── Rule 4 · The Hub owns exactly one write ─────────────────────────────────
-// D4 §5: "The PM decision buttons live in the Hub only — nothing in GHL.
-// Deciding what a homeowner sees is the Hub's job. This is the one place the
-// Hub owns the action."
+// ── Rule 4 · Every mutation is permission-checked ──────────────────────────
+// An earlier version of this file asserted that the Hub owns exactly ONE write,
+// from a too-narrow reading of D4 §5. That section says the PM decision buttons
+// live in the Hub and not in GHL; it does not say the Hub writes once. §12.1 is
+// explicit that the contractor dashboard "creates and controls everything the
+// other two experiences display".
+//
+// The invariant that actually matters is not how many writes there are. It is
+// that none of them happens without asking `permissions.ts` first — a hidden
+// button is a UI fact, and a server action is something anyone can post to.
 
-test('D4 §5 — the mutating server actions are only the publish decision and session control', () => {
+test('every mutating server action checks permission before it writes', () => {
   const actions = FILES.find((f) => rel(f.path) === 'lib/actions.ts');
   assert.ok(actions);
 
-  const exported = [...actions.text.matchAll(/^export async function (\w+)/gm)].map((m) => m[1]);
-
-  // reviewUpdate + updateVisibility ARE the publish decision. submitFieldUpdate
-  // is the crew proposing, which is the input to it. The rest is session
-  // handling and demo scaffolding, which own no project data.
-  const allowed = new Set([
-    'reviewUpdate', // the decision itself
-    'updateVisibility', // which clauses of the gate are open
-    'submitFieldUpdate', // the crew proposes; it never publishes
-    // Both of these originate in the Hub and GoHighLevel does not model them:
-    // a read receipt on an assignment, and an internal crew↔PM note. Neither
-    // touches project state, and neither can reach a homeowner.
-    'markTaskSeen',
-    'sendFieldMessage',
+  // Session control owns no project data, so it is exempt by name.
+  const sessionOnly = new Set([
     'signIn',
     'signOut',
     'viewAs',
@@ -153,11 +148,42 @@ test('D4 §5 — the mutating server actions are only the publish decision and s
     'toggleDemoData',
   ]);
 
-  const unexpected = exported.filter((name) => !allowed.has(name));
+  const bodies = [...actions.text.matchAll(/^export async function (\w+)[\s\S]*?\n\}/gm)];
+  assert.ok(bodies.length > 0, 'no server actions found — has the file moved?');
+
+  const unchecked: string[] = [];
+  for (const match of bodies) {
+    const name = match[1]!;
+    if (sessionOnly.has(name)) continue;
+    if (!/assertCan\(/.test(match[0])) unchecked.push(name);
+  }
+
   assert.deepEqual(
-    unexpected,
+    unchecked,
     [],
-    `new server action(s) ${unexpected.join(', ')} — the Hub owns one write; anything else must reflect GHL`,
+    `server action(s) ${unchecked.join(', ')} mutate without calling assertCan`,
+  );
+});
+
+test('the permission matrix grants nothing by default', () => {
+  const permissions = FILES.find((f) => rel(f.path) === 'lib/permissions.ts');
+  assert.ok(permissions);
+
+  // `?? false` is what makes an absent entry a refusal rather than a crash or
+  // an accidental allow. If that changes, every future action starts open.
+  assert.match(permissions.text, /\?\?\s*false/, 'can() must default to refusing');
+});
+
+test('D4 §5 — no role can complete a stage from the Hub', () => {
+  const permissions = FILES.find((f) => rel(f.path) === 'lib/permissions.ts');
+  assert.ok(permissions);
+
+  // completeStage exists as an action so its absence from every row is a
+  // deliberate statement rather than an omission. It must never be granted.
+  assert.equal(
+    /completeStage:\s*\[/.test(permissions.text),
+    false,
+    'completeStage has been granted to a role — GHL owns stage movement',
   );
 });
 

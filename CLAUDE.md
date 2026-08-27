@@ -31,7 +31,12 @@ one written after the client meeting and after the code existed. Six conflicts a
 2. **The field crew never touches GoHighLevel.** They only ever see the Hub.
 3. **Never key a cross-system link off a job title or name.** Dedicated ID field only — a rename
    breaks the link silently and shows the wrong data on a job site.
-4. **The Hub owns exactly one write: the PM's publish decision.** Everything else it reflects.
+4. **Every mutation is permission-checked.** `lib/permissions.ts` is the matrix — role ×
+   resource × action — and every server action calls `assertCan` before it writes. The
+   contractor dashboard is a **full CRUD surface** (§12.1: it "creates and controls everything
+   the other two experiences display"); the field crew writes updates, progresses its own tasks
+   and raises issues; the client approves, comments and reports. Only a contractor deletes, and
+   only a contractor publishes.
 5. **GoHighLevel is the operational system of record after handoff.** The Hub reads that state;
    it does not originate it. This is a boundary rule, **not a schema rule** — where the Hub
    stores what it reads is an engineering decision and stays ours.

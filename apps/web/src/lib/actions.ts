@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { accountForEmail, clearSession, getSession, homeFor, setSession } from './session';
 import { planReturn, planViewAs, realIdentity, viewAsEnabled } from './view-as';
+import { assertCan, ownsTask } from './permissions';
 import { demoToggleEnabled, setDemoData } from './demo-mode';
 import {
   approveInternally,
@@ -63,9 +64,9 @@ function today(): string {
  */
 export async function reviewUpdate(formData: FormData) {
   const session = await getSession();
-  if (session?.role !== 'contractor') {
-    throw new Error('§3.2: only a project manager may review field updates');
-  }
+  if (session === null) throw new Error('not signed in');
+  // §12.1 / §10 — publishing is the contractor's decision and nobody else's.
+  assertCan(session.role, 'publish', 'dailyUpdate');
 
   const id = String(formData.get('updateId') ?? '');
   const clientSummary = String(formData.get('clientSummary') ?? '');
@@ -120,9 +121,10 @@ export async function reviewUpdate(formData: FormData) {
  */
 export async function updateVisibility(formData: FormData) {
   const session = await getSession();
-  if (session?.role !== 'contractor') {
-    throw new Error('§9.1: only a contractor may change client visibility');
-  }
+  if (session === null) throw new Error('not signed in');
+  // §9.1 — the switches are clauses of the gate, so who may move them is a
+  // security question rather than a UI one.
+  assertCan(session.role, 'update', 'visibilitySettings');
 
   const projectId = String(formData.get('projectId') ?? '');
 
@@ -142,9 +144,9 @@ export async function updateVisibility(formData: FormData) {
 /** Field submits to the PM. Runs **WF3**, which never notifies the client. */
 export async function submitFieldUpdate(formData: FormData) {
   const session = await getSession();
-  if (session?.role !== 'field' && session?.role !== 'contractor') {
-    throw new Error('Only field users may submit daily updates');
-  }
+  if (session === null) throw new Error('not signed in');
+  // §12.2 — the crew writes updates. Note this is `create`, not `publish`.
+  assertCan(session.role, 'create', 'dailyUpdate');
 
   const projectId = String(formData.get('projectId') ?? '');
   const blocker = String(formData.get('blocker') ?? '');
@@ -257,16 +259,16 @@ export async function toggleDemoData(formData: FormData) {
  */
 export async function markTaskSeen(formData: FormData) {
   const session = await getSession();
-  if (session?.role !== 'field' && session?.role !== 'contractor') {
-    throw new Error('§9.4: only an assigned field user may clear their own task');
-  }
+  if (session === null) throw new Error('not signed in');
+  assertCan(session.role, 'update', 'task');
 
   const taskId = String(formData.get('taskId') ?? '');
   const task = TASKS.find((t) => t.id === taskId);
 
-  // Only your own assignment. Without this check, a field user could clear
-  // somebody else's ding by posting their task id.
-  if (task !== undefined && task.assignedTo === session.name) {
+  // Permission and ownership are separate questions and both have to pass.
+  // Without the second, a field user could clear somebody else's ding by
+  // posting their task id.
+  if (task !== undefined && ownsTask(session, task)) {
     task.seenAt = new Date().toISOString();
   }
 
@@ -284,9 +286,8 @@ export async function markTaskSeen(formData: FormData) {
  */
 export async function sendFieldMessage(formData: FormData) {
   const session = await getSession();
-  if (session?.role !== 'field' && session?.role !== 'contractor') {
-    throw new Error('§9.4: only a field user may post to the internal thread');
-  }
+  if (session === null) throw new Error('not signed in');
+  assertCan(session.role, 'create', 'message');
 
   const projectId = String(formData.get('projectId') ?? '');
   const body = String(formData.get('body') ?? '').trim();
