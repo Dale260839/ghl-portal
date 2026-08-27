@@ -18,6 +18,7 @@ import {
   DOCUMENTS,
   MESSAGES,
   PHOTOS,
+  PUNCH_LIST,
   SCHEDULE_ITEMS,
   SELECTIONS,
 } from './data/portal-fixtures.ts';
@@ -31,6 +32,7 @@ import type {
   Project,
   ProjectDocument,
   ProjectPhoto,
+  PunchListItem,
   ScheduleItem,
 } from './data/types.ts';
 
@@ -150,6 +152,34 @@ export function changeOrdersFor(project: Project): ChangeOrder[] {
   return CHANGE_ORDERS.filter(
     (c) => c.projectId === project.buildsuiteProjectId && c.clientVisible,
   ).sort((a, b) => b.createdDate.localeCompare(a.createdDate));
+}
+
+/**
+ * A punch item as the client may see it (§9.3).
+ *
+ * `internalNotes` is dropped by construction — the returned object has no such
+ * property, the same way `actualCost` is on a selection. A field that is never
+ * copied cannot be leaked by a screen that forgets to omit it.
+ */
+export type ClientPunchItem = Omit<PunchListItem, 'internalNotes'>;
+
+function toClientPunchItem(p: PunchListItem): ClientPunchItem {
+  const { internalNotes: _notes, ...safe } = p;
+  return safe;
+}
+
+/**
+ * The punch list the client may see.
+ *
+ * A closeout item is a task inside the contract, not a priced change, so the
+ * gate is the portal master switch plus the per-item publish flag — no budget
+ * switch. Oldest number first, so the list reads as a sequence.
+ */
+export function punchListFor(project: Project): ClientPunchItem[] {
+  if (!portalOpen(project)) return [];
+  return PUNCH_LIST.filter((p) => p.projectId === project.buildsuiteProjectId && p.clientVisible)
+    .map(toClientPunchItem)
+    .sort((a, b) => a.itemNumber.localeCompare(b.itemNumber));
 }
 
 /**
