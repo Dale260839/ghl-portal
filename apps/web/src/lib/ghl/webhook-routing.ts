@@ -19,7 +19,7 @@ import type { WebhookEvent } from './webhook.ts';
  */
 
 /** The workflows a GHL event can currently start. */
-export type RoutedWorkflow = 'WF2' | 'WF3' | 'WF4' | 'WF5' | 'WF6' | 'WF7' | 'WF8';
+export type RoutedWorkflow = 'WF1' | 'WF2' | 'WF3' | 'WF4' | 'WF5' | 'WF6' | 'WF7' | 'WF8';
 
 export type Routing =
   | { handled: true; workflow: RoutedWorkflow; why: string }
@@ -37,6 +37,17 @@ export type Routing =
  * unmatched branch logs the type precisely so the first real event tells us.
  */
 const BY_TYPE: Record<string, { workflow: RoutedWorkflow; why: string }> = {
+  // §11 WF1 — the handoff. This is the event that has never fired: no deal has
+  // ever been signed (`docs/kb/two-system-model.md`), so nothing has ever
+  // reached WF1 in production. Wired now so the first signature is not also the
+  // first test. WF1 is idempotent on `projectExists`, which matters here — a
+  // re-sent proposal or a retried delivery must not seed milestones twice.
+  senttocrm: { workflow: 'WF1', why: 'BuildSuite handed a signed project over' },
+  contactsenttocrm: { workflow: 'WF1', why: 'BuildSuite handed a signed project over' },
+  opportunitysenttocrm: { workflow: 'WF1', why: 'BuildSuite handed a signed project over' },
+  handoffreceived: { workflow: 'WF1', why: 'BuildSuite handed a signed project over' },
+  projecthandoff: { workflow: 'WF1', why: 'BuildSuite handed a signed project over' },
+
   // §11 WF2 — the stage sync. D4 §5: stage movement happens in GHL and the Hub
   // reflects it, so this is the event that keeps us honest.
   opportunitystagechange: { workflow: 'WF2', why: 'opportunity stage changed in GHL' },
