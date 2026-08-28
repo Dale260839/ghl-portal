@@ -4,10 +4,42 @@ import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, HealthBadge, ProgressBar, currency, shortDate } from '@/components/ui';
 import { hasOperationalDetail, moneyLabel, stageLabel } from '@/lib/data/types';
 import { currentDataSource } from '@/lib/data/current-source';
+import { getDealsReader } from '@/lib/buildsuite/deals';
+import {
+  applySignedOnly,
+  joinDealsToProjects,
+  signedOnlyFilterEnabled,
+  signedWorkBanner,
+  summarizeSignedWork,
+  type ProjectSigning,
+  type SignedStatus,
+} from '@/lib/signed-work';
+
+/** How each signing state reads on a row. `unknown` says so rather than guessing. */
+const SIGNING: Record<SignedStatus, { label: string; tone: 'good' | 'warn' | 'neutral' } | null> = {
+  signed: { label: 'Signed', tone: 'good' },
+  unsigned: { label: 'Unsigned', tone: 'warn' },
+  unknown: { label: 'No deal', tone: 'neutral' },
+};
 
 export default async function ProjectsList() {
   const scope = await requireTenantScope();
-  const projects = await (await currentDataSource(scope)).listProjects(scope);
+  const allProjects = await (await currentDataSource(scope)).listProjects(scope);
+
+  // The join needs BuildSuite. When it is unreachable every project is
+  // `unknown` — which is the honest answer, and the filter then hides nothing.
+  const reader = getDealsReader();
+  const deals = reader.available ? await reader.listDealsForProjects(
+    scope,
+    allProjects.map((p) => p.buildsuiteProjectId),
+  ) : [];
+
+  const joined: ProjectSigning[] = joinDealsToProjects(allProjects, deals);
+  const summary = summarizeSignedWork(joined);
+  const filterOn = signedOnlyFilterEnabled();
+  const rows = applySignedOnly(joined, filterOn);
+  const banner = signedWorkBanner(summary, filterOn);
+  const projects = rows.map((r) => r.project);
 
   return (
     <div className="space-y-6">
@@ -17,6 +49,12 @@ export default async function ProjectsList() {
           {projects.length} projects · every row keyed by its BuildSuite Project ID
         </p>
       </div>
+
+      {banner !== null && (
+        <div className="rounded-lg border border-navy-200 bg-navy-50 px-4 py-3 text-sm text-navy-600">
+          {banner}
+        </div>
+      )}
 
       <Card className="overflow-hidden">
         {/* Desktop table */}
@@ -32,15 +70,20 @@ export default async function ProjectsList() {
             </tr>
           </thead>
           <tbody className="divide-y divide-navy-100">
-            {projects.map((p) => (
+            {rows.map(({ project: p, status }) => (
               <tr key={p.buildsuiteProjectId} className="transition hover:bg-navy-50/60">
                 <td className="px-5 py-3.5">
-                  <Link
-                    href={`/dashboard/projects/${p.buildsuiteProjectId}`}
-                    className="text-sm font-medium text-navy-900 hover:underline"
-                  >
-                    {p.projectName}
-                  </Link>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/dashboard/projects/${p.buildsuiteProjectId}`}
+                      className="text-sm font-medium text-navy-900 hover:underline"
+                    >
+                      {p.projectName}
+                    </Link>
+                    {SIGNING[status] !== null && (
+                      <Badge tone={SIGNING[status].tone}>{SIGNING[status].label}</Badge>
+                    )}
+                  </div>
                   <div className="mt-0.5 text-xs text-navy-400">
                     {p.clientName} · {p.buildsuiteProjectId}
                   </div>
@@ -77,7 +120,7 @@ export default async function ProjectsList() {
 
         {/* Mobile cards */}
         <ul className="divide-y divide-navy-100 md:hidden">
-          {projects.map((p) => (
+          {rows.map(({ project: p, status }) => (
             <li key={p.buildsuiteProjectId}>
               <Link
                 href={`/dashboard/projects/${p.buildsuiteProjectId}`}
@@ -85,8 +128,13 @@ export default async function ProjectsList() {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-navy-900">
-                      {p.projectName}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-medium text-navy-900">
+                        {p.projectName}
+                      </span>
+                      {SIGNING[status] !== null && (
+                        <Badge tone={SIGNING[status].tone}>{SIGNING[status].label}</Badge>
+                      )}
                     </div>
                     <div className="mt-0.5 truncate text-xs text-navy-400">
                       {p.clientName} · {stageLabel(p)}
