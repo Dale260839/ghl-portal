@@ -1,9 +1,10 @@
 /**
  * Inline SVG icons for the sidebar.
  *
- * Hand-written rather than pulled from a package: there are twelve of them, they
- * never change, and a dependency for twelve paths costs more in bundle size and
- * supply chain than it saves in typing.
+ * Hand-written rather than pulled from a package: they are a small fixed set,
+ * they never change, and a dependency for a few dozen paths costs more in bundle
+ * size and supply chain than it saves in typing. (The count used to be written
+ * here and had already drifted twice — hence not writing it.)
  */
 
 function Icon({ children }: { children: React.ReactNode }) {
@@ -132,5 +133,11 @@ export const IconBuildSuite = (
   <Icon>
     <path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4" />
     <path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01" />
+  </Icon>
+);
+
+export const IconPipeline = (
+  <Icon>
+    <path d="M3 4h18l-7 8v7l-4 2v-9z" />
   </Icon>
 );

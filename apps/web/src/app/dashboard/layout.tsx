@@ -13,6 +13,7 @@ import {
   IconBuildSuite,
   IconDashboard,
   IconIssues,
+  IconPipeline,
   IconProjects,
   IconUpdates,
 } from '@/components/nav-icons';
@@ -36,6 +37,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const nav: NavItem[] = [
     { href: '/dashboard', label: 'Overview', icon: IconDashboard },
+    // Above Projects because it is upstream of them: a deal becomes a project,
+    // and today almost none of them do.
+    { href: '/dashboard/pipeline', label: 'Pipeline', icon: IconPipeline },
     { href: '/dashboard/projects', label: 'Projects', icon: IconProjects },
     { href: '/dashboard/updates', label: 'Field Updates', icon: IconUpdates, badge: pendingReview },
     { href: '/dashboard/issues', label: 'Issues', icon: IconIssues, badge: openIssues },
