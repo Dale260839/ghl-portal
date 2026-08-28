@@ -2,7 +2,6 @@ import 'server-only';
 
 import { redirect } from 'next/navigation';
 import { getSession } from './session.ts';
-import { DEMO_SCOPE, isDemoData } from './demo-mode.ts';
 import type { TenantScope } from './tenancy.ts';
 import type { Project } from './data/types.ts';
 
@@ -20,9 +19,6 @@ import type { Project } from './data/types.ts';
  */
 export async function requireTenantScope(): Promise<TenantScope> {
   const session = await getSession();
-  // Demo mode means "you are the demo agency" — a fictional tenant, but a real
-  // scope. Every read below it is still filtered; see `demo-mode.ts`.
-  if (session !== null && (await isDemoData())) return DEMO_SCOPE;
   if (session === null) redirect('/');
   if (session.authProfileIds === undefined || session.authProfileIds.length === 0) {
     // Signed in, but not linked to a BuildSuite profile — so there is no tenant

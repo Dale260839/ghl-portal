@@ -139,10 +139,14 @@ export function shortDate(iso: string): string {
 /**
  * Names the source behind the screen.
  *
- * Three states, not two. "Demo data" and "real projects, but no field updates
+ * Three states, not two. "Sample data" and "real projects, but no field updates
  * yet" are different things to be looking at, and a presenter told the wrong one
  * gets contradicted by their own screen mid-sentence — which is exactly what
  * happened when the dashboard claimed to be live and was on fixtures.
+ *
+ * The fixture state is now only reachable when neither BuildSuite nor GHL is
+ * configured — there is no longer a toggle that chooses it — so it means "this
+ * deployment is misconfigured", not "someone flipped a switch".
  */
 export function DataModeBanner({ kind }: { kind: 'fixture' | 'buildsuite' | 'ghl' }) {
   if (kind === 'ghl') return null;

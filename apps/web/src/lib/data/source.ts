@@ -197,18 +197,13 @@ export function isLiveData(): boolean {
 /**
  * Which source the next request will use, without building one.
  *
- * The banner needs to name it. "Demo data" and "real projects, no updates yet"
+ * The banner needs to name it. "Fixtures" and "real projects, no updates yet"
  * are different things to be looking at, and telling a contractor the wrong one
  * is how a demo gets contradicted by its own screen.
+ *
+ * (This comment sat above a `fixtureDataSource()` helper that only the retired
+ * demo toggle called — it always described this function, not that one.)
  */
-export function fixtureDataSource(): ProjectDataSource {
-  const existing = sources.get(FIXTURE_KEY);
-  if (existing !== undefined) return existing;
-  const created: ProjectDataSource = new FixtureDataSource();
-  sources.set(FIXTURE_KEY, created);
-  return created;
-}
-
 export function activeSourceKind(): DataSourceKind {
   const result = readGhlConfig();
   if (result.configured && canReadProjectObject(result.config)) return 'ghl';

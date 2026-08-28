@@ -144,14 +144,14 @@ export const STEPS: Step[] = [
       'Four tiles across the top — Active contract value, Outstanding balance, Updates awaiting review, Needs attention. Sweep them, then rest on the "Projects needing attention" panel below.',
     say: 'What your PM opens with coffee. The four tiles are the money and the queue. The panel underneath is the useful part — not a list of everything, a list of what has gone quiet or gone wrong.',
     watch:
-      'THIS SCREEN IS ON DEMO DATA. An amber "Demo data" banner sits across the top saying so, and the names are Johnson and Whitfield. Do not call these live numbers — the banner contradicts you while you speak. Point at the shape, not the figures.',
+      'THE NUMBERS ARE THIN AND YOU SHOULD SAY SO FIRST. The projects are real — read live from BuildSuite — but contract value and outstanding balance show a dash because BuildSuite does not hold them, and the review queue is empty because our tables are not created yet. Say "the figures land when the tables go in" BEFORE they read the dashes, not after.',
     then: 'Point at the "2" badge on Field Updates in the sidebar. Then open Projects.',
     backend:
-      "Fixtures. This screen reads through our data layer, which falls back to sample data until GHL_PROJECT_OBJECT_KEY is set — and even once set, that live path reads GoHighLevel custom objects, not Supabase. Two things touch BuildSuite's Supabase for real: the \"From BuildSuite\" screen, and the profile lookup at sign-in.",
+      "Live BuildSuite. This screen reads through our data layer, which prefers GoHighLevel custom objects when GHL_PROJECT_OBJECT_KEY is set, falls back to BuildSuite's Supabase — which is where it sits today — and only reaches fixtures when neither is reachable. So the projects, clients and dates are real. What is missing is everything that would live in our own tables: field updates, milestones, budgets. Those come back empty rather than invented.",
     ifAsked: [
       {
         q: 'Is this our real data?',
-        a: 'Not on this screen — that banner says demo data and it means it. The live one is "From BuildSuite" in the sidebar, and sign-in resolves your real account too. I would rather tell you than have you find it.',
+        a: 'Yes — these are your projects, read out of BuildSuite a moment ago, and sign-in resolved your real account. What is not real is the empty half: no field updates, no budgets, because those live in tables your team has not signed off on yet. I would rather tell you than have you find it.',
       },
     ],
   },
@@ -403,7 +403,7 @@ export const STEPS: Step[] = [
     hover: 'The Document Center list. Count the rows out loud if it helps.',
     say: 'Five documents here. There are six on the project. The missing one is a supplier invoice, marked internal. A list that showed you everything would prove nothing — this one is short on purpose, and that is the feature.',
     watch:
-      'Five of six is what the fixtures hold today. Count the rows on screen before the call and use the real number, or describe the shape and skip the figures.',
+      'Count the rows on screen before the call and use the real number, or describe the shape and skip the figures. Documents live in our own tables, which are not created yet, so this list may be empty — in which case describe the rule and do not point at rows.',
     then: 'Click Photos & Videos.',
     backend:
       'Default-deny. An item is invisible unless something explicitly marks it visible, so a document uploaded and never reviewed does not reach a client by sitting there. The failure mode is a homeowner asking why they cannot see something, which is a phone call. The other way round is a leak.',
@@ -479,12 +479,12 @@ export const STEPS: Step[] = [
     hotspot: 'sec-active-projects',
     star: true,
     hover: 'Open "From BuildSuite" in the sidebar. This one IS your live data — show it.',
-    say: 'Where this stands, bluntly. Sign-in through GoHighLevel is real, against your live account. This screen is reading your real BuildSuite database — those projects started as leads in GoHighLevel, went into BuildSuite to be bid, and we read them back out. Everything else today ran on demo data, and the amber banner said so the whole time. That is one configuration value and your team\'s sign-off on our tables, not a gap in the build.',
+    say: 'Where this stands, bluntly. Sign-in through GoHighLevel is real, against your live account. This screen is reading your real BuildSuite database — those projects started as leads in GoHighLevel, went into BuildSuite to be bid, and we read them back out. Everything you saw today read from that same live database — what was thin was the half that needs our own tables, and I flagged it each time rather than dressing it up. That is one configuration value and your team\'s sign-off on our tables, not a gap in the build.',
     watch:
-      'Say this even if nobody asks — it decides whether they believe the rest. Ending on the live screen rather than a fixture screen is deliberate: finish on something real.',
+      'Say this even if nobody asks — it decides whether they believe the rest. Ending here is deliberate: finish on the screen where the data is unambiguous.',
     then: 'Go into the asks.',
     backend:
-      "Next.js on Vercel, reading BuildSuite's Supabase read-only and GoHighLevel over its API. Our own tables are written and not yet created — that is the sign-off. 189 automated tests, and the ones that matter assert the rules rather than the screens.",
+      "Next.js on Vercel, reading BuildSuite's Supabase read-only and GoHighLevel over its API. Our own tables are written and not yet created — that is the sign-off. Automated tests in the high hundreds, and the ones that matter assert the rules rather than the screens.",
   },
 
   {

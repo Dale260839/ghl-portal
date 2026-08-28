@@ -2,9 +2,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/session';
 
 import { AppShell, type NavItem } from '@/components/app-shell';
-import { DemoToggle } from '@/components/demo-toggle';
 import { ViewSwitcher, ViewingAsBanner } from '@/components/view-switcher';
-import { demoToggleEnabled, isDemoData } from '@/lib/demo-mode';
 import { isViewingAs, viewAsEnabled } from '@/lib/view-as';
 import { DataModeBanner } from '@/components/ui';
 import { currentDataSource, currentSourceKind } from '@/lib/data/current-source';
@@ -38,7 +36,6 @@ export default async function PortalLayout({ children }: { children: React.React
   let contextSubtitle: string | undefined;
 
   const viewing = isViewingAs(session);
-  const demo = await isDemoData();
 
   if (session.role === 'client' && session.contactId !== undefined) {
     const projects = await db.listProjectsForContact(session.contactId);
@@ -74,11 +71,8 @@ export default async function PortalLayout({ children }: { children: React.React
       nav={nav}
       userName={session.name}
       headerExtra={
-        session.role === 'contractor' || viewing ? (
-          <>
-            {demoToggleEnabled() && <DemoToggle on={demo} returnTo="/portal" />}
-            {viewAsEnabled() && <ViewSwitcher current={session.role} viewing={viewing} />}
-          </>
+        (session.role === 'contractor' || viewing) && viewAsEnabled() ? (
+          <ViewSwitcher current={session.role} viewing={viewing} />
         ) : null
       }
       banner={

@@ -114,12 +114,11 @@ Step 19 deliberately ends on the **From BuildSuite** screen, because that is the
 one reading their real database. Finishing on live data rather than fixtures is
 the point of putting it last.
 
-### The dashboard is on real data now
+### The dashboard is on real data
 
-As of 2026-08-20 the contractor screens read **BuildSuite's live Supabase**, not
-fixtures. The banner says "Live BuildSuite data" and the projects are the
-tenant's own. Step 4's watch-out in the HUD is now out of date if you have
-pulled the latest — check the banner before you say anything about demo data.
+The contractor screens read **BuildSuite's live Supabase**. The banner says "Live
+BuildSuite data" and the projects are the tenant's own. Since 2026-08-28 there is
+no alternative — see below.
 
 What BuildSuite actually carries, measured: identity, client, city/state/zip,
 start and end dates, a budget **band**, and its own status word. It carries **no**
@@ -129,28 +128,38 @@ fixture-filled, on purpose: mixing invented updates into a list of real projects
 is indistinguishable from the product working.
 
 So on the call: the project list, client names and dates are real — but the
-Field Updates queue is **empty**, because BuildSuite has no updates. That would
-break the walkthrough's spine (steps 9-14).
+Field Updates queue is **empty**, because BuildSuite has no updates. That breaks
+the walkthrough's spine (steps 9-14).
 
-### The Demo data toggle
+### The Demo data toggle is gone (2026-08-28)
 
-There is a **Demo data** switch in the header, left of the "Viewing as"
-dropdown. Flip it on and the whole app runs on fixtures: six projects, a review
-queue with pending updates, documents, photos — everything the walkthrough needs.
-Flip it off and you are back on the tenant's real projects.
+It has been **removed**, at the project owner's instruction — the switch, the
+cookie, the fixture-scope override and the server action. There is no longer any
+way to put the app on sample data from the UI, and no environment variable that
+brings it back. Fixtures now load only when neither BuildSuite nor GHL is
+reachable at all, and the banner calls that a misconfiguration rather than a mode.
 
-**It is loud on purpose.** When it is on the pill turns amber and the banner says
-"Demo data". A contractor who forgets it is flipped would read sample content as
-their own book of work.
+**What that costs, stated plainly.** The toggle existed because the walkthrough's
+spine — a field update arriving, a PM reviewing it, publishing it, the homeowner
+seeing it — has no data on the real database. Measured on the Alliance tenant
+today: nine real projects, contract value and outstanding balance both a dash,
+**review queue empty, nothing published**. So **steps 9-14 cannot be demonstrated
+on live data.** They can be described, and the rules behind them are real and
+tested, but there is nothing on screen to point at.
 
-Demo mode also swaps the tenant to the fixtures' own agency — otherwise a
-GoHighLevel session would see only the fixtures that happen to share a profile id
-with it. Every read is still scoped and still filtered; the identity behind it is
-simply pretend.
+**Three ways out, and only the first is ours to do:**
 
-**For the call:** run steps 9-14 with the toggle **on**, then flip it **off** for
-step 19 so "what is live" lands on their actual database. That contrast is worth
-more than either state alone.
+1. **Run `0001_hub_tables.sql`** — nine tables, create-only. Then a real update
+   can be submitted during the call and the whole spine works on real data. This
+   is the actual fix and it is one task for Sing.
+2. Seed a demonstration project in the Hub tables once they exist, clearly
+   labelled, so the walkthrough has a worked example that is nonetheless real.
+3. Reinstate a fixture mode. Available, but it is what was just removed.
+
+**Until then, run the call on what is real:** sign-in, the project list, the
+**Pipeline** screen, and "From BuildSuite". The pipeline screen is the strongest
+thing to show — it is live, it is specific, and it says something true and
+uncomfortable that the client needs to hear.
 
 ### The one caveat you must not drop
 

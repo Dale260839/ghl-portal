@@ -5,7 +5,6 @@ import { redirect } from 'next/navigation';
 import { accountForEmail, clearSession, getSession, homeFor, setSession } from './session';
 import { planReturn, planViewAs, realIdentity, viewAsEnabled } from './view-as';
 import { assertCan, ownsTask } from './permissions';
-import { demoToggleEnabled, setDemoData } from './demo-mode';
 import {
   approveInternally,
   createDraftUpdate,
@@ -221,33 +220,6 @@ export async function returnToMyAccount() {
 
   await setSession(result.session);
   redirect(result.redirectTo);
-}
-
-/**
- * Demo data toggle (D-017, temporary scaffolding).
- *
- * Flips the whole app between real BuildSuite data and fixtures. It exists
- * because BuildSuite holds no field updates, so the review queue — the spine of
- * the client walkthrough — is empty on real data. See `lib/demo-mode.ts`.
- *
- * Contractor-only, checked here rather than trusted from the form: the control
- * being hidden is a UI fact, and this is a server action anyone can post to.
- */
-export async function toggleDemoData(formData: FormData) {
-  if (!demoToggleEnabled()) throw new Error('Demo data toggle is disabled');
-
-  const session = await getSession();
-  if (session === null) throw new Error('Sign in first');
-  const real = realIdentity(session);
-  if (real.role !== 'contractor') {
-    throw new Error('Only a contractor account can switch demo data');
-  }
-
-  await setDemoData(formData.get('on') === 'true');
-
-  // Every surface reads through the data source, so all of them change.
-  revalidatePath('/', 'layout');
-  redirect(String(formData.get('returnTo') ?? homeFor(session.role)));
 }
 
 /**

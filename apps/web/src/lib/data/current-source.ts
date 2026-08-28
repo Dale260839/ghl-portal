@@ -1,30 +1,26 @@
 import 'server-only';
 
-import { isDemoData } from '../demo-mode.ts';
 import type { TenantScope } from '../tenancy.ts';
 import {
   activeSourceKind,
-  fixtureDataSource,
   getDataSource,
   type DataSourceKind,
   type ProjectDataSource,
 } from './source.ts';
 
 /**
- * The data source for *this request*, honouring the demo toggle.
+ * The data source for *this request*.
  *
- * `getDataSource` picks between GHL, BuildSuite and fixtures from configuration
- * alone and stays free of request state so it can be tested. This is the thin
- * layer above it that reads the cookie, so screens call one function and never
- * have to remember the toggle exists.
+ * This once wrapped `getDataSource` to honour a demo-data cookie that swapped
+ * the whole app onto fixtures. That toggle is gone (D-017 retired), so these are
+ * now thin pass-throughs — kept rather than inlined because every screen calls
+ * them, and a source that later needs request state again has one place to go.
  */
 export async function currentDataSource(scope?: TenantScope): Promise<ProjectDataSource> {
-  if (await isDemoData()) return fixtureDataSource();
   return getDataSource(scope);
 }
 
-/** What the banner should say — the toggle wins over configuration. */
+/** What the banner should say. */
 export async function currentSourceKind(): Promise<DataSourceKind> {
-  if (await isDemoData()) return 'fixture';
   return activeSourceKind();
 }

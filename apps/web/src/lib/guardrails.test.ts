@@ -140,13 +140,7 @@ test('every mutating server action checks permission before it writes', () => {
   assert.ok(actions);
 
   // Session control owns no project data, so it is exempt by name.
-  const sessionOnly = new Set([
-    'signIn',
-    'signOut',
-    'viewAs',
-    'returnToMyAccount',
-    'toggleDemoData',
-  ]);
+  const sessionOnly = new Set(['signIn', 'signOut', 'viewAs', 'returnToMyAccount']);
 
   const bodies = [...actions.text.matchAll(/^export async function (\w+)[\s\S]*?\n\}/gm)];
   assert.ok(bodies.length > 0, 'no server actions found — has the file moved?');
