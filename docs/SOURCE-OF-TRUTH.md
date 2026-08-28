@@ -139,6 +139,33 @@ the matching key. The opportunity id stays a useful secondary link on the sales 
 Detail and the measured join chain: `docs/kb/two-system-model.md`. **Chris still confirms**, but
 there is now a reasoned default rather than three competing answers.
 
+---
+
+**Update 2026-08-28 (second measurement, while building the handoff).** Which id BuildSuite
+generates is still open, and the column survey changes the options:
+
+| Candidate | Format | Populated | Note |
+|---|---|---|---|
+| `projects.id` | UUID | **101 / 101** | What `deals.source_project_id` actually points at — all 47 |
+| `projects.project_code` | `BSA-NNN` (`BSA-002`) | 48 / 101 | Unique where present |
+| `projects.award_code` | — | 0 / 101 | Empty everywhere |
+| ARCHITECTURE §5 | `BSP-YYYY-NNNNNN` | **0 / 101** | No value in this format exists in BuildSuite |
+
+**`project_code` is very likely what D4 §6 meant.** D4 names the format `APS-081`; BuildSuite
+holds `BSA-002`. Three letters, a dash, digits — the same shape, with a different prefix. That
+was not visible when C-3 was first written because nobody had looked at the column.
+
+**So the question sharpens.** It is no longer "which of three keys" but:
+
+1. Adopt `project_code`, and fix its 53% gap — closest to D4 §6, human-readable on a job site
+2. Adopt `projects.id`, already universal and already the join key `deals` uses
+3. Mint a new `BSP-YYYY-NNNNNN`, faithful to ARCHITECTURE §5 as written
+
+Consequence, stated plainly: **the §8.2 handoff contract rejects every project in the database
+today**, because it validates against `BSP-YYYY-NNNNNN`. The mapping refuses rather than
+inventing an id, and reports the field as needing a decision. See `docs/HANDOFF-CONTRACT.md` §2,
+which is written for Sing and states the two implementable options and who pays for each.
+
 ### C-3 (original) · The shared key: three answers, and the data supports none of them 🟠
 
 | Source | Says |

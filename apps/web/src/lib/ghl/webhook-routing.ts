@@ -19,7 +19,7 @@ import type { WebhookEvent } from './webhook.ts';
  */
 
 /** The workflows a GHL event can currently start. */
-export type RoutedWorkflow = 'WF2' | 'WF3' | 'WF4' | 'WF5' | 'WF6' | 'WF7' | 'WF8';
+export type RoutedWorkflow = 'WF1' | 'WF2' | 'WF3' | 'WF4' | 'WF5' | 'WF6' | 'WF7' | 'WF8';
 
 export type Routing =
   | { handled: true; workflow: RoutedWorkflow; why: string }
@@ -37,6 +37,19 @@ export type Routing =
  * unmatched branch logs the type precisely so the first real event tells us.
  */
 const BY_TYPE: Record<string, { workflow: RoutedWorkflow; why: string }> = {
+  // §11 WF1 — the handoff landing. This is the far end of BuildSuite's
+  // Send-to-CRM: the deal was signed, GoHighLevel created the operational
+  // Project stamped with the shared key, and this is GHL telling us so.
+  //
+  // WF1's own trigger is documented as "Opportunity reaches Estimate Approved",
+  // so both shapes route here — whether GHL announces the new record or the
+  // stage that produced it, the Hub's job is the same and WF1 is idempotent on
+  // the shared key.
+  projecthandoffreceived: { workflow: 'WF1', why: 'a signed deal was handed over from BuildSuite' },
+  projectcreated: { workflow: 'WF1', why: 'a Project record was created in GHL' },
+  estimateapproved: { workflow: 'WF1', why: 'an opportunity reached Estimate Approved' },
+  opportunityestimateapproved: { workflow: 'WF1', why: 'an opportunity reached Estimate Approved' },
+
   // §11 WF2 — the stage sync. D4 §5: stage movement happens in GHL and the Hub
   // reflects it, so this is the event that keeps us honest.
   opportunitystagechange: { workflow: 'WF2', why: 'opportunity stage changed in GHL' },
