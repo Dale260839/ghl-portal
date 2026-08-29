@@ -515,7 +515,7 @@ export const STEPS: Step[] = [
       'Say this even if nobody asks — it decides whether they believe the rest. Ending here is deliberate: finish on the screen where the data is unambiguous.',
     then: 'Go into the asks.',
     backend:
-      "Next.js on Vercel, reading BuildSuite's Supabase read-only and GoHighLevel over its API. Our own tables are written and not yet created — that is the sign-off. Automated tests in the high hundreds, and the ones that matter assert the rules rather than the screens.",
+      "Next.js on Vercel, reading BuildSuite's Supabase read-only and GoHighLevel over its API. Our own tables are written and not yet created — that is the sign-off. Four hundred and nineteen automated tests, and the ones that matter assert the rules rather than the screens.",
   },
 
   {
@@ -646,42 +646,42 @@ export const STEPS: Step[] = [
     primary:
       'The known gaps, said the same way whether they ask or not.',
     hoodSimple:
-      'One portal screen, the front door for the client link, the field login, our tables, and multi-company sign-in before the second client.',
+      'Our tables need creating — that one unblocks the field and client screens. Then one portal screen, the front door for the client link, the field login, and multi-company sign-in before the second client.',
     seconds: 100,
     screen: 'stack',
     section: 'annex',
     hover: 'Nothing. Eye contact.',
-    say: 'One portal screen designed and not built: payments, and that one is waiting on your answer about the rail. The client sign-in link itself is built — single use, it expires, and an email address plus a project number on its own gets nobody in. What is not built is the branded page that sends it, because where that page lives is your call. The field login is not built. Our tables need creating in your database. Multi-tenant sign-in needs a GoHighLevel Marketplace app before the second client, not after. Two more things we are waiting on from the BuildSuite side. Everything else is real.',
+    say: 'Start with the big one: our tables need creating in your database. Nine of them, and until that happens the field updates and the whole client portal have nowhere to keep anything — which is why those screens are empty today rather than broken. It is one task and it is the highest-value thing on this list. Then: one portal screen designed and not built, payments, waiting on your answer about the rail. The client sign-in link is built — single use, it expires, and an email plus a project number on its own gets nobody in — but the branded page that sends it is not, because where that page lives is your call. The field login is not built. And multi-company sign-in needs a GoHighLevel Marketplace app before the second client, not after. Everything else is real.',
     watch:
-      'Say this list the same way whether asked or not. Do not name individuals to the client — "the BuildSuite side" is enough. If he asks whether a homeowner can log in today: the mechanism works, the page that emails the link does not.',
+      'LEAD WITH THE TABLES. It is the item that unblocks the most and it is the one that sounds smallest, so it gets skipped — and if they noticed empty screens earlier in the call, this is the sentence that explains them. Say the list the same way whether asked or not. Do not name individuals to the client. If he asks whether a homeowner can log in today: the mechanism works, the page that emails the link does not.',
     then: 'Go to the two dependencies.',
     backend:
       'Payments is a placeholder with a design behind it, not a missing route, so the nav stays honest about what is coming. Client sign-in is a signed single-use token and a /verify landing that mints the same session the contractor path does; the gap is the branded front door and the email send, plus his confirmation that the link — not the project number — is the credential. Multi-tenant is the real dependency: the token we authenticate with is scoped to one sub-account, so a second client needs the Marketplace app.',
   },
 
   {
-    title: 'The two we are waiting on',
+    title: 'The filter, and why it is not on',
     risk: true,
     primary:
-      'These decide which projects appear — and they\'re owed by another team, not by us.',
+      'We now know which projects are signed. The filter is built, and it is switched off on purpose.',
     hoodSimple:
-      'We\'re showing every project on the account because we can\'t yet tell which deals were actually won. That needs two pieces from the BuildSuite side.',
+      'We can now tell a won deal from an open one, so the list can narrow to signed work. It still shows everything because nothing has been signed yet.',
     seconds: 110,
     screen: 'systems',
     hotspot: 'inbound',
     section: 'annex',
     star: true,
     hover: 'The inbound arrow — leads coming into BuildSuite from GoHighLevel.',
-    say: 'Two open dependencies, both on the BuildSuite side, both about which projects we show rather than how. First, the list reads every project BuildSuite holds for the account; it should show only closed, signed work, and that needs the client-to-contractor matching finished before we can filter on it. Second, we cannot find how a contractor bid is classified in the data, so we cannot yet tell a won bid from an open one. Neither blocks a screen. Both decide what the list contains.',
+    say: 'Last time I told you we could not tell a won bid from an open one. We can now — we found it, and it was not where we had been looking. It sits on the deal, not on the project. So the filter exists, it is tested, and it is one switch away. I have deliberately left it off, and here is why: turn it on today and this list goes from nine projects to one, because nothing has been signed. The filter was never the blocker. A signature is.',
     watch:
-      'INTERNAL — do not say these names to the client: the matching is Sing\'s, and the bid classification is the one Pat set up that we cannot locate in the schema. Externally: "the BuildSuite side" and "how bids are classified".\n\nKeep these out of the two asks. Those are the client\'s decisions; these are things another team owes us.',
+      'This step used to be an apology and it is now a result — deliver it that way. You reported the gap last time; you closed it. The one honest caveat is that the definition still wants confirming by the BuildSuite side, because the column is empty on every row and no sample can prove it. Say that rather than overclaiming.\n\nDo not name individuals to the client. "The BuildSuite side" is enough.',
     then: 'Back to wherever you jumped in from.',
     backend:
-      'We read projects for the account filtered on active status, with no notion of "this deal was won". Until the matching lands there is no reliable join from a contractor to the client whose deal they closed, so "only closed deals" cannot be expressed as a query. We have been through the columns and cannot find the field or value marking a bid as won, so any filter would be a guess.',
+      "The answer was on `deals`, not `projects` — `signature_signed_at` or `sent_to_crm_at`, whichever lands first, joined by `deals.source_project_id` to `projects.id`. A project is signed, unsigned, or unknown, and the filter hides only what it can prove is unsigned: a project with no linked deal stays on the list, because only a quarter of deals carry a project id and hiding the rest would read as data loss. It ships behind a flag defaulting off, and that was measured rather than assumed — switching it on today takes this account from nine projects to one.",
     ifAsked: [
       {
         q: 'So the dashboard numbers are wrong?',
-        a: "They are that account's, but the list is broader than it should be — it includes work that is not signed yet. Narrowing it is a filter we are waiting on, not a rebuild.",
+        a: "They are that account's and they are right — the list is simply broader than it will be, because it includes work that is not signed yet. The screen says so in a line above the table. Narrowing it is one switch, not a rebuild.",
       },
     ],
   },
