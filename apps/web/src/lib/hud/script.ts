@@ -157,6 +157,36 @@ export const STEPS: Step[] = [
   },
 
   {
+    title: 'The pipeline — and the number nobody wants',
+    primary:
+      'Every enquiry, by stage, with how long it has sat. Twenty-three deals and not one signed.',
+    hoodSimple:
+      'This reads the BuildSuite matching engine directly — the same table that decides which contractor gets a job. Nothing here is estimated or entered by hand.',
+    seconds: 110,
+    screen: 'pipeline',
+    hotspot: 'sec-how-far-the-pipeline-gets',
+    star: true,
+    hover:
+      'Sweep the four tiles — Deals, Stalled, Dormant, Oldest. Then rest on "How far the pipeline gets" and stay there while you say the numbers.',
+    say: 'This is your funnel, live. Twenty-three enquiries. Sixteen are sitting at draft ready. Seventeen have not moved in over sixty days, and the oldest has sat for a hundred and seventy-four. Now the column on the right: matched to a contractor, zero. Proposal sent, zero. Signed, zero. Handed to GoHighLevel, zero. The build is not what is stuck — nothing has ever reached the point where the build starts.',
+    watch:
+      'DO NOT SOFTEN THIS AND DO NOT RUSH IT. It is the most valuable screen you have and the whole reason it exists is that these numbers were invisible until now. Say the zeros slowly. If it feels like bad news to deliver, that is the point — you found it, and you built the screen that shows it. Let the silence sit rather than filling it.',
+    then: 'Open Projects.',
+    backend:
+      "Read live from BuildSuite's `deals` table, tenant-scoped, read-only. The Hub had never read that table before this week — it read `projects`, which is the far end of the pipeline, so everything upstream was invisible. The stage bars are current occupancy, not cumulative flow, and the screen says so: a deal that advances leaves the count it came from. The right-hand column cuts across the stages instead, because a signed deal still carries whatever status it had.",
+    ifAsked: [
+      {
+        q: 'Is that our real data, or a sample?',
+        a: 'Real, read out of BuildSuite about a second ago. The one caveat: roughly half of all deals carry no contractor profile, so a per-contractor count can only undercount. The screen states that itself at the bottom rather than presenting the number as complete.',
+      },
+      {
+        q: 'So the system does not work?',
+        a: 'The opposite — everything downstream of a signature is built and tested, and until this screen existed nobody could see that the funnel was empty. The blocker is one deal getting all the way through, and that is an operational run, not a build task.',
+      },
+    ],
+  },
+
+  {
     title: 'Projects — and whose they are',
     primary:
       'You see your jobs and nobody else\'s — enforced in the data, not hidden in the page.',
@@ -248,12 +278,12 @@ export const STEPS: Step[] = [
       'A field update arrives in a pending state. Nothing is sent to the homeowner until someone approves and publishes it.',
     seconds: 70,
     screen: 'updates',
-    hotspot: 'sec-johnson-kitchen-remodel',
-    hover: 'The two pending cards — Johnson Kitchen Remodel and Whitfield Master Suite Addition.',
-    say: 'Your superintendent files an update from their phone on site. It arrives here. Notice what has not happened: your client has not been told anything.',
+    hotspot: 'title',
+    hover: 'The Field Updates heading and the empty review queue beneath it.',
+    say: 'Your superintendent files an update from their phone on site. It arrives here, and notice what has not happened: your client has not been told anything. Nothing moves to them until someone here decides it should.',
     watch:
-      'There must be at least one pending update before the call, or the next three steps have nothing to stand on. Two are seeded — check they are still there.',
-    then: 'On the Johnson card, point at the amber Internal field notes block.',
+      'THE QUEUE IS EMPTY AND YOU MUST SAY SO BEFORE THEY NOTICE. Field updates live in our own tables, which have not been created yet — that is the sign-off in the asks. So describe this step and the next two rather than clicking through them. Say: "the rule is built and tested, what it needs is somewhere to store an update." Do not mime it and do not skip it — it is the most important argument you have.',
+    then: 'Describe the two boxes on an update card.',
     backend:
       'An update moves through a small state machine and the names matter: Pending, Approved Internally, Approved & Published. Only the last is visible to a client. Approved Internally reads like approval and deliberately is not.',
   },
@@ -266,13 +296,13 @@ export const STEPS: Step[] = [
       'They\'re two separate fields on the record. Nothing copies the internal note into the client\'s version — which is why it can\'t leak later.',
     seconds: 150,
     screen: 'updates',
-    hotspot: 'sec-johnson-kitchen-remodel',
+    hotspot: 'title',
     star: true,
-    hover: 'The amber "Internal field notes" block, then the client summary box under it.',
+    hover: 'The Field Updates screen. Describe the card rather than pointing at one — the queue is empty.',
     say: 'Two boxes. The amber one is what the crew wrote — the tile came in wrong, the supplier let us down, we lost a day. The one below is what the client reads, and your PM edits it before it goes. Same event, two audiences. The crew never has to be diplomatic; the client never reads a raw complaint about a supplier.',
     watch:
-      'Read a line of the amber text out loud. Then actually type an edit into the client summary. This is where the call turns, and it turns on it being live rather than described.',
-    then: 'Move to the four buttons underneath.',
+      'This is where the call turns, and today you have to carry it with words — there is no card on screen to edit, because the Hub tables are not created yet. Say the two-audiences argument in full and slowly; it is the strongest thing in the product and it survives being described. Offer to show them the test that proves the internal note is never copied into the client field.',
+    then: 'Describe the four buttons.',
     backend:
       'Two separate fields on the record, not one field shown twice. No code path copies the internal note into the client summary. That is why the portal screen later can prove the complaint was not sent — it was never in the field that gets published.',
     ifAsked: [
@@ -291,12 +321,13 @@ export const STEPS: Step[] = [
       'Publishing runs a defined workflow rather than ad-hoc updates: it sets the status, notifies the client and stamps the date as one unit, so it can\'t half-happen.',
     seconds: 80,
     screen: 'updates',
-    hotspot: 'btn-approve-and-publish',
+    hotspot: 'title',
     hover:
-      'The four buttons on the card — Approve and Publish, Approve Internally, Edit Client Summary, Return for Revision.',
+      'Name the four choices a PM has on an update — Approve and Publish, Approve Internally, Edit Client Summary, Return for Revision.',
     say: 'Four choices. Publish it and the client gets the edited version. Approve internally and it is on your record but the client never sees it. Edit the summary first. Or send it back to the crew. Most systems give you one button. The second one matters most — plenty of a day is worth recording and not worth reporting.',
-    watch: 'Name all four before clicking anything. Then click Approve and Publish.',
-    then: 'Click Approve and Publish.',
+    watch:
+      'Name all four. The second one is the sale — sit on it. As above, there is nothing to click yet; say "and that is the button nobody else gives you" rather than reaching for a mouse.',
+    then: 'Switch to the client side.',
     backend:
       'Publishing runs a defined workflow, WF4, rather than updates scattered through a button handler. The workflow is a pure function: given this state, here are the effects — set the status, notify the contact, stamp the date. Something else carries them out, so we can test what a publish does without sending anyone a real notification, and an effect with no handler fails the build.',
   },
@@ -353,12 +384,12 @@ export const STEPS: Step[] = [
       'The same project record is translated for the client: your detailed stages collapse into a handful they\'d actually understand.',
     seconds: 90,
     screen: 'portal',
-    hotspot: 'title',
+    hotspot: 'sidebar',
     hover:
-      'The project name at the top, then the "Your input is needed" card, then "Current stage — In Progress".',
+      'The client sidebar — thirteen sections. Run down them.',
     say: 'Their job, in their words. Where it is now, what needs them next, what is coming. Your pipeline has nineteen stages because running a job takes nineteen. They see the one that matters, in plain English. Same record, translated.',
     watch:
-      'There are two Johnson projects in the switcher at the top — a homeowner can have more than one job with you. Worth a sentence if they notice it.',
+      'THE CLIENT PORTAL HAS NO CONTENT TODAY. Records for the homeowner live in the Hub tables, which are not created yet, so these screens render their empty state. What is real and worth showing is the navigation — thirteen sections, the shape of the whole product. Say what each screen will hold and why the rule behind it matters; do not pretend to read rows. There are two Johnson projects in the switcher at the top — a homeowner can have more than one job with you. Worth a sentence if they notice it.',
     then: 'Open Daily Updates in the nav.',
     backend:
       'Nineteen stages collapse to six for the client via a lookup table; an unrecognised stage falls back to Planning rather than throwing. A client seeing a slightly early stage is confusing; a crashed page is worse. The six are our reading, not something anyone confirmed — worth asking them.',
@@ -378,12 +409,12 @@ export const STEPS: Step[] = [
       'Before this page is built we check the portal is on, the item is marked client-visible, it\'s been published, and this homeowner owns the project. Then internal fields are stripped from what\'s left.',
     seconds: 110,
     screen: 'portalUpdates',
-    hotspot: 'title',
+    hotspot: 'sidebar',
     star: true,
-    hover: 'The top entry — the update you published two minutes ago.',
+    hover: 'The Daily Updates screen. Describe the published entry rather than pointing at one.',
     say: 'There it is. The update we approved a minute ago, in the clean version your PM wrote. Now tell me where the supplier complaint went. It is not further down and it is not hidden behind anything. It was never sent.',
     watch:
-      'This is the closing argument. Pause after "it was never sent" and let them fill the silence.',
+      'THE CLIENT PORTAL HAS NO CONTENT TODAY. Records for the homeowner live in the Hub tables, which are not created yet, so these screens render their empty state. What is real and worth showing is the navigation — thirteen sections, the shape of the whole product. Say what each screen will hold and why the rule behind it matters; do not pretend to read rows. This is the closing argument. Pause after "it was never sent" and let them fill the silence.',
     then: 'Open Documents.',
     backend:
       'Four checks ran before this response was built: is the portal on for this project, is the item client-visible, is it in a published state, does this contact own this project. First failure wins. Then internal fields are stripped from what is left. It happens where the data is read, so no page, no API call and no browser trick returns the internal note.',
@@ -398,12 +429,12 @@ export const STEPS: Step[] = [
       'Nothing is visible unless it\'s explicitly marked visible, so a document uploaded and never reviewed can\'t reach a client by sitting there.',
     seconds: 100,
     screen: 'portalDocuments',
-    hotspot: 'title',
+    hotspot: 'sidebar',
     star: true,
-    hover: 'The Document Center list. Count the rows out loud if it helps.',
+    hover: 'The Document Center. Describe the rule; there are no rows to count today.',
     say: 'Five documents here. There are six on the project. The missing one is a supplier invoice, marked internal. A list that showed you everything would prove nothing — this one is short on purpose, and that is the feature.',
     watch:
-      'Count the rows on screen before the call and use the real number, or describe the shape and skip the figures. Documents live in our own tables, which are not created yet, so this list may be empty — in which case describe the rule and do not point at rows.',
+      'THE CLIENT PORTAL HAS NO CONTENT TODAY. Records for the homeowner live in the Hub tables, which are not created yet, so these screens render their empty state. What is real and worth showing is the navigation — thirteen sections, the shape of the whole product. Say what each screen will hold and why the rule behind it matters; do not pretend to read rows. Count the rows on screen before the call and use the real number, or describe the shape and skip the figures. Documents live in our own tables, which are not created yet, so this list may be empty — in which case describe the rule and do not point at rows.',
     then: 'Click Photos & Videos.',
     backend:
       'Default-deny. An item is invisible unless something explicitly marks it visible, so a document uploaded and never reviewed does not reach a client by sitting there. The failure mode is a homeowner asking why they cannot see something, which is a phone call. The other way round is a leak.',
@@ -417,10 +448,10 @@ export const STEPS: Step[] = [
       'Same rule as documents: the crew shoots everything, the client sees what\'s been approved.',
     seconds: 70,
     screen: 'portalPhotos',
-    hotspot: 'title',
-    hover: 'The photo grid.',
+    hotspot: 'sidebar',
+    hover: 'The Photos screen.',
     say: 'Same rule. Three photos published, four on the job. The held-back one is a scratched door with a replacement already ordered — your call whether that is a conversation you want before it is fixed, rather than the system deciding for you.',
-    watch: 'Keep it short. You have made the argument; this is confirmation.',
+    watch: 'THE CLIENT PORTAL HAS NO CONTENT TODAY. Records for the homeowner live in the Hub tables, which are not created yet, so these screens render their empty state. What is real and worth showing is the navigation — thirteen sections, the shape of the whole product. Say what each screen will hold and why the rule behind it matters; do not pretend to read rows. Keep it short. You have made the argument; this is confirmation.',
     then: 'Click Designs & Selections.',
   },
 
@@ -456,7 +487,7 @@ export const STEPS: Step[] = [
       'Submitting notifies the project manager and never the client. There\'s no path from the crew\'s phone to your homeowner.',
     seconds: 90,
     screen: 'field',
-    hotspot: 'sec-add-daily-update',
+    hotspot: 'sec-my-projects',
     hover:
       'Narrow the browser to phone width FIRST. Then: Today\'s tasks, the "Add daily update" form, and "Submit to Project Manager" at the bottom.',
     say: 'The crew, on a phone, in a driveway. Big targets, few fields, thirty seconds to file. And the same two boxes from the other end: what happened, and what the client should hear. The crew writes both, your PM decides. That is the loop.',

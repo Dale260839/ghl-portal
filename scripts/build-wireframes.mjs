@@ -32,18 +32,19 @@ const cookies = JSON.parse(readFileSync(resolve(REPO, '.hud-cookies.json'), 'utf
 const PAGES = [
   { id: 'signin', name: 'Sign in', path: '/', as: null },
   { id: 'dashboard', name: 'Contractor Dashboard', path: '/dashboard', as: 'staff' },
+  { id: 'pipeline', name: 'Pipeline', path: '/dashboard/pipeline', as: 'staff' },
   { id: 'projects', name: 'Projects', path: '/dashboard/projects', as: 'staff' },
   {
     id: 'project',
     name: 'Project detail',
-    path: '/dashboard/projects/BSP-2026-000184',
+    path: '/dashboard/projects/:id',
     as: 'staff',
     route: '/dashboard/projects/...',
   },
   {
     id: 'visibility',
     name: 'Client Visibility Settings',
-    path: '/dashboard/projects/BSP-2026-000184/visibility',
+    path: '/dashboard/projects/:id/visibility',
     as: 'staff',
     route: '/dashboard/projects/.../visibility',
   },
@@ -58,9 +59,18 @@ const PAGES = [
   { id: 'field', name: 'Field Interface', path: '/field', as: 'staff' },
 ];
 
-/** Links that are navigation rather than content. */
+/**
+ * Links that are navigation rather than content.
+ *
+ * The one hand-maintained list left in a script whose whole purpose is that
+ * hand-maintained lists go stale — and it duly did: `/dashboard/pipeline` shipped
+ * and every wireframe silently lost a nav item, which is exactly the class of
+ * error this file was written to stop. `warnUnlistedNavHrefs` below now makes
+ * that loud instead of silent.
+ */
 const NAV_HREFS = new Set([
   '/dashboard',
+  '/dashboard/pipeline',
   '/dashboard/projects',
   '/dashboard/updates',
   '/dashboard/issues',
@@ -112,6 +122,29 @@ async function fetchPage(path, as) {
   return await res.text();
 }
 
+/**
+ * Shout when a top-level app link is not on NAV_HREFS.
+ *
+ * A missing entry does not fail anything — it just quietly drops the item from
+ * every map, and the HUD then points a presenter at the wrong row. Better to say
+ * so on every run than to discover it during a demo.
+ */
+function warnUnlistedNavHrefs(html, navCount) {
+  const unlisted = new Set();
+  for (const m of html.matchAll(/<a[^>]*href="(\/(?:dashboard|portal|field)[^"]*)"/g)) {
+    const href = m[1];
+    // Detail routes are content, not nav — two segments deep or more.
+    if (href.split('/').filter(Boolean).length > 2) continue;
+    if (!NAV_HREFS.has(href)) unlisted.add(href);
+  }
+  if (unlisted.size > 0) {
+    console.warn(
+      `  ! ${[...unlisted].join(', ')} look like nav but are not in NAV_HREFS ` +
+        `— ${navCount} item(s) captured. Add them or the maps will be wrong.`,
+    );
+  }
+}
+
 function parse(html) {
   // Nav, in order, de-duplicated (desktop sidebar and mobile bar both render).
   const nav = [];
@@ -125,6 +158,8 @@ function parse(html) {
     seen.add(href);
     nav.push({ href, label });
   }
+
+  warnUnlistedNavHrefs(html, nav.length);
 
   const headings = [];
   for (const m of html.matchAll(/<(h1|h2|h3)\b[^>]*>([\s\S]*?)<\/\1>/g)) {
@@ -260,9 +295,27 @@ const DIAGRAMS = `
 `;
 
 // ── Run ─────────────────────────────────────────────────────────────────────
+
+/**
+ * `:id` is resolved from the live projects list rather than hardcoded.
+ *
+ * It used to be `BSP-2026-000184`, a fixture id, which worked only while the
+ * session was the fixtures' invented profile. It is not, any more — the app
+ * reads live BuildSuite — so the id is whatever this tenant actually has, and
+ * asking the page beats guessing.
+ */
+const projectsHtml = await fetchPage('/dashboard/projects', 'staff');
+// href= specifically: an unanchored match also finds Next.js chunk paths like
+// /dashboard/projects/page.js, which are not projects.
+const firstProjectId = (projectsHtml.match(/href="\/dashboard\/projects\/([^"/?#]+)"/) ?? [])[1];
+if (firstProjectId === undefined) {
+  throw new Error('no project link on /dashboard/projects — cannot scrape the detail screens');
+}
+console.log(`resolved :id      ${firstProjectId}`);
+
 const screens = [];
 for (const page of PAGES) {
-  const html = await fetchPage(page.path, page.as);
+  const html = await fetchPage(page.path.replace(':id', firstProjectId), page.as);
   const parsed = parse(html);
   const hasSidebar = parsed.nav.length > 0;
   const { blocks, rows } = layout(parsed, hasSidebar);

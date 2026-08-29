@@ -29,7 +29,14 @@ const contractor = {
   role: 'contractor',
   name: 'Marcus Reyes',
   email: 'marcus@allianceproservices.com',
-  authProfileIds: ['7726102a-8e13-4006-889d-d68bc1cccd40'],
+  // The real Alliance profiles. This used to be the fixtures' invented profile,
+  // which made sense while the demo toggle existed — it does not now: every
+  // screen reads live BuildSuite, so a wireframe scraped under a fake profile
+  // would show empty panels that the real app never shows.
+  authProfileIds: [
+    '1dca7b15-9904-449b-a702-5725a5d1b069',
+    'a4502e38-bb67-420b-a7fc-3e1bc3d99c01',
+  ],
   ghlLocationId: 'IifYfP2B2NUaoDPdsTTa',
 };
 

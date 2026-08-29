@@ -24,6 +24,7 @@ const WEB = resolve(REPO, 'apps/web');
 const load = (relative) => import(pathToFileURL(resolve(WEB, relative)).href);
 
 const { rehearseHandoff, formatRehearsal } = await load('src/lib/handoff/rehearsal.ts');
+const { rehearseFullChain, formatFullChain } = await load('src/lib/handoff/full-chain.ts');
 const { normalizeDeal } = await load('src/lib/buildsuite/deals.ts');
 
 const live = process.argv.includes('--live');
@@ -116,22 +117,27 @@ if (!subject.deal.signed && !subject.deal.sentToCrm) {
   console.log(formatRehearsal(rehearseHandoff({ ...subject, deal: { ...subject.deal, signed: true } })));
 }
 
+/** The same subject with every payload gap closed — what "once Sing ships it" looks like. */
+const closed = {
+  deal: { ...subject.deal, signed: true },
+  project: {
+    ...subject.project,
+    projectCode: 'BSP-2026-000184',
+    contractAmount: 82_500,
+    clientEmail: subject.project.clientEmail ?? 'client@example.com',
+    clientPhone: subject.project.clientPhone ?? '555-0100',
+  },
+  projectManagerUserId: 'user-pm-1',
+};
+
 console.log('\n▶ Signed, with every payload gap closed\n');
-console.log(
-  formatRehearsal(
-    rehearseHandoff({
-      deal: { ...subject.deal, signed: true },
-      project: {
-        ...subject.project,
-        projectCode: 'BSP-2026-000184',
-        contractAmount: 82_500,
-        clientEmail: subject.project.clientEmail ?? 'client@example.com',
-        clientPhone: subject.project.clientPhone ?? '555-0100',
-      },
-      projectManagerUserId: 'user-pm-1',
-    }),
-  ),
-);
+console.log(formatRehearsal(rehearseHandoff(closed)));
+
+console.log(`\n${line}`);
+console.log('THE WHOLE LOOP — handoff through to the homeowner seeing an update');
+console.log(line);
+console.log();
+console.log(formatFullChain(rehearseFullChain(closed)));
 
 console.log(`\n${line}`);
 console.log('The blocked steps and who owns them: docs/HANDOFF-CONTRACT.md');
