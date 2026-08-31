@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { accountForEmail, clearSession, getSession, homeFor, setSession } from './session';
+import { accountForEmail, clearSession, getSession, homeFor, setSession, type Session } from './session';
 import { planReturn, planViewAs, realIdentity, viewAsEnabled } from './view-as';
 import { assertCan, ownsTask } from './permissions';
 import { requireTenantScope } from './scope';
@@ -41,14 +41,54 @@ import { TASKS } from './data/fixtures';
 import { MESSAGES } from './data/portal-fixtures';
 
 export async function signIn(_prev: { error?: string } | undefined, formData: FormData) {
-  const email = String(formData.get('email') ?? '');
-  const account = accountForEmail(email);
+  // Two distinct field names on purpose. The demo radios are `email`; a real
+  // account types `accountEmail`. Sharing one name would let a selected radio
+  // shadow what someone typed, and they would be signed in as a demo identity
+  // while believing they had used their own credentials.
+  const password = String(formData.get('password') ?? '');
+  const email = String(formData.get('accountEmail') ?? '') || String(formData.get('email') ?? '');
 
-  if (account === undefined) {
-    return { error: 'Unknown account. Use one of the demo identities below.' };
+  // Real invited users first. Someone who set a password through an invitation
+  // must be able to come back, and their account takes precedence over any
+  // demo identity that happens to share an email.
+  if (password !== '') {
+    const hub = getHubTeam();
+    if (hub.available) {
+      const result = await hub.team.authenticate(email, password);
+      if (result.ok) {
+        const m = result.membership;
+        await setSession({
+          role: m.role,
+          name: m.fullName === '' ? m.email : m.fullName,
+          email: m.email,
+          membershipId: m.id,
+          // A field user is scoped to their contractor's work; a client to
+          // their own projects. Both resolve server-side from the membership,
+          // never from anything the browser sent.
+          authProfileIds: [m.contractorId],
+          ...(m.role === 'client' ? { contactId: m.id } : {}),
+        } as Session);
+        redirect(homeFor(m.role));
+      }
+
+      if (result.reason === 'revoked') {
+        return { error: 'This account no longer has access. Ask your contractor to restore it.' };
+      }
+      if (result.reason === 'not-activated') {
+        return { error: 'Finish setting up your account using the invitation link first.' };
+      }
+      // 'unknown' falls through to the demo path rather than answering here,
+      // so a wrong password and an unknown email look identical.
+    }
   }
 
-  // Demo build: no password check. Real auth is GHL portal login (§9.2).
+  const account = accountForEmail(email);
+  if (account === undefined) {
+    return { error: 'We could not sign you in. Check the email and password.' };
+  }
+
+  // Demo build: the demo identities have no password. Real auth for staff is
+  // GHL portal login (§9.2); real auth for invited users is the branch above.
   await setSession({
     role: account.role,
     name: account.name,

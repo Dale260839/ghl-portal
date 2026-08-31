@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { signOut } from '@/lib/actions';
-import { getSession } from '@/lib/session';
+import { requireAccess } from '@/lib/access';
 import { activeSourceKind } from '@/lib/data/source';
 import { currentDataSource } from '@/lib/data/current-source';
 import { requireTenantScope } from '@/lib/scope';
@@ -21,9 +21,11 @@ import { projectsForField, tasksForField, unseenCount } from '@/lib/field-data';
  * the same number on every screen rather than each page computing its own.
  */
 export default async function FieldLayout({ children }: { children: React.ReactNode }) {
-  const session = await getSession();
-  if (session === null) redirect('/');
-  if (session.role !== 'field' && session.role !== 'contractor') redirect('/');
+  // Access, not just a session. For an invited crew member this re-reads the
+  // membership on every request, so a contractor revoking them takes effect
+  // now rather than at their next login.
+  const { session, role } = await requireAccess();
+  if (role !== 'field' && role !== 'contractor') redirect('/');
 
   const viewing = isViewingAs(session);
 

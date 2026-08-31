@@ -107,6 +107,12 @@ export interface Grant {
 const SCRYPT_COST = 16_384;
 const KEY_LENGTH = 64;
 
+/**
+ * A real hash of a value nobody knows, so an unknown email costs the same as a
+ * wrong password. Computed once at load rather than per request.
+ */
+const DUMMY_HASH_SEED = randomBytes(32).toString('hex');
+
 export function hashPassword(password: string): string {
   const salt = randomBytes(16);
   const derived = scryptSync(password, salt, KEY_LENGTH, { N: SCRYPT_COST });
@@ -136,6 +142,9 @@ export function verifyPassword(password: string, stored: string): boolean {
  * else, so someone holding a dump of `hub_invitations` still cannot accept an
  * invitation.
  */
+/** Built after hashPassword is defined, hence the placement. */
+const DUMMY_HASH = hashPassword(DUMMY_HASH_SEED);
+
 export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
@@ -365,6 +374,88 @@ export class HubTeam {
     });
 
     return { ok: true, membership: toMembership(membership!) };
+  }
+
+  /**
+   * Sign in an invited user.
+   *
+   * Looks up by email ACROSS contractors, because the person typing it does not
+   * know which contractor's tenant they belong to and should not have to.
+   *
+   * Deliberately no scope argument: this runs before there is a session, so
+   * there is no tenant yet. The membership row is what establishes one.
+   */
+  async authenticate(
+    email: string,
+    password: string,
+  ): Promise<{ ok: true; membership: Membership } | { ok: false; reason: 'unknown' | 'revoked' | 'not-activated' }> {
+    const normalized = email.trim().toLowerCase();
+    if (normalized === '' || password === '') return { ok: false, reason: 'unknown' };
+
+    const rows = await this.client.select<MembershipRow>({
+      from: 'hub_memberships',
+      filters: { email: `eq.${normalized}` },
+      limit: 5,
+    });
+
+    // Verify a password even when no row matched, against a throwaway hash, so
+    // the response takes the same time either way. Without it, "unknown email"
+    // returns measurably faster than "wrong password" and the endpoint becomes
+    // a way to enumerate who has been invited.
+    if (rows.length === 0) {
+      verifyPassword(password, DUMMY_HASH);
+      return { ok: false, reason: 'unknown' };
+    }
+
+    for (const row of rows) {
+      if (row.password_hash === null) continue;
+      if (!verifyPassword(password, row.password_hash)) continue;
+
+      // The password was right. Only now does the account state matter, and
+      // these reasons are safe to distinguish because the caller has proved
+      // they own the account.
+      if (row.revoked_at !== null) return { ok: false, reason: 'revoked' };
+      if (row.activated_at === null) return { ok: false, reason: 'not-activated' };
+
+      await this.client.update({
+        from: 'hub_memberships',
+        filters: { id: `eq.${row.id}` },
+        patch: { last_seen_at: new Date().toISOString() },
+      });
+      return { ok: true, membership: toMembership(row) };
+    }
+
+    return { ok: false, reason: 'unknown' };
+  }
+
+  /**
+   * Re-read a membership and its ticks on every request that needs them.
+   *
+   * NOT cached in the session on purpose. A session lasts eight hours; a
+   * contractor who revokes access or unticks a resource expects that to take
+   * effect now, not at the invitee's next login. One small query is the price
+   * of revocation meaning what it says.
+   */
+  async currentAccess(
+    membershipId: string,
+  ): Promise<{ membership: Membership; grants: Record<string, boolean> } | null> {
+    const [row] = await this.client.select<MembershipRow>({
+      from: 'hub_memberships',
+      filters: { id: `eq.${membershipId}` },
+      limit: 1,
+    });
+    if (row === undefined || row.revoked_at !== null) return null;
+
+    const grantRows = await this.client.select<{ resource: string; allowed: boolean }>({
+      from: 'hub_grants',
+      filters: { membership_id: `eq.${membershipId}` },
+      limit: 100,
+    });
+
+    return {
+      membership: toMembership(row),
+      grants: Object.fromEntries(grantRows.map((g) => [g.resource, g.allowed])),
+    };
   }
 
   async revoke(scope: TenantScope, membershipId: string, actor: { name: string }): Promise<void> {

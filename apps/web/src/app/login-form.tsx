@@ -45,6 +45,34 @@ export function LoginForm({ accounts }: { accounts: DemoAccount[] }) {
         })}
       </fieldset>
 
+      {/* Real accounts sign in here — anyone who set a password through an
+          invitation. The demo identities above have no password and are
+          scaffolding; this is the path that survives them. */}
+      <div className="mt-6 border-t border-navy-100 pt-5">
+        <p className="text-xs font-medium tracking-wide text-navy-400 uppercase">
+          Or sign in with your account
+        </p>
+        <div className="mt-3 space-y-2.5">
+          <input
+            name="accountEmail"
+            type="email"
+            autoComplete="username"
+            placeholder="your@email.com"
+            className="w-full rounded-lg border border-navy-200 px-3 py-2 text-sm"
+          />
+          <input
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            placeholder="Password"
+            className="w-full rounded-lg border border-navy-200 px-3 py-2 text-sm"
+          />
+        </div>
+        <p className="mt-2 text-xs text-navy-400">
+          Invited by a contractor? Use the email your invitation was sent to.
+        </p>
+      </div>
+
       {state?.error !== undefined && (
         <p className="mt-3 text-sm text-red-600" role="alert">
           {state.error}

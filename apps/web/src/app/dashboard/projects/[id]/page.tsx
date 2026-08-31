@@ -5,6 +5,8 @@ import { requireTenantScope } from '@/lib/scope';
 import { hasFinancials, hasOperationalDetail, stageLabel } from '@/lib/data/types';
 import { currentDataSource } from '@/lib/data/current-source';
 import { Badge, Card, CardHeader, HealthBadge, InternalNote, InternalOnly, ProgressBar, currency, shortDate } from '@/components/ui';
+import { ProjectEditor } from '@/components/project-editor';
+import { getHubRecords } from '@/lib/hub-db/records';
 
 export default async function ProjectOverview({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -18,6 +20,13 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
     db.listDailyUpdates(scope, id),
     db.listTasks(scope, id),
   ]);
+
+  // The Hub's overlay on this project — edits and archive state. Absent is the
+  // normal case: most projects have never been edited here.
+  const hub = getHubRecords();
+  const overlay = hub.available
+    ? ((await hub.records.getOverlays(scope, [id]))[0] ?? null)
+    : null;
 
   const switches: [string, boolean][] = [
     ['Client Portal Enabled', project.clientPortalEnabled],
@@ -243,6 +252,16 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
           </Card>
         </div>
       </div>
+      <ProjectEditor
+        projectId={id}
+        overlay={overlay}
+        buildSuite={{
+          title: project.projectName,
+          address: project.projectAddress,
+          clientName: project.clientName,
+        }}
+      />
+
     </div>
   );
 }

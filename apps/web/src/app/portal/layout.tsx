@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getSession } from '@/lib/session';
+import { requireAccess } from '@/lib/access';
 
 import { AppShell, type NavItem } from '@/components/app-shell';
 import { ViewSwitcher, ViewingAsBanner } from '@/components/view-switcher';
@@ -23,8 +23,9 @@ import {
 } from '@/components/nav-icons';
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
-  const session = await getSession();
-  if (session === null) redirect('/');
+  // Access, not just a session. A homeowner whose contractor revoked them is
+  // out on their next request, not eight hours later when the cookie expires.
+  const { session } = await requireAccess();
   // Contractors may preview the portal; the gate still runs against the
   // project's own contact, so previewing proves the rule rather than skipping it.
   if (session.role !== 'client' && session.role !== 'contractor') redirect('/');

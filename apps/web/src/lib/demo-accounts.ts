@@ -28,6 +28,16 @@ export interface Session {
   /** The GHL sub-account this session is working in (D-013). */
   ghlLocationId?: string;
   /**
+   * `hub_memberships.id`, for a user who arrived through an invitation rather
+   * than through GoHighLevel.
+   *
+   * Its presence means access is re-checked on every request against the Hub
+   * database — revocation and permission ticks take effect immediately rather
+   * than at the next login. A session alone is never sufficient authority for
+   * an invited user.
+   */
+  membershipId?: string;
+  /**
    * Demo scaffolding (D-016) — the contractor identity this view was assumed
    * from, so "Back to my account" restores it exactly. Absent on a normal
    * session; its presence is what makes the impersonation banner render.

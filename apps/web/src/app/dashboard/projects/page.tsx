@@ -5,6 +5,7 @@ import { Badge, Card, HealthBadge, ProgressBar, currency, shortDate } from '@/co
 import { hasOperationalDetail, moneyLabel, stageLabel } from '@/lib/data/types';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getDealsReader } from '@/lib/buildsuite/deals';
+import { getHubRecords } from '@/lib/hub-db/records';
 import {
   applySignedOnly,
   joinDealsToProjects,
@@ -24,7 +25,21 @@ const SIGNING: Record<SignedStatus, { label: string; tone: 'good' | 'warn' | 'ne
 
 export default async function ProjectsList() {
   const scope = await requireTenantScope();
-  const allProjects = await (await currentDataSource(scope)).listProjects(scope);
+  const everyProject = await (await currentDataSource(scope)).listProjects(scope);
+
+  // Archived projects leave the working list. They are not deleted and they are
+  // one click from returning — see /dashboard/archive. Filtering here rather
+  // than in the data source keeps the archive a Hub concept: BuildSuite has no
+  // idea any of this happened.
+  const hub = getHubRecords();
+  const overlays = hub.available
+    ? await hub.records.getOverlays(scope, everyProject.map((p) => p.buildsuiteProjectId))
+    : [];
+  const archivedIds = new Set(
+    overlays.filter((o) => o.archivedAt !== null).map((o) => o.projectId),
+  );
+  const allProjects = everyProject.filter((p) => !archivedIds.has(p.buildsuiteProjectId));
+  const archivedCount = everyProject.length - allProjects.length;
 
   // The join needs BuildSuite. When it is unreachable every project is
   // `unknown` — which is the honest answer, and the filter then hides nothing.
@@ -47,6 +62,14 @@ export default async function ProjectsList() {
         <h1 className="text-xl font-semibold tracking-tight text-navy-900">Projects</h1>
         <p className="mt-1 text-sm text-navy-400">
           {projects.length} projects · every row keyed by its BuildSuite Project ID
+          {archivedCount > 0 && (
+            <>
+              {' · '}
+              <Link href="/dashboard/archive" className="underline hover:text-navy-600">
+                {archivedCount} archived
+              </Link>
+            </>
+          )}
         </p>
       </div>
 
