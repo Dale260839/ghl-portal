@@ -17,3 +17,19 @@ next-env.d.ts
 
 # Signed sessions minted for the HUD map generator.
 .hud-cookies.json
+
+# Minted session cookies and other scratch credentials.
+#
+# On 2026-08-31 two valid contractor session tokens reached a commit via
+# `git add -A` while verifying screens over HTTP. They were signed with the same
+# SESSION_SECRET production uses, and this repository is public. They expired on
+# their own, but the fix is to make the mistake impossible rather than to
+# remember not to make it.
+#
+# If you need a session to test with, mint it into one of these names.
+*.cookie
+*.cookies.json
+.hud-cookies.json
+/.*.txt
+/_*.mjs
+/_*.html
