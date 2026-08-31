@@ -242,12 +242,12 @@ executed. A step we do not perform never reports `ok`.
 | **A second signed job** | One exists, from February. The loop has run once | Chris / ops |
 | Seven contractor profiles see no work | None of the three identity links resolves them | Sing, small and targeted |
 | The one signed project's details | BuildSuite RLS hides that row from our key | Sing |
-| The handoff payload | `buildsuite_project_id` must be `BSP-YYYY-NNNNNN`; nothing in BuildSuite is | Chris decides |
+| The handoff payload | Key **answered**: it is `project_code` (BSA-NNN). Our pattern still expects `BSP-YYYY-NNNNNN` and needs changing | us, half a day |
 | `contract_amount` | `total` is set on 8 of 46 proposals; `price` is free text | Sing |
 | Reading operational state from GoHighLevel | No object key; tier unconfirmed | Pat |
 | Live webhooks | The secret is still the placeholder | Pat |
 | Invitation emails | No sender configured — the link is shown to the contractor to send | Chris to choose |
-| Payments screen | Rail undecided | Chris |
+| Payments screen | Chris leans Stripe, pending whether GHL invoicing fires from a workflow — I am checking | us, then Chris |
 | RLS on the Hub database | Deliberately off while the schema settles | us, before real data |
 
 ---

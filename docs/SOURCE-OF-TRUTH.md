@@ -123,7 +123,26 @@ ID alone admits someone, that is a decision to overrule D1 and D3 and I need it 
 
 ---
 
-### C-3 · The shared key — **proposed resolution, 2026-08-28** 🟡
+### C-3 · The shared key — **ANSWERED by Chris, 2026-09-01** ✅
+
+**It is `projects.project_code`, the BSA number.** Chris confirmed in Slack, and
+the live data agrees exactly: 48 of 101 projects carry one, format `BSA-NNN`
+uniformly, all unique, BSA-001 to BSA-048. His "populated on half the projects
+already" is precisely right.
+
+**Consequence for us:** ARCHITECTURE §5 specifies `BSP-YYYY-NNNNNN` and
+`packages/contracts/src/ids.ts` validates against it, so a handoff carrying
+`BSA-002` is currently rejected. The documented format was never implemented by
+anyone; `project_code` is a real column with real values. The pattern changes to
+match reality.
+
+**Still open, and Chris raised it himself:** whether Supabase assigns the code on
+insert. It matters because 53 projects have none — a database default closes that
+gap permanently, an application-assigned one can reopen it. Sing's call.
+
+---
+
+### C-3 (earlier) · The proposed resolution, 2026-08-28 🟡
 
 **Measured since this was written:** `ghl_opportunity_id` is empty on **all 182 deals** and all
 101 projects. It cannot be the key today.
