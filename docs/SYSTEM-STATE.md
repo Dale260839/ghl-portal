@@ -1,4 +1,4 @@
-# What actually exists, 2026-08-29
+# What actually exists, 2026-09-01
 
 **Verified, not remembered.** Every claim on this page was checked against the
 repository or the live database on the date above. Where something is unproven it
@@ -12,27 +12,38 @@ than smoothed over.
 
 ## 1. The one-paragraph version
 
-Twenty-seven screens exist across three experiences and they work. The privacy
-gate, the permission matrix and all eight workflows are built and tested — 419
-tests. The contractor screens read **live production data** from BuildSuite.
+Thirty screens exist across three experiences and they work. The privacy gate,
+the permission matrix and all eight workflows are built and tested — **502
+tests**. The contractor screens read **live production data** from BuildSuite.
 
-What does not exist is **data for the operational half**: no field updates, no
-milestones, no documents, no photos, because the nine tables that would hold them
-have never been created. And upstream of all of it, **no deal has ever been
-signed** — 0 of 182 — so the loop the product exists to run has never run once.
+**Two things on this page changed on 2026-08-31 and both were corrections to
+claims I had been repeating.**
 
-The build is not the blocker. That is the whole point of this page.
+**A job HAS been signed.** "0 of 182" was measured against
+`deals.signature_signed_at`, a column BuildSuite does not populate. Signature
+lives on `proposals`: four SIGNED rows with Adobe agreement ids and signed PDFs,
+February 2026, all on one project. One job, once — not none, ever.
+
+**The Hub now has its own database and writes to it.** A separate Supabase
+project, so BuildSuite stays read-only forever. Sixteen tables, live. Contractors
+can edit, archive and restore records, and invite their crew and clients.
+
+What still does not exist is a second signed job, and a link from most sign-ins
+to their contractor record.
 
 ---
 
-## 2. Screens — 27, all reachable
+## 2. Screens — 30, all reachable
 
-### Contractor (8)
+### Contractor (11)
 
 | Route | State |
 |---|---|
 | `/dashboard` | Live projects; money tiles show `—` (BuildSuite has no contract value) |
-| `/dashboard/pipeline` | **Live and complete.** The deal funnel — new this sprint |
+| `/dashboard/engagements` | **The book of work.** Live proposals, contractor-scoped, signed first |
+| `/dashboard/pipeline` | The deal funnel — upstream of a job |
+| `/dashboard/team` | Invite crew and clients, tick what they see, revoke |
+| `/dashboard/archive` | Everything archived, restorable in one click |
 | `/dashboard/projects` | Live projects, with signed / unsigned / no-deal badges |
 | `/dashboard/projects/[id]` | Live project detail |
 | `/dashboard/projects/[id]/visibility` | The per-project client-visibility switches |
@@ -57,10 +68,10 @@ All thirteen render. **All thirteen show their empty state on real data**, becau
 every record they display lives in the uncreated tables. The navigation is real;
 the content is not there yet.
 
-### Entry points (2)
+### Entry points (3)
 
-Sign-in (`/`) and the GoHighLevel landing (`/auth/ghl`). With the three groups
-above that is **27 page routes**.
+Sign-in (`/`), the GoHighLevel landing (`/auth/ghl`) and the invitation accept
+page (`/invite/[token]`). With the three groups above that is **31 page routes**.
 
 ### API endpoints (3)
 
@@ -78,7 +89,9 @@ selector: `GHL_PROJECT_OBJECT_KEY` is empty so GoHighLevel is skipped,
 |---|---|---|
 | Projects, clients, addresses, dates | BuildSuite `projects` | **Live** |
 | Deal pipeline, stages, signature state | BuildSuite `deals` | **Live** — new this sprint |
-| Field updates, milestones, tasks, documents, photos, messages | `hub_*` tables | **Do not exist** |
+| Field updates, milestones, tasks, documents, photos, messages | `hub_*` tables | **Exist — the Hub's own database, 16 tables** |
+| Record edits and archive | `hub_project_state` overlay | **Live.** BuildSuite is never written to |
+| Team, invitations, permission ticks | `hub_memberships` / `_invitations` / `_grants` | **Live** |
 | Operational state after handoff | GoHighLevel custom objects | No object key; tier unconfirmed |
 
 Fixtures still exist as a last-resort fallback when neither source is reachable,
@@ -115,6 +128,50 @@ exposure, and a test fails if any is added back.
 **Caveat carried on the screen:** `deals.auth_profile_id` is populated on roughly
 half the table, so a per-contractor count undercounts. The pipeline screen states
 this itself rather than presenting the number as complete.
+
+---
+
+## 3b. The two databases
+
+| | Database | Access |
+|---|---|---|
+| **BuildSuite** | `bkngicyqgdwzmoeahqdi` | **Read-only, forever.** No write method exists on its client |
+| **Project Hub** | `nexpqqxarimqmntnvzff` | Read and write. Everything the Hub owns |
+
+Two clients, deliberately not one. `BuildSuiteClient` can only issue GET, so
+writing to someone else's production is structurally impossible rather than a
+rule to remember. `HubClient` writes — and has **no delete method at all**,
+because archive is `archived_at` plus who and why.
+
+**RLS is currently OFF on the Hub database** (owner's decision, 2026-08-31, so
+policy-writing did not block the build). That makes two guardrails load-bearing
+and both are tested: the key is server-only and never `NEXT_PUBLIC_`, and
+exactly one module reads it. `supabase/hub/0002_rls_development.sql` carries the
+re-enable statements. **Write the policies before a real contractor's data
+lands here.**
+
+---
+
+## 3c. Tenancy has two keys, and knowing which is which matters
+
+| Reading | Filtered by |
+|---|---|
+| `projects`, `deals` | `auth_profile_id` |
+| **`proposals`** | **`contractor_id`** — it has no `auth_profile_id` |
+| `hub_*` | `contractor_id` |
+
+That difference caused a real leak, found and fixed on 2026-08-31: passing a
+scope to a `proposals` read only *asserted*, it did not filter, so every
+contractor saw every other contractor's live work and prices.
+
+The fix is `contractor-identity.ts` — resolve the session to a contractor via
+`auth_profiles.contractor_id`, then an exact single email match. **When it
+cannot be resolved the answer is nothing, not everything**, and an ambiguous
+email resolves to nothing rather than guessing.
+
+**`auth_profiles.contractor_id` is populated on 1 of 110 profiles.** So today
+most sign-ins see an empty Active Work screen with an explanation. That is the
+single highest-value backfill available and it is BuildSuite's to run.
 
 ---
 
@@ -166,44 +223,42 @@ executed. A step we do not perform never reports `ok`.
 
 | | Reason | Owner |
 |---|---|---|
-| **A signed deal** | 0 of 182. Nothing has completed the loop | Chris / ops |
-| Field updates, milestones, documents, photos | `0001_hub_tables.sql` never run | Sing |
-| The client portal showing anything | Same — every record lives in those tables | Sing |
-| The handoff payload | `buildsuite_project_id` must be `BSP-YYYY-NNNNNN`; **no value in that format exists in BuildSuite** | Chris decides, Sing implements |
-| `contract_amount` | BuildSuite has a budget *band*, not an amount | Sing |
+| **A second signed job** | One exists, from February. The loop has run once | Chris / ops |
+| **Most sign-ins see no work** | `auth_profiles.contractor_id` is 1 of 110 | **Sing — highest value** |
+| The one signed project's details | BuildSuite RLS hides that row from our key | Sing |
+| The handoff payload | `buildsuite_project_id` must be `BSP-YYYY-NNNNNN`; nothing in BuildSuite is | Chris decides |
+| `contract_amount` | `total` is set on 8 of 46 proposals; `price` is free text | Sing |
 | Reading operational state from GoHighLevel | No object key; tier unconfirmed | Pat |
-| Live webhooks | The secret in `.env.local` is still the placeholder | Pat |
-| Payments screen | Rail undecided — deliberately unbuilt | Chris |
-| The signed-only filter being **on** | Would take Alliance from 9 projects to 1 | waits on a signature |
-
-### The shared key, in detail
-
-| Candidate | Format | Populated |
-|---|---|---|
-| `projects.id` | UUID | **101 / 101** — and what `deals.source_project_id` points at |
-| `projects.project_code` | `BSA-002` | 48 / 101, unique where present |
-| `projects.award_code` | — | 0 / 101 |
-| ARCHITECTURE §5 requires | `BSP-YYYY-NNNNNN` | **0 / 101** |
-
-D4 §6 names the format `APS-081`; BuildSuite holds `BSA-002`. Same shape,
-different prefix — `project_code` is very likely what was meant. Not resolved
-here: it is open decision C-3 and choosing is not ours.
+| Live webhooks | The secret is still the placeholder | Pat |
+| Invitation emails | No sender configured — the link is shown to the contractor to send | Chris to choose |
+| Payments screen | Rail undecided | Chris |
+| RLS on the Hub database | Deliberately off while the schema settles | us, before real data |
 
 ---
 
-## 7. The nine tables that do not exist
+## 7. The Hub's sixteen tables — created 2026-08-31
 
-`0001_hub_tables.sql`, create-only — no `ALTER`, no `DROP`, nothing touching an
-existing table. RLS deny-by-default, both tenancy keys on every row.
+`supabase/hub/0001_initial.sql`, create-only, run by hand in the SQL editor
+because the app's publishable key cannot execute DDL (correctly — a running app
+should never change its own schema).
 
 ```
-hub_daily_updates          hub_milestones      hub_update_acknowledgements
-hub_documents              hub_photos          hub_update_comments
-hub_messages               hub_schedule_items  hub_visibility_settings
+hub_milestones      hub_schedule_items   hub_tasks
+hub_daily_updates   hub_update_comments  hub_update_acknowledgements
+hub_issues          hub_messages         hub_documents
+hub_photos          hub_visibility_settings
+hub_project_state   hub_activity
+hub_memberships     hub_invitations      hub_grants
 ```
 
-**This single unrun file is why the field interface and the entire client portal
-have no content.** It needs the service-role key, which is why it is Sing's.
+**`supabase/migrations/0001_hub_tables.sql` is SUPERSEDED and must not be run.**
+It was written to add these inside BuildSuite's database and declares foreign
+keys to `public.projects`, which does not exist in the Hub's project — it would
+fail on the first table.
+
+**No foreign keys to BuildSuite.** `project_id` is a plain indexed uuid.
+Cross-database referential integrity is the application's job and it already
+does it; the constraint was never enforceable across a network boundary.
 
 ---
 
@@ -222,9 +277,9 @@ have no content.** It needs the service-role key, which is why it is Sing's.
 
 ---
 
-## 9. Tests — 419, and what they are for
+## 9. Tests — 502, and what they are for
 
-30 test files. They encode invariants rather than implementation: a test named
+35 test files. They encode invariants rather than implementation: a test named
 `§3.2 …` asserts an architectural MUST, and if it fails the code is wrong, not
 the test.
 

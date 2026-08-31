@@ -1,5 +1,32 @@
 # Working in this repo
 
+## 🛑 TWO DATABASES — know which one you are touching (2026-08-31)
+
+| | Project | Access |
+|---|---|---|
+| **BuildSuite** | `bkngicyqgdwzmoeahqdi` | **READ-ONLY, FOREVER.** `BuildSuiteClient` has no write method |
+| **Project Hub** | `nexpqqxarimqmntnvzff` | Read and write. `HubClient`. Everything the Hub owns |
+
+Every Hub write goes to the Hub's database. BuildSuite is never written to — a
+contractor editing a project stores an **overlay** in `hub_project_state` that
+renders on top of BuildSuite's row.
+
+Migrations for the Hub live in `supabase/hub/`. `supabase/migrations/0001_hub_tables.sql`
+is **SUPERSEDED and must not be run** — it targets BuildSuite's database.
+
+**RLS is currently OFF on the Hub database** (owner's decision, so policy-writing
+did not block the build). Two things are therefore load-bearing and tested:
+`HUB_SUPABASE_KEY` is server-only and never `NEXT_PUBLIC_`, and exactly one
+module reads it. Re-enable statements: `supabase/hub/0002_rls_development.sql`.
+
+### Tenancy has two keys
+
+`projects` and `deals` filter on `auth_profile_id`. **`proposals` has none** — it
+filters on `contractor_id`, resolved by `lib/buildsuite/contractor-identity.ts`.
+Passing a scope to a proposals read only *asserts*; it does not filter. That
+caused a real cross-tenant leak on 2026-08-31. **When the contractor cannot be
+resolved, show nothing — never everything.**
+
 ## 🛑 Live-system guardrails — read before touching anything
 
 These are standing rules from the project owner (decision D-003), not
