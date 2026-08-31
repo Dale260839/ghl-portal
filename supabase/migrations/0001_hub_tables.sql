@@ -1,3 +1,18 @@
+-- ############################################################################
+-- ##  SUPERSEDED 2026-08-31 - DO NOT RUN THIS FILE.
+-- ##
+-- ##  It was written to add Hub tables INSIDE BuildSuite's production
+-- ##  database. That plan changed: the Hub now has its own Supabase project,
+-- ##  so BuildSuite stays read-only forever and nobody needs write access to
+-- ##  someone else's production data.
+-- ##
+-- ##  Run `supabase/hub/0001_initial.sql` instead. See supabase/hub/README.md.
+-- ##
+-- ##  This file would fail here anyway - it declares foreign keys to
+-- ##  public.projects, which does not exist in the Hub's database. Kept only
+-- ##  as the record of what was designed and why.
+-- ############################################################################
+
 -- ============================================================================
 -- Project Hub — own tables (migration 0001)
 --
