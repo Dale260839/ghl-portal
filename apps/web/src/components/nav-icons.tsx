@@ -156,3 +156,10 @@ export const IconTeam = (
     <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
   </Icon>
 );
+
+export const IconEngagements = (
+  <Icon>
+    <path d="M12 2 3 7v10l9 5 9-5V7z" />
+    <path d="m3 7 9 5 9-5M12 12v10" />
+  </Icon>
+);

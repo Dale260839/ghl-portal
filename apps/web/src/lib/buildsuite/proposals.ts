@@ -191,8 +191,15 @@ export interface BuildSuiteProposalsReader {
   readonly available: true;
   /** Every proposal for a set of projects. Scope is required. */
   listForProjects(scope: TenantScope, projectIds: string[]): Promise<Proposal[]>;
-  /** Live engagements across the tenant, unfiltered by project. */
-  listLive(scope: TenantScope, limit?: number): Promise<Proposal[]>;
+  /**
+   * This contractor's live engagements.
+   *
+   * `contractorId` is REQUIRED. `proposals` has no `auth_profile_id`, so
+   * without it a "scoped" read returns every contractor's work to anyone
+   * signed in — exactly the leak found in August. Resolve it with
+   * `resolveContractor` and show nothing when it cannot be resolved.
+   */
+  listLive(scope: TenantScope, contractorId: string, limit?: number): Promise<Proposal[]>;
 }
 
 export interface ProposalsUnavailable {
@@ -228,13 +235,25 @@ export class SupabaseProposalsReader implements BuildSuiteProposalsReader {
     return rows.map(normalizeProposal);
   }
 
-  async listLive(scope: TenantScope, limit = 200): Promise<Proposal[]> {
+  async listLive(scope: TenantScope, contractorId: string, limit = 200): Promise<Proposal[]> {
     assertScope(scope, 'live proposals');
+
+    // Refused rather than defaulted. An empty contractor id would produce
+    // `contractor_id=eq.` which PostgREST treats as a match on empty string,
+    // and the failure would look like "no work" rather than "no filter".
+    if (contractorId.trim() === '') {
+      throw new TypeError(
+        'listLive requires a contractor id — proposals carry no auth_profile_id, so an unfiltered read would expose every contractor',
+      );
+    }
 
     const rows = await this.client.select<BuildSuiteProposalRow>({
       from: 'proposals',
       columns: PROPOSAL_COLUMNS,
-      filters: { status: 'in.(submitted,accepted)' },
+      filters: {
+        contractor_id: `eq.${contractorId}`,
+        status: 'in.(submitted,accepted)',
+      },
       order: 'updated_at.desc',
       limit,
     });

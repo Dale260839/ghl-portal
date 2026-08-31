@@ -11,6 +11,7 @@ import {
   IconBuildSuite,
   IconDashboard,
   IconArchive,
+  IconEngagements,
   IconIssues,
   IconTeam,
   IconPipeline,
@@ -36,6 +37,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const nav: NavItem[] = [
     { href: '/dashboard', label: 'Overview', icon: IconDashboard },
+    // First after the overview: this is the book of work, and it is what a
+    // project manager opens. Everything below it is either upstream of a job
+    // (Pipeline) or a detail of one.
+    { href: '/dashboard/engagements', label: 'Active Work', icon: IconEngagements },
     // Above Projects because it is upstream of them: a deal becomes a project,
     // and today almost none of them do.
     { href: '/dashboard/pipeline', label: 'Pipeline', icon: IconPipeline },
