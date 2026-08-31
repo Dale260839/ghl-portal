@@ -92,7 +92,7 @@ test('a project lookup with no ids never reaches the network', async () => {
 
 test('the dedicated column wins when it is populated', async () => {
   const { resolver, urls } = fake([
-    [{ id: 'p1', contractor_id: 'c-linked', email: 'ralph@example.com' }],
+    [{ id: 'p1', contractor_id: 'c-linked', contact_id: 'ghl-1', email: 'ralph@example.com' }],
   ]);
 
   const result = await resolver.resolve(scope);
@@ -102,9 +102,37 @@ test('the dedicated column wins when it is populated', async () => {
   assert.equal(urls.length, 1, 'no email lookup is needed when the link exists');
 });
 
-test('email is the fallback, and only on an exact single match', async () => {
+test('the GoHighLevel contact id is tried before email', async () => {
+  // Better covered than the dedicated column: contractors.ghl_contact_id is set
+  // on 472 of 483, because it is written when a contractor is onboarded through
+  // GHL — which is how they all arrive.
   const { resolver } = fake([
-    [{ id: 'p1', contractor_id: null, email: 'Ralph@Example.com' }],
+    [{ id: 'p1', contractor_id: null, contact_id: 'ghl-123', email: 'ralph@example.com' }],
+    [{ id: 'c-by-contact', ghl_contact_id: 'ghl-123' }],
+  ]);
+
+  const result = await resolver.resolve(scope);
+  assert.equal(result.resolved, true);
+  assert.equal(result.identity.contractorId, 'c-by-contact');
+  assert.equal(result.identity.via, 'ghl_contact');
+});
+
+test('an ambiguous contact id falls through rather than guessing', async () => {
+  // Seven contact ids in the live data are shared by more than one contractor.
+  const { resolver } = fake([
+    [{ id: 'p1', contractor_id: null, contact_id: 'shared', email: 'ralph@example.com' }],
+    [{ id: 'c-1', ghl_contact_id: 'shared' }, { id: 'c-2', ghl_contact_id: 'shared' }],
+    [{ id: 'c-by-email', email: 'ralph@example.com' }],
+  ]);
+
+  const result = await resolver.resolve(scope);
+  assert.equal(result.resolved, true);
+  assert.equal(result.identity.via, 'email', 'it must fall through, not pick one');
+});
+
+test('email is the last fallback, and only on an exact single match', async () => {
+  const { resolver } = fake([
+    [{ id: 'p1', contractor_id: null, contact_id: null, email: 'Ralph@Example.com' }],
     [{ id: 'c-by-email', email: 'ralph@example.com' }],
   ]);
 
@@ -118,7 +146,7 @@ test('an ambiguous email resolves to nothing rather than guessing', async () => 
   // Two contractors sharing an address. Picking one would silently show a
   // person somebody else's book of work.
   const { resolver } = fake([
-    [{ id: 'p1', contractor_id: null, email: 'shared@example.com' }],
+    [{ id: 'p1', contractor_id: null, contact_id: null, email: 'shared@example.com' }],
     [{ id: 'c-1', email: 'shared@example.com' }, { id: 'c-2', email: 'shared@example.com' }],
   ]);
 
@@ -128,7 +156,7 @@ test('an ambiguous email resolves to nothing rather than guessing', async () => 
 });
 
 test('an unlinked profile with no email resolves to nothing', async () => {
-  const { resolver } = fake([[{ id: 'p1', contractor_id: null, email: null }]]);
+  const { resolver } = fake([[{ id: 'p1', contractor_id: null, contact_id: null, email: null }]]);
 
   const result = await resolver.resolve(scope);
   assert.equal(result.resolved, false);
@@ -144,7 +172,7 @@ test('resolving refuses without a scope', async () => {
 test('the resolver never matches on a name or a company', async () => {
   // §3.6 and D4 §6: a rename must not silently repoint a cross-system link.
   const { resolver, urls } = fake([
-    [{ id: 'p1', contractor_id: null, email: 'ralph@example.com' }],
+    [{ id: 'p1', contractor_id: null, contact_id: null, email: 'ralph@example.com' }],
     [{ id: 'c1', email: 'ralph@example.com' }],
   ]);
 

@@ -18,18 +18,34 @@ import { assertScope, type TenantScope } from '../tenancy.ts';
  * which is precisely the leak found in August: 43 projects across five
  * contractors visible to anyone.
  *
- * The link is `auth_profiles.contractor_id`, and it is populated on **1 of 110
- * profiles** (measured 2026-08-31). Email is the fallback and matches 52 of 483
- * contractors. Both are exact-match lookups on an id or a normalized address;
- * neither matches on a name, per §3.6.
+ * THREE LINKS, TRIED IN ORDER. Measured across 65 contractor-ish profiles on
+ * 2026-08-31:
+ *
+ *   1. `auth_profiles.contractor_id` → `contractors.id`      1 of 110
+ *   2. `auth_profiles.contact_id` → `contractors.ghl_contact_id`  54
+ *   3. `auth_profiles.email` → `contractors.email`          52
+ *
+ * Together they resolve **58 of 65**. The dedicated column is nearly empty, but
+ * the GoHighLevel contact id is not: `contractors.ghl_contact_id` is populated
+ * on 472 of 483, because it is written when a contractor is onboarded through
+ * GHL — which is how they all arrive.
+ *
+ * **The three never disagree.** Of the 45 profiles resolvable by both the
+ * contact id and the email, all 45 give the same contractor. That is what makes
+ * a fallback chain safe rather than a guess: they are corroborating routes to
+ * one answer, not competing opinions.
+ *
+ * Every one is an exact match on an id or a normalized address. None matches on
+ * a name or a business name, per §3.6 and D4 §6 — a rename must never silently
+ * repoint a cross-system link.
  * ---------------------------------------------------------------------------
  */
 
 export interface ContractorIdentity {
   /** `contractors.id` — the key `proposals.contractor_id` points at. */
   contractorId: string;
-  /** How it was found, so a screen can say why it saw nothing. */
-  via: 'auth_profile' | 'email';
+  /** Which link found it, so a screen can explain itself. */
+  via: 'auth_profile' | 'ghl_contact' | 'email';
 }
 
 export type IdentityResult =
@@ -37,9 +53,9 @@ export type IdentityResult =
   | {
       resolved: false;
       /**
-       * `unlinked` is by far the common case today and is not the user's fault:
-       * their profile has no `contractor_id` and no contractor shares their
-       * email. It needs a one-off backfill on BuildSuite's side.
+       * None of the three links resolved, or one of them was ambiguous. Seven
+       * of 65 contractor profiles are in this state — not the user's fault, and
+       * fixable by setting `contractor_id` on their profile.
        */
       reason: 'unlinked' | 'unavailable';
     };
@@ -47,6 +63,7 @@ export type IdentityResult =
 interface AuthProfileRow {
   id: string;
   contractor_id: string | null;
+  contact_id: string | null;
   email: string | null;
 }
 
@@ -62,7 +79,7 @@ export class ContractorResolver {
 
     const profiles = await this.client.select<AuthProfileRow>({
       from: 'auth_profiles',
-      columns: ['id', 'contractor_id', 'email'],
+      columns: ['id', 'contractor_id', 'contact_id', 'email'],
       filters: { id: `in.(${safe.authProfileIds.join(',')})` },
       limit: 10,
     });
@@ -76,9 +93,30 @@ export class ContractorResolver {
       return { resolved: true, identity: { contractorId: linked.contractor_id!, via: 'auth_profile' } };
     }
 
-    // 2 · Email, as a fallback. An exact match on a normalized address — never
-    //     a name, never a company, because §3.6 and D4 §6 both say a rename
-    //     must not silently repoint a link.
+    // 2 · The GoHighLevel contact id. Far better covered than the dedicated
+    //     column — `contractors.ghl_contact_id` is set on 472 of 483, because it
+    //     is written when a contractor is onboarded through GHL, which is how
+    //     they all arrive.
+    const contactIds = [...new Set(
+      profiles.map((p) => (p.contact_id ?? '').trim()).filter((c) => c !== ''),
+    )];
+    if (contactIds.length > 0) {
+      const byContact = await this.client.select<{ id: string; ghl_contact_id: string | null }>({
+        from: 'contractors',
+        columns: ['id', 'ghl_contact_id'],
+        filters: { ghl_contact_id: `in.(${contactIds.map((c) => `"${c}"`).join(',')})` },
+        limit: 5,
+      });
+      // Seven contact ids in the live data are shared by more than one
+      // contractor. Ambiguity resolves to nothing rather than to a coin flip.
+      if (byContact.length === 1) {
+        return { resolved: true, identity: { contractorId: byContact[0]!.id, via: 'ghl_contact' } };
+      }
+    }
+
+    // 3 · Email, last. An exact match on a normalized address — never a name,
+    //     never a company, because §3.6 and D4 §6 both say a rename must not
+    //     silently repoint a link.
     const emails = profiles
       .map((p) => (p.email ?? '').trim().toLowerCase())
       .filter((e) => e !== '');

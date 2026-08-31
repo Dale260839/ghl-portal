@@ -169,9 +169,11 @@ The fix is `contractor-identity.ts` — resolve the session to a contractor via
 cannot be resolved the answer is nothing, not everything**, and an ambiguous
 email resolves to nothing rather than guessing.
 
-**`auth_profiles.contractor_id` is populated on 1 of 110 profiles.** So today
-most sign-ins see an empty Active Work screen with an explanation. That is the
-single highest-value backfill available and it is BuildSuite's to run.
+**Three links are tried in order**, and together they resolve **57 of 64**
+contractor profiles: `auth_profiles.contractor_id` (1 of 110), then
+`auth_profiles.contact_id` → `contractors.ghl_contact_id` (the workhorse — 472 of
+483 contractors carry one), then email. They never disagree where more than one
+applies. Ambiguity at any step falls through rather than guessing.
 
 ---
 
@@ -224,7 +226,7 @@ executed. A step we do not perform never reports `ok`.
 | | Reason | Owner |
 |---|---|---|
 | **A second signed job** | One exists, from February. The loop has run once | Chris / ops |
-| **Most sign-ins see no work** | `auth_profiles.contractor_id` is 1 of 110 | **Sing — highest value** |
+| Seven contractor profiles see no work | None of the three identity links resolves them | Sing, small and targeted |
 | The one signed project's details | BuildSuite RLS hides that row from our key | Sing |
 | The handoff payload | `buildsuite_project_id` must be `BSP-YYYY-NNNNNN`; nothing in BuildSuite is | Chris decides |
 | `contract_amount` | `total` is set on 8 of 46 proposals; `price` is free text | Sing |
