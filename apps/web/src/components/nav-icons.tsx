@@ -141,3 +141,10 @@ export const IconPipeline = (
     <path d="M3 4h18l-7 8v7l-4 2v-9z" />
   </Icon>
 );
+
+export const IconArchive = (
+  <Icon>
+    <rect width="20" height="5" x="2" y="3" rx="1" />
+    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4" />
+  </Icon>
+);

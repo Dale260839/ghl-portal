@@ -10,6 +10,7 @@ import { currentDataSource, currentSourceKind } from '@/lib/data/current-source'
 import {
   IconBuildSuite,
   IconDashboard,
+  IconArchive,
   IconIssues,
   IconPipeline,
   IconProjects,
@@ -41,6 +42,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: '/dashboard/updates', label: 'Field Updates', icon: IconUpdates, badge: pendingReview },
     { href: '/dashboard/issues', label: 'Issues', icon: IconIssues, badge: openIssues },
     { href: '/dashboard/buildsuite', label: 'From BuildSuite', icon: IconBuildSuite },
+    // Last, because it is where you go to undo something rather than to work.
+    { href: '/dashboard/archive', label: 'Archive', icon: IconArchive },
   ];
 
   return (

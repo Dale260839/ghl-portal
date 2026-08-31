@@ -63,7 +63,16 @@ export type Action =
   /** A client accepting a selection or a change order. */
   | 'approve'
   /** Move a project to Completed. Nobody — GoHighLevel owns this. */
-  | 'completeStage';
+  | 'completeStage'
+  /**
+   * Remove from the working list without destroying the record.
+   *
+   * Separate from `delete` on purpose. Only a contractor deletes, and in
+   * practice nothing does — archiving is the operation people actually want,
+   * and it is reversible. Keeping them as different actions means a role can be
+   * trusted to archive without being trusted to destroy.
+   */
+  | 'archive';
 
 type Matrix = Record<Resource, Partial<Record<Action, readonly Role[]>>>;
 
@@ -83,6 +92,7 @@ const MATRIX: Matrix = {
     read: EVERYONE,
     update: CONTRACTOR,
     delete: CONTRACTOR,
+    archive: CONTRACTOR,
     // completeStage: deliberately absent for every role. See exception 1.
   },
 
@@ -91,6 +101,7 @@ const MATRIX: Matrix = {
     read: EVERYONE,
     update: CONTRACTOR,
     delete: CONTRACTOR,
+    archive: CONTRACTOR,
     publish: CONTRACTOR,
   },
 
@@ -100,6 +111,7 @@ const MATRIX: Matrix = {
     read: CONTRACTOR_AND_FIELD,
     update: CONTRACTOR_AND_FIELD,
     delete: CONTRACTOR,
+    archive: CONTRACTOR,
     publish: CONTRACTOR,
   },
 
@@ -109,6 +121,7 @@ const MATRIX: Matrix = {
     read: EVERYONE,
     update: CONTRACTOR_AND_FIELD,
     delete: CONTRACTOR,
+    archive: CONTRACTOR,
     publish: CONTRACTOR,
   },
 
@@ -119,6 +132,7 @@ const MATRIX: Matrix = {
     read: EVERYONE,
     update: CONTRACTOR,
     delete: CONTRACTOR,
+    archive: CONTRACTOR,
     publish: CONTRACTOR,
     approve: ['contractor', 'client'],
   },
@@ -128,6 +142,7 @@ const MATRIX: Matrix = {
     read: ['contractor', 'client'],
     update: CONTRACTOR,
     delete: CONTRACTOR,
+    archive: CONTRACTOR,
     publish: CONTRACTOR,
     approve: ['contractor', 'client'],
   },
@@ -139,6 +154,7 @@ const MATRIX: Matrix = {
     read: EVERYONE,
     update: CONTRACTOR,
     delete: CONTRACTOR,
+    archive: CONTRACTOR,
     publish: CONTRACTOR,
   },
 
@@ -147,6 +163,7 @@ const MATRIX: Matrix = {
     read: EVERYONE,
     update: CONTRACTOR,
     delete: CONTRACTOR,
+    archive: CONTRACTOR,
     publish: CONTRACTOR,
   },
 
@@ -157,6 +174,7 @@ const MATRIX: Matrix = {
     read: EVERYONE,
     update: CONTRACTOR,
     delete: CONTRACTOR,
+    archive: CONTRACTOR,
   },
 
   // §6.1 `Allow Issue Submission` gates the client half.
@@ -165,6 +183,7 @@ const MATRIX: Matrix = {
     read: EVERYONE,
     update: CONTRACTOR_AND_FIELD,
     delete: CONTRACTOR,
+    archive: CONTRACTOR,
     publish: CONTRACTOR,
   },
 
@@ -173,6 +192,7 @@ const MATRIX: Matrix = {
     read: EVERYONE,
     update: CONTRACTOR_AND_FIELD,
     delete: CONTRACTOR,
+    archive: CONTRACTOR,
     publish: CONTRACTOR,
   },
 
@@ -181,6 +201,7 @@ const MATRIX: Matrix = {
     read: ['contractor', 'client'],
     update: CONTRACTOR,
     delete: CONTRACTOR,
+    archive: CONTRACTOR,
     publish: CONTRACTOR,
   },
 
@@ -200,6 +221,7 @@ const MATRIX: Matrix = {
     read: CONTRACTOR,
     update: CONTRACTOR,
     delete: CONTRACTOR,
+    archive: CONTRACTOR,
   },
 };
 

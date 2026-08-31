@@ -5,6 +5,21 @@ import { redirect } from 'next/navigation';
 import { accountForEmail, clearSession, getSession, homeFor, setSession } from './session';
 import { planReturn, planViewAs, realIdentity, viewAsEnabled } from './view-as';
 import { assertCan, ownsTask } from './permissions';
+import { requireTenantScope } from './scope';
+import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db/records';
+import type { Resource } from './permissions';
+
+/** Which permission resource governs each archivable table. */
+const RESOURCE_FOR_TABLE: Record<ArchivableTable, Resource> = {
+  hub_milestones: 'milestone',
+  hub_schedule_items: 'milestone',
+  hub_tasks: 'task',
+  hub_daily_updates: 'dailyUpdate',
+  hub_issues: 'issue',
+  hub_documents: 'document',
+  hub_photos: 'photo',
+};
+
 import {
   approveInternally,
   createDraftUpdate,
@@ -282,4 +297,120 @@ export async function sendFieldMessage(formData: FormData) {
 
   revalidatePath('/field/messages');
   redirect('/field/messages?sent=1');
+}
+
+// ── The Hub's own records: edit, archive, restore ───────────────────────────
+//
+// Everything below writes to the HUB's database, never BuildSuite's. A project
+// belongs to BuildSuite, so editing or archiving one stores an overlay row that
+// renders on top of it — see `lib/hub-db/records.ts`.
+
+/** The scope and identity every Hub write needs, resolved once. */
+async function hubWriteContext(action: 'update' | 'archive', resource: Resource) {
+  const session = await getSession();
+  if (session === null) throw new Error('not signed in');
+
+  // Permission first, before anything is read or written. A hidden button is a
+  // UI fact; a server action is something anyone can post to.
+  assertCan(session.role, action, resource);
+
+  const scope = await requireTenantScope();
+  const hub = getHubRecords();
+  if (!hub.available) {
+    throw new Error(`the Hub database is not connected (missing ${hub.missing.join(', ')})`);
+  }
+
+  return {
+    scope,
+    records: hub.records,
+    actor: { name: session.name, role: session.role },
+    // Tenancy for Hub rows is the contractor, per the 2026-08-31 finding.
+    contractorId: scope.authProfileIds[0]!,
+  };
+}
+
+export async function editProjectDetails(formData: FormData) {
+  const { scope, records, actor, contractorId } = await hubWriteContext('update', 'project');
+
+  const projectId = String(formData.get('projectId') ?? '');
+  if (projectId === '') throw new Error('projectId is required');
+
+  // Only fields the form actually submitted are patched. An absent field means
+  // "leave it alone", which is different from an empty one meaning "clear it".
+  const patch: Record<string, string | null> = {};
+  for (const [field, key] of [
+    ['title', 'titleOverride'],
+    ['address', 'addressOverride'],
+    ['clientName', 'clientNameOverride'],
+    ['notes', 'notes'],
+  ] as const) {
+    if (formData.has(field)) patch[key] = String(formData.get(field) ?? '');
+  }
+
+  await records.editProject(scope, projectId, contractorId, patch, actor);
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/projects');
+  revalidatePath(`/dashboard/projects/${projectId}`);
+}
+
+export async function archiveProject(formData: FormData) {
+  const { scope, records, actor, contractorId } = await hubWriteContext('archive', 'project');
+
+  const projectId = String(formData.get('projectId') ?? '');
+  if (projectId === '') throw new Error('projectId is required');
+  const reason = String(formData.get('reason') ?? '').trim();
+
+  await records.archiveProject(scope, projectId, contractorId, actor, reason);
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/projects');
+  revalidatePath('/dashboard/archive');
+}
+
+export async function archiveRecord(formData: FormData) {
+  const table = String(formData.get('table') ?? '') as ArchivableTable;
+  if (!(ARCHIVABLE_TABLES as readonly string[]).includes(table)) {
+    // An unknown table name from a form post is either a bug or someone
+    // probing. Either way it does not reach the database.
+    throw new Error(`${table} is not an archivable table`);
+  }
+
+  const { scope, records, actor } = await hubWriteContext('archive', RESOURCE_FOR_TABLE[table]);
+  const id = String(formData.get('id') ?? '');
+  if (id === '') throw new Error('id is required');
+
+  await records.archiveRecord(scope, table, id, actor, String(formData.get('reason') ?? ''));
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/archive');
+}
+
+/**
+ * Restore, from the Archive screen.
+ *
+ * Permission-checked as `archive` rather than as its own action: someone who
+ * may take a record out of the working list may put it back. Splitting them
+ * would create a state where a contractor can archive something and then cannot
+ * undo it, which is worse than either.
+ */
+export async function restoreArchivedItem(formData: FormData) {
+  const table = String(formData.get('table') ?? '');
+  const id = String(formData.get('id') ?? '');
+  if (id === '') throw new Error('id is required');
+
+  if (table === 'project') {
+    const { scope, records, actor, contractorId } = await hubWriteContext('archive', 'project');
+    await records.restoreProject(scope, id, contractorId, actor);
+  } else {
+    if (!(ARCHIVABLE_TABLES as readonly string[]).includes(table)) {
+      throw new Error(`${table} is not an archivable table`);
+    }
+    const { scope, records, actor } = await hubWriteContext(
+      'archive',
+      RESOURCE_FOR_TABLE[table as ArchivableTable],
+    );
+    await records.restoreRecord(scope, table as ArchivableTable, id, actor);
+  }
+
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/projects');
+  revalidatePath('/dashboard/archive');
 }

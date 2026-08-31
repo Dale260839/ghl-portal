@@ -145,11 +145,18 @@ test('every mutating server action checks permission before it writes', () => {
   const bodies = [...actions.text.matchAll(/^export async function (\w+)[\s\S]*?\n\}/gm)];
   assert.ok(bodies.length > 0, 'no server actions found — has the file moved?');
 
+  // An action may check permission directly, or delegate to a helper that does.
+  // Delegation is only acceptable if the helper itself asserts — verified
+  // separately below, so the chain is checked rather than assumed.
+  const DELEGATES = ['hubWriteContext('];
+
   const unchecked: string[] = [];
   for (const match of bodies) {
     const name = match[1]!;
     if (sessionOnly.has(name)) continue;
-    if (!/assertCan\(/.test(match[0])) unchecked.push(name);
+    const body = match[0];
+    const checks = /assertCan\(/.test(body) || DELEGATES.some((d) => body.includes(d));
+    if (!checks) unchecked.push(name);
   }
 
   assert.deepEqual(
@@ -252,4 +259,16 @@ test('the migration creates only, and alters nothing of BuildSuite’s', () => {
     .filter((line) => !/enable row level security/i.test(line));
 
   assert.deepEqual(dangerous, [], 'the migration alters or drops something');
+});
+
+test('every permission-checking helper actually checks permission', () => {
+  // `DELEGATES` above lets an action satisfy the rule by calling a helper. That
+  // is only safe while the helper really does assert — otherwise the list
+  // becomes a way to opt out of the guardrail by renaming a function.
+  const actions = FILES.find((f) => rel(f.path) === 'lib/actions.ts');
+  assert.ok(actions);
+
+  const helper = actions.text.match(/async function hubWriteContext\([\s\S]*?\n\}/);
+  assert.ok(helper, 'hubWriteContext has moved or been renamed — update DELEGATES');
+  assert.match(helper[0], /assertCan\(/, 'hubWriteContext no longer checks permission');
 });
