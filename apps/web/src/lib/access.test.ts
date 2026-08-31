@@ -126,3 +126,29 @@ test('the two sign-in paths use different field names', () => {
   assert.match(form, /name="accountEmail"/);
   assert.match(form, /name="password"/);
 });
+
+// ── The ticks reaching a screen ─────────────────────────────────────────────
+
+test('the portal nav is filtered by what the client may read', () => {
+  // Without this the tick boxes on the Team screen are a record of intent that
+  // nothing enforces — the section stays in the homeowner's navigation and the
+  // contractor believes they turned it off.
+  const layout = readFileSync(join(LIB, '..', 'app', 'portal', 'layout.tsx'), 'utf8');
+
+  assert.match(layout, /access\.can\('read', item\.resource\)/);
+  assert.match(layout, /RESOURCE_FOR_PORTAL_ROUTE/);
+});
+
+test('dashboard, timeline and messages are never tickable away', () => {
+  // A portal you cannot navigate, and cannot ask a question in, is not a
+  // portal. These three have no resource mapped, so no tick removes them.
+  const layout = readFileSync(join(LIB, '..', 'app', 'portal', 'layout.tsx'), 'utf8');
+  const map = layout.slice(
+    layout.indexOf('RESOURCE_FOR_PORTAL_ROUTE'),
+    layout.indexOf('};', layout.indexOf('RESOURCE_FOR_PORTAL_ROUTE')),
+  );
+
+  for (const always of ["'/portal'", "'/portal/timeline'", "'/portal/messages'"]) {
+    assert.equal(map.includes(`${always}:`), false, `${always} must not be tickable`);
+  }
+});

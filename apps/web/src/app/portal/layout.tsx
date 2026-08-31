@@ -21,11 +21,28 @@ import {
   IconTimeline,
   IconUpdates,
 } from '@/components/nav-icons';
+import type { Resource } from '@/lib/permissions';
+
+/**
+ * Portal routes that a contractor can switch off per person. Routes absent from
+ * this map are always shown — see the note where the nav is built.
+ */
+const RESOURCE_FOR_PORTAL_ROUTE: Record<string, Resource | undefined> = {
+  '/portal/schedule': 'milestone',
+  '/portal/updates': 'dailyUpdate',
+  '/portal/designs': 'selection',
+  '/portal/budget': 'invoice',
+  '/portal/change-orders': 'changeOrder',
+  '/portal/documents': 'document',
+  '/portal/photos': 'photo',
+  '/portal/issues': 'issue',
+};
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   // Access, not just a session. A homeowner whose contractor revoked them is
   // out on their next request, not eight hours later when the cookie expires.
-  const { session } = await requireAccess();
+  const access = await requireAccess();
+  const { session } = access;
   // Contractors may preview the portal; the gate still runs against the
   // project's own contact, so previewing proves the rule rather than skipping it.
   if (session.role !== 'client' && session.role !== 'contractor') redirect('/');
@@ -47,7 +64,19 @@ export default async function PortalLayout({ children }: { children: React.React
     }
   }
 
-  const nav: NavItem[] = [
+  /**
+   * Which sections this homeowner sees.
+   *
+   * `access.can` is the role AND their contractor's ticks. Unticking Documents
+   * for one client removes it from their navigation on their next request —
+   * that is what makes the tick boxes on the Team screen mean something rather
+   * than being a record of intent nobody enforces.
+   *
+   * Dashboard, Timeline and Messages have no tick: the first two are the
+   * product's spine and the third is how they reach their contractor at all.
+   * A portal you cannot navigate or ask a question in is not a portal.
+   */
+  const nav: NavItem[] = ([
     { href: '/portal', label: 'Dashboard', icon: IconDashboard },
     { href: '/portal/timeline', label: 'Project Timeline', icon: IconTimeline },
     { href: '/portal/schedule', label: 'Schedule', icon: IconSchedule },
@@ -61,7 +90,12 @@ export default async function PortalLayout({ children }: { children: React.React
     { href: '/portal/issues', label: 'Issues & Requests', icon: IconIssues },
     { href: '/portal/payments', label: 'Payments', icon: IconPayments },
     { href: '/portal/completion', label: 'Completion & Warranty', icon: IconCompletion },
-  ];
+  ] as (NavItem & { resource?: Resource })[])
+    .map((item) => ({
+      ...item,
+      resource: RESOURCE_FOR_PORTAL_ROUTE[item.href],
+    }))
+    .filter((item) => item.resource === undefined || access.can('read', item.resource));
 
   return (
     <AppShell
