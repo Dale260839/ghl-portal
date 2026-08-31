@@ -91,9 +91,13 @@ function fakeHub(response: unknown = []) {
   return { client, calls, records: new HubRecords(client) };
 }
 
+// A contractor id AND an auth profile id, deliberately different values. They
+// are different things, and a test that reuses one for the other cannot catch
+// the bug where the code does the same.
 const scope: TenantScope = {
   locationId: 'loc-1',
-  authProfileIds: ['5dd312bd-0b95-45af-be7b-c19a14eff103'],
+  authProfileIds: ['7726102a-8e13-4006-889d-d68bc1cccd40'],
+  contractorId: '5dd312bd-0b95-45af-be7b-c19a14eff103',
 };
 const actor = { name: 'Marcus Reyes', role: 'contractor' };
 
@@ -137,7 +141,9 @@ test('archiving filters on the contractor AND the id, never the id alone', async
 
   const patch = calls.find((c) => c.method === 'PATCH');
   assert.ok(patch);
-  assert.match(patch.url, /contractor_id=in\./);
+  // `eq.` and not `in.`: a contractor is ONE id. A list would be an auth
+  // profile list, which is a different id and the source of the 2026-09-01 bug.
+  assert.match(patch.url, /contractor_id=eq\.5dd312bd/);
   assert.match(patch.url, /id=eq\.id-1/);
 });
 
@@ -240,7 +246,7 @@ test('the archive listing asks only for archived rows, scoped to the tenant', as
 
   for (const call of calls) {
     assert.match(call.url, /archived_at=not\.is\.null/);
-    assert.match(call.url, /contractor_id=in\./);
+    assert.match(call.url, /contractor_id=eq\.5dd312bd/);
   }
 });
 

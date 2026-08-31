@@ -29,7 +29,8 @@ import { sign } from '../auth/session-crypto.ts';
 const SECRET = 'test-secret-at-least-32-characters-long!!';
 const scope: TenantScope = {
   locationId: 'loc-1',
-  authProfileIds: ['5dd312bd-0b95-45af-be7b-c19a14eff103'],
+  authProfileIds: ['7726102a-8e13-4006-889d-d68bc1cccd40'],
+  contractorId: '5dd312bd-0b95-45af-be7b-c19a14eff103',
 };
 const actor = { name: 'Marcus Reyes' };
 

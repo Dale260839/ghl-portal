@@ -3,7 +3,7 @@ import 'server-only';
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
 import { getHubClient, type HubClient } from './client.ts';
-import { assertScope, type TenantScope } from '../tenancy.ts';
+import { assertContractor, type TenantScope } from '../tenancy.ts';
 import { sign, verify } from '../auth/session-crypto.ts';
 import type { Role } from '../demo-accounts.ts';
 
@@ -221,7 +221,7 @@ export class HubTeam {
   }
 
   private contractorOf(scope: TenantScope, context: string): string {
-    return assertScope(scope, context).authProfileIds[0]!;
+    return assertContractor(scope, context);
   }
 
   async listTeam(scope: TenantScope): Promise<Membership[]> {

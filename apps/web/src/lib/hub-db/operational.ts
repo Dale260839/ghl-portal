@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { getHubClient, type HubClient } from './client.ts';
-import { assertScope, type TenantScope } from '../tenancy.ts';
+import { assertContractor, type TenantScope } from '../tenancy.ts';
 import type { DailyUpdate, Issue, Milestone, Task } from '../data/types.ts';
 
 /**
@@ -173,12 +173,17 @@ export class HubOperational {
     this.client = client;
   }
 
+  /**
+   * The contractor these rows belong to.
+   *
+   * `assertContractor`, not `assertScope`. An auth profile id is a different id
+   * and putting one in `contractor_id` is what made a contractor's own records
+   * invisible to them on 2026-09-01. A session with no contractor throws rather
+   * than falling back — the fallback was the bug.
+   */
   private tenant(scope: TenantScope, context: string): { filters: Record<string, string>; contractorId: string } {
-    const safe = assertScope(scope, context);
-    return {
-      filters: { contractor_id: `in.(${safe.authProfileIds.join(',')})` },
-      contractorId: safe.authProfileIds[0]!,
-    };
+    const contractorId = assertContractor(scope, context);
+    return { filters: { contractor_id: `eq.${contractorId}` }, contractorId };
   }
 
   /**

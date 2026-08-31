@@ -31,7 +31,7 @@ import {
   VISIBILITY_SWITCHES,
 } from './data/mutations';
 
-import type { TenantScope } from './tenancy';
+import { assertContractor, type TenantScope } from './tenancy';
 import { execute, describe } from './workflows/executor';
 import { fixturePorts } from './workflows/fixture-ports';
 import { planFieldUpdateSubmitted } from './workflows/wf3-update-submitted';
@@ -387,8 +387,10 @@ async function hubWriteContext(action: 'update' | 'archive', resource: Resource)
     scope,
     records: hub.records,
     actor: { name: session.name, role: session.role },
-    // Tenancy for Hub rows is the contractor, per the 2026-08-31 finding.
-    contractorId: scope.authProfileIds[0]!,
+    // The CONTRACTOR id, resolved by requireTenantScope. Not an auth profile
+    // id: they are different values and using one for the other filed records
+    // where their owner could not see them.
+    contractorId: assertContractor(scope, resource),
   };
 }
 

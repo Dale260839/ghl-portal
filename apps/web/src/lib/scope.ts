@@ -3,6 +3,7 @@ import 'server-only';
 import { redirect } from 'next/navigation';
 import { getSession } from './session.ts';
 import type { TenantScope } from './tenancy.ts';
+import { resolveContractor } from './buildsuite/contractor-identity.ts';
 import type { Project } from './data/types.ts';
 
 /**
@@ -26,10 +27,17 @@ export async function requireTenantScope(): Promise<TenantScope> {
     // dashboard that looks like a bug.
     redirect('/?error=no-profile');
   }
-  return {
+  const base: TenantScope = {
     locationId: session.ghlLocationId ?? '',
     authProfileIds: session.authProfileIds,
   };
+
+  // Resolve the contractor once per request rather than in every screen. It is
+  // a different id from the auth profile and the Hub's tables are filed under
+  // it; see `assertContractor`. Absent is a legitimate state — seven profiles
+  // do not resolve — and Hub reads then return nothing rather than guessing.
+  const identity = await resolveContractor(base);
+  return identity.resolved ? { ...base, contractorId: identity.identity.contractorId } : base;
 }
 
 /**

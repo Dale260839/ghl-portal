@@ -26,6 +26,11 @@ export async function currentDataSource(scope?: TenantScope): Promise<ProjectDat
   // get the Hub bolted on.
   if (commercial.kind === 'fixture') return commercial;
 
+  // No contractor resolved means no Hub records to read. Returning the
+  // commercial source alone gives an empty operational list, which is the true
+  // answer, rather than throwing on a screen that would otherwise work.
+  if (scope?.contractorId === undefined) return commercial;
+
   const hub = getHubOperational();
   if (!hub.available) return commercial;
 

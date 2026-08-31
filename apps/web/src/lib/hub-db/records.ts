@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { getHubClient, type HubClient } from './client.ts';
-import { assertScope, type TenantScope } from '../tenancy.ts';
+import { assertContractor, assertScope, type TenantScope } from '../tenancy.ts';
 
 /**
  * Writing, editing and archiving — the Hub's own records.
@@ -137,8 +137,7 @@ export class HubRecords {
    * which is null on more than half the engaged projects.
    */
   private contractorFilter(scope: TenantScope, context: string): Record<string, string> {
-    const safe = assertScope(scope, context);
-    return { contractor_id: `in.(${safe.authProfileIds.join(',')})` };
+    return { contractor_id: `eq.${assertContractor(scope, context)}` };
   }
 
   // ── The project overlay ───────────────────────────────────────────────────
@@ -286,7 +285,7 @@ export class HubRecords {
     });
     await this.recordActivity(scope, {
       projectId: null,
-      contractorId: assertScope(scope, table).authProfileIds[0]!,
+      contractorId: assertContractor(scope, table),
       actor,
       action: 'archive',
       resource: table,
@@ -310,7 +309,7 @@ export class HubRecords {
     });
     await this.recordActivity(scope, {
       projectId: null,
-      contractorId: assertScope(scope, table).authProfileIds[0]!,
+      contractorId: assertContractor(scope, table),
       actor,
       action: 'restore',
       resource: table,

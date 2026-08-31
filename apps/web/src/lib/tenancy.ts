@@ -27,6 +27,23 @@ export interface TenantScope {
    * the owning column on `projects`; `user_id` and `client_id` are unpopulated.
    */
   authProfileIds: readonly string[];
+  /**
+   * `contractors.id` — a DIFFERENT id from any of the above, and the key the
+   * Hub's own tables and `proposals` are filed under.
+   *
+   * Resolved once per request by `requireTenantScope`, because deriving it is
+   * two BuildSuite reads and every screen would otherwise repeat them.
+   *
+   * **It is not interchangeable with an auth profile id**, and treating it as
+   * one was a real bug on 2026-09-01: Hub records were written with
+   * `contractor_id = authProfileIds[0]`, so a contractor's own records became
+   * invisible to them the moment the value was resolved properly. For Ralph the
+   * two differ — auth profile `7726102a…`, contractor `5dd312bd…`.
+   *
+   * Absent when the session could not be linked to a contractor. Hub reads and
+   * writes must then do nothing, never fall back to another id.
+   */
+  contractorId?: string;
 }
 
 export class TenancyError extends Error {
@@ -58,4 +75,26 @@ export function assertScope(scope: TenantScope | null | undefined, context: stri
 /** True when a row's owner belongs to this tenant. */
 export function ownedByScope(scope: TenantScope, ownerAuthProfileId: string): boolean {
   return scope.authProfileIds.includes(ownerAuthProfileId);
+}
+
+/**
+ * The contractor a Hub read or write is filed under.
+ *
+ * Separate from `assertScope` because they answer different questions and a
+ * caller can legitimately have one without the other: a contractor signed in
+ * through GoHighLevel always has a scope, and only has a `contractorId` once
+ * their profile resolves to a contractor record.
+ *
+ * Throws rather than returning a default. The default would be an auth profile
+ * id, which is exactly the bug this exists to prevent.
+ */
+export function assertContractor(scope: TenantScope | null | undefined, context: string): string {
+  const safe = assertScope(scope, context);
+  const id = safe.contractorId;
+  if (typeof id !== 'string' || id.trim() === '') {
+    throw new TenancyError(
+      `${context}: this session is not linked to a contractor record, so there is nothing to file under`,
+    );
+  }
+  return id;
 }
