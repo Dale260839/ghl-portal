@@ -40,9 +40,12 @@ export interface StoredFile {
 }
 
 export class HubStorageError extends Error {
-  constructor(message: string, readonly status: number | null) {
+  readonly status: number | null;
+
+  constructor(message: string, status: number | null) {
     super(message);
     this.name = 'HubStorageError';
+    this.status = status;
   }
 }
 
@@ -72,10 +75,13 @@ export function storagePath(
 }
 
 export class HubStorage {
-  constructor(
-    private readonly url: string,
-    private readonly key: string,
-  ) {}
+  private readonly url: string;
+  private readonly key: string;
+
+  constructor(url: string, key: string) {
+    this.url = url;
+    this.key = key;
+  }
 
   private headers(extra: Record<string, string> = {}): Record<string, string> {
     return { apikey: this.key, Authorization: `Bearer ${this.key}`, ...extra };
