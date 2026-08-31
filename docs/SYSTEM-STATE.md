@@ -88,7 +88,9 @@ selector: `GHL_PROJECT_OBJECT_KEY` is empty so GoHighLevel is skipped,
 | | Source | State |
 |---|---|---|
 | Projects, clients, addresses, dates | BuildSuite `projects` | **Live** |
-| Deal pipeline, stages, signature state | BuildSuite `deals` | **Live** — new this sprint |
+| Live proposals: contractor, price, signature | BuildSuite `proposals` | **Live** — the book of work |
+| Deal pipeline and stages | BuildSuite `deals` | Live, but see the caveat below |
+| Contractor matching fan-out | BuildSuite `project_contractor_matches` | **Not read yet** — 272 rows, 47 projects, 23 contractors |
 | Field updates, milestones, tasks, documents, photos, messages | `hub_*` tables | **Exist — the Hub's own database, 16 tables** |
 | Record edits and archive | `hub_project_state` overlay | **Live.** BuildSuite is never written to |
 | Team, invitations, permission ticks | `hub_memberships` / `_invitations` / `_grants` | **Live** |
@@ -98,6 +100,18 @@ Fixtures still exist as a last-resort fallback when neither source is reachable,
 and the banner calls that a misconfiguration rather than a mode. **There is no
 longer any way to select sample data from the UI** — the demo toggle was removed
 on 2026-08-28.
+
+### `deals` is not the matching table — corrected 2026-09-01
+
+Confirmed by Sing: `deals` is the DealsEngine flow and has nothing to do with
+matching. Matching writes to **`project_contractor_matches`** (272 rows), and a
+contractor's proposal links to the same `project_id` and `contractor_id`.
+
+That table's outcome columns are **null on all 272 rows** —
+`contractor_accepted`, `client_selected`, `project_outcome` — and `projects.status`
+has no `awarded` value. So the award step exists as a design and has not yet
+written anything. Open question with Sing; do not build against
+`client_selected` until it is answered.
 
 ### The funnel, measured
 
