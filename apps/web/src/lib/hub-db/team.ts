@@ -44,6 +44,16 @@ export type InvitableRole = (typeof INVITABLE_ROLES)[number];
 export interface Membership {
   id: string;
   contractorId: string;
+  /**
+   * BuildSuite `auth_profiles.id` values this member may read under.
+   *
+   * Empty for field crew and clients, who read only the Hub's own tables. A
+   * contractor needs at least one, because every BuildSuite read filters on it.
+   *
+   * **Not the same id as `contractorId`.** Putting one in the other's slot is
+   * the bug this column exists to prevent.
+   */
+  authProfileIds: string[];
   email: string;
   fullName: string;
   role: Role;
@@ -60,6 +70,7 @@ export interface Membership {
 interface MembershipRow {
   id: string;
   contractor_id: string;
+  auth_profile_ids: string[] | null;
   email: string;
   full_name: string | null;
   role: string;
@@ -76,6 +87,7 @@ function toMembership(row: MembershipRow): Membership {
   return {
     id: row.id,
     contractorId: row.contractor_id,
+    authProfileIds: row.auth_profile_ids ?? [],
     email: row.email,
     fullName: row.full_name ?? '',
     role: row.role as Role,

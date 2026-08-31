@@ -63,10 +63,14 @@ export async function signIn(_prev: { error?: string } | undefined, formData: Fo
           name: m.fullName === '' ? m.email : m.fullName,
           email: m.email,
           membershipId: m.id,
-          // A field user is scoped to their contractor's work; a client to
-          // their own projects. Both resolve server-side from the membership,
-          // never from anything the browser sent.
-          authProfileIds: [m.contractorId],
+          // The BuildSuite profiles this member reads under, from the
+          // membership row. A contractor needs one; field crew and clients get
+          // an empty array because they read only the Hub's tables.
+          //
+          // It used to be `[m.contractorId]`, which put a contractor id where an
+          // auth profile id belongs — the same conflation that hid a
+          // contractor's own records on 2026-09-01.
+          authProfileIds: m.authProfileIds,
           ...(m.role === 'client' ? { contactId: m.id } : {}),
         } as Session);
         redirect(homeFor(m.role));
