@@ -1,6 +1,8 @@
 import 'server-only';
 
 import type { TenantScope } from '../tenancy.ts';
+import { getHubOperational } from '../hub-db/operational.ts';
+import { HubBackedDataSource } from './hub-backed-source.ts';
 import {
   activeSourceKind,
   getDataSource,
@@ -17,7 +19,17 @@ import {
  * them, and a source that later needs request state again has one place to go.
  */
 export async function currentDataSource(scope?: TenantScope): Promise<ProjectDataSource> {
-  return getDataSource(scope);
+  const commercial = getDataSource(scope);
+
+  // Fixtures already carry their own milestones and updates, so wrapping them
+  // would replace a working demo with an empty database. Only the live sources
+  // get the Hub bolted on.
+  if (commercial.kind === 'fixture') return commercial;
+
+  const hub = getHubOperational();
+  if (!hub.available) return commercial;
+
+  return new HubBackedDataSource(commercial, hub.ops);
 }
 
 /** What the banner should say. */

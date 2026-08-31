@@ -37,6 +37,7 @@ import { fixturePorts } from './workflows/fixture-ports';
 import { planFieldUpdateSubmitted } from './workflows/wf3-update-submitted';
 import { planFieldUpdateApproved } from './workflows/wf4-update-approved';
 import { currentDataSource } from './data/current-source.ts';
+import { currentWriter } from './data/current-writer.ts';
 import { TASKS } from './data/fixtures';
 import { MESSAGES } from './data/portal-fixtures';
 
@@ -118,6 +119,14 @@ function today(): string {
  * Contractor-only — a field user reaching this would be a §3.2 violation, so
  * the role is checked server-side rather than by hiding the buttons.
  */
+/** The scope a review action runs under. Small helper so the branches agree. */
+function reviewScope(session: Session): TenantScope {
+  return {
+    locationId: session.ghlLocationId ?? '',
+    authProfileIds: session.authProfileIds ?? [],
+  };
+}
+
 export async function reviewUpdate(formData: FormData) {
   const session = await getSession();
   if (session === null) throw new Error('not signed in');
@@ -140,7 +149,9 @@ export async function reviewUpdate(formData: FormData) {
     const project = await db.getProject(scope, row.projectId);
 
     // The PM's edit is what gets published — not what the field wrote.
-    saveClientSummary(id, clientSummary);
+    const writer = currentWriter();
+    await writer.saveClientSummary(scope, id, clientSummary);
+    await writer.setApproval(scope, id, 'Approved & Published', today());
 
     const result = await execute(
       planFieldUpdateApproved({
@@ -158,11 +169,15 @@ export async function reviewUpdate(formData: FormData) {
     // eslint-disable-next-line no-console
     console.log(describe(result));
   } else if (action === 'internal') {
-    approveInternally(id, clientSummary);
+    // §10 — recorded, and deliberately NOT visible to the client. The writer
+    // derives client_visible from the status, so the two cannot drift apart.
+    const writer = currentWriter();
+    await writer.saveClientSummary(reviewScope(session), id, clientSummary);
+    await writer.setApproval(reviewScope(session), id, 'Approved Internally', today());
   } else if (action === 'return') {
-    returnForRevision(id);
+    await currentWriter().returnForRevision(reviewScope(session), id);
   } else if (action === 'save') {
-    saveClientSummary(id, clientSummary);
+    await currentWriter().saveClientSummary(reviewScope(session), id, clientSummary);
   }
 
   revalidatePath('/dashboard/updates');
@@ -207,24 +222,30 @@ export async function submitFieldUpdate(formData: FormData) {
   const projectId = String(formData.get('projectId') ?? '');
   const blocker = String(formData.get('blocker') ?? '');
 
-  const updateId = createDraftUpdate(
-    {
-      projectId,
-      submittedBy: session.name,
-      workCompleted: String(formData.get('workCompleted') ?? ''),
-      internalNotes: String(formData.get('internalNotes') ?? ''),
-      clientSummary: String(formData.get('clientSummary') ?? ''),
-      crewOnsite: Number(formData.get('crewOnsite') ?? 0),
-      hoursWorked: Number(formData.get('hoursWorked') ?? 0),
-      weather: String(formData.get('weather') ?? ''),
-    },
-    today(),
-  );
-
   const fieldScope: TenantScope = {
     locationId: session.ghlLocationId ?? '',
     authProfileIds: session.authProfileIds ?? [],
   };
+
+  // Goes to the Hub's database when there is one. It used to go to an in-memory
+  // array that the read path never consulted, so submitting did nothing
+  // visible and anything that worked vanished on restart.
+  //
+  // NOTE the client summary is NOT taken from this form. A crew member writes
+  // what happened; the PM writes what the homeowner reads. Accepting a
+  // clientSummary here would let the field set client-facing text directly,
+  // which is the one thing the whole approval model exists to prevent.
+  const updateId = await currentWriter().createUpdate(fieldScope, {
+    projectId,
+    submittedBy: session.name,
+    workCompleted: String(formData.get('workCompleted') ?? ''),
+    internalNotes: String(formData.get('internalNotes') ?? ''),
+    crewOnsite: Number(formData.get('crewOnsite') ?? 0),
+    hoursWorked: Number(formData.get('hoursWorked') ?? 0),
+    weather: String(formData.get('weather') ?? ''),
+    blocker,
+    clientDecisionNeeded: formData.get('clientDecisionNeeded') === 'on',
+  });
   const project = await (await currentDataSource(fieldScope)).getProject(fieldScope, projectId);
 
   const result = await execute(
