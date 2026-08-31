@@ -140,7 +140,17 @@ test('every mutating server action checks permission before it writes', () => {
   assert.ok(actions);
 
   // Session control owns no project data, so it is exempt by name.
-  const sessionOnly = new Set(['signIn', 'signOut', 'viewAs', 'returnToMyAccount']);
+  const sessionOnly = new Set([
+    'signIn',
+    'signOut',
+    'viewAs',
+    'returnToMyAccount',
+    // Redeeming an invitation is deliberately unauthenticated — the whole point
+    // is that the person has no account yet. Authority is the single-use token,
+    // checked against the database rather than trusted for being signed. It is
+    // pinned separately below so this exemption cannot quietly widen.
+    'acceptInvitation',
+  ]);
 
   const bodies = [...actions.text.matchAll(/^export async function (\w+)[\s\S]*?\n\}/gm)];
   assert.ok(bodies.length > 0, 'no server actions found — has the file moved?');
@@ -148,7 +158,7 @@ test('every mutating server action checks permission before it writes', () => {
   // An action may check permission directly, or delegate to a helper that does.
   // Delegation is only acceptable if the helper itself asserts — verified
   // separately below, so the chain is checked rather than assumed.
-  const DELEGATES = ['hubWriteContext('];
+  const DELEGATES = ['hubWriteContext(', 'teamContext('];
 
   const unchecked: string[] = [];
   for (const match of bodies) {

@@ -274,3 +274,79 @@ export function ownsAsClient(
   if (user.role !== 'client') return false;
   return user.contactId !== undefined && user.contactId === record.contactId;
 }
+
+// ── Per-user grants ─────────────────────────────────────────────────────────
+
+/**
+ * Resources a contractor can tick on or off for one person.
+ *
+ * Deliberately NOT every `Resource`. `invoice`, `visibilitySettings` and
+ * `project` are not tickable: they are contractor-only in the matrix, so a tick
+ * could never grant them and offering the box would imply otherwise. A control
+ * that cannot change anything is worse than no control — someone will believe it
+ * worked.
+ */
+export const GRANTABLE_RESOURCES = [
+  'milestone',
+  'task',
+  'dailyUpdate',
+  'document',
+  'photo',
+  'message',
+  'issue',
+  'selection',
+  'changeOrder',
+] as const satisfies readonly Resource[];
+
+export type GrantableResource = (typeof GRANTABLE_RESOURCES)[number];
+
+export function isGrantable(resource: string): resource is GrantableResource {
+  return (GRANTABLE_RESOURCES as readonly string[]).includes(resource);
+}
+
+/**
+ * What this specific person may do — the role AND their ticks.
+ *
+ * ---------------------------------------------------------------------------
+ * THE RULE: role matrix **AND** grant. Never OR.
+ *
+ * `can()` is the ceiling. A grant can only take away from it. Reading this as
+ * an OR — "allowed if the role permits it OR the box is ticked" — would let a
+ * tick box hand a field user access to margins, or a homeowner access to an
+ * invoice. That is the single most dangerous mistake available in this file, so
+ * the AND is written once, here, and every caller goes through it.
+ *
+ * An ABSENT grant means "not narrowed", so a person with no grant rows has
+ * exactly their role's permissions. That is what makes the ticks additive UI
+ * over a safe default rather than a gate everyone has to be let through.
+ * ---------------------------------------------------------------------------
+ */
+export function effectiveCan(
+  role: Role,
+  action: Action,
+  resource: Resource,
+  grants: Partial<Record<string, boolean>> = {},
+): boolean {
+  // The ceiling first. If the role forbids it, nothing below can help.
+  if (!can(role, action, resource)) return false;
+
+  // Reading is what a tick governs — a contractor decides what this person
+  // SEES. Write permissions stay purely the role's business, because "may they
+  // edit a task" is not a question a visibility checkbox should answer.
+  if (action !== 'read') return true;
+
+  const tick = grants[resource];
+  return tick === undefined ? true : tick;
+}
+
+/** Throwing form, for server actions. */
+export function assertEffective(
+  role: Role,
+  action: Action,
+  resource: Resource,
+  grants: Partial<Record<string, boolean>> = {},
+): void {
+  if (!effectiveCan(role, action, resource, grants)) {
+    throw new PermissionError(role, action, resource);
+  }
+}

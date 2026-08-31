@@ -7,6 +7,8 @@ import { planReturn, planViewAs, realIdentity, viewAsEnabled } from './view-as';
 import { assertCan, ownsTask } from './permissions';
 import { requireTenantScope } from './scope';
 import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db/records';
+import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
+import { GRANTABLE_RESOURCES } from './permissions';
 import type { Resource } from './permissions';
 
 /** Which permission resource governs each archivable table. */
@@ -413,4 +415,119 @@ export async function restoreArchivedItem(formData: FormData) {
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/projects');
   revalidatePath('/dashboard/archive');
+}
+
+// ── Team: invitations, revocation, permission ticks ─────────────────────────
+
+/** Contractor-only, checked here rather than trusted from a hidden button. */
+async function teamContext() {
+  const session = await getSession();
+  if (session === null) throw new Error('not signed in');
+
+  // Managing who has access is the contractor's alone. Not in the resource
+  // matrix because a membership is not project data — it is the account.
+  const real = realIdentity(session);
+  if (real.role !== 'contractor') {
+    throw new Error('only a contractor can manage the team');
+  }
+
+  const scope = await requireTenantScope();
+  const hub = getHubTeam();
+  if (!hub.available) {
+    throw new Error(`the Hub database is not connected (missing ${hub.missing.join(', ')})`);
+  }
+  return { scope, team: hub.team, actor: { name: session.name } };
+}
+
+export async function inviteTeamMember(formData: FormData) {
+  const { scope, team, actor } = await teamContext();
+
+  const role = String(formData.get('role') ?? '');
+  if (!(INVITABLE_ROLES as readonly string[]).includes(role)) {
+    throw new Error(`${role} is not a role a contractor can invite`);
+  }
+
+  const result = await team.invite(
+    scope,
+    {
+      email: String(formData.get('email') ?? ''),
+      fullName: String(formData.get('fullName') ?? ''),
+      role: role as InvitableRole,
+      projectIds: [],
+    },
+    actor,
+  );
+
+  revalidatePath('/dashboard/team');
+  // The link is passed back through the URL because no mail sender is
+  // configured yet — the contractor sends it themselves. It is single-use and
+  // expires, and it goes to the person who was allowed to create it.
+  redirect(
+    `/dashboard/team?invited=${encodeURIComponent(result.membership.email)}&link=${encodeURIComponent(result.acceptUrl)}`,
+  );
+}
+
+export async function revokeTeamMember(formData: FormData) {
+  const { scope, team, actor } = await teamContext();
+  await team.revoke(scope, String(formData.get('membershipId') ?? ''), actor);
+  revalidatePath('/dashboard/team');
+}
+
+export async function restoreTeamMember(formData: FormData) {
+  const { scope, team } = await teamContext();
+  await team.restore(scope, String(formData.get('membershipId') ?? ''));
+  revalidatePath('/dashboard/team');
+}
+
+export async function saveTeamGrants(formData: FormData) {
+  const { scope, team, actor } = await teamContext();
+  const membershipId = String(formData.get('membershipId') ?? '');
+  if (membershipId === '') throw new Error('membershipId is required');
+
+  // An unchecked box submits nothing, so every grantable resource is written
+  // explicitly. Reading only the present keys would make unticking a no-op —
+  // the contractor would click Save and nothing would change.
+  const grants: Record<string, boolean> = {};
+  for (const resource of GRANTABLE_RESOURCES) {
+    grants[resource] = formData.get(resource) !== null;
+  }
+
+  await team.setGrants(scope, membershipId, grants, actor);
+  revalidatePath('/dashboard/team');
+}
+
+/**
+ * Redeem an invitation.
+ *
+ * No session is required and none may be assumed — the whole point is that the
+ * person has no account yet. Authority comes from the token alone, which is why
+ * it is checked against the database rather than trusted for being signed.
+ */
+export async function acceptInvitation(formData: FormData) {
+  const token = String(formData.get('token') ?? '');
+  const password = String(formData.get('password') ?? '');
+
+  const hub = getHubTeam();
+  if (!hub.available) throw new Error('the Hub database is not connected');
+
+  const result = await hub.team.acceptInvite(token, password);
+  if (!result.ok) {
+    // The reason goes back in the URL so the page can be specific to someone
+    // who already holds a valid link, without ever revealing anything to
+    // someone holding an invalid one.
+    redirect(`/invite/${encodeURIComponent(token)}?error=${result.reason}`);
+  }
+
+  // Sign them straight in. Making someone set a password and then immediately
+  // log in with it is a step that exists only to make the developer's life
+  // simpler.
+  await setSession({
+    role: result.membership.role,
+    name: result.membership.fullName === '' ? result.membership.email : result.membership.fullName,
+    email: result.membership.email,
+    membershipId: result.membership.id,
+    ...(result.membership.role === 'client' ? { contactId: result.membership.id } : {}),
+  } as Parameters<typeof setSession>[0]);
+
+  redirect(homeFor(result.membership.role));
 }
