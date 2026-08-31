@@ -30,6 +30,9 @@ next-env.d.ts
 *.cookie
 *.cookies.json
 .hud-cookies.json
-/.*.txt
-/_*.mjs
-/_*.html
+# Anchored at the root caught only half of these: a probe written into
+# apps/web/ slipped through and was committed. Unanchored now, so the pattern
+# matches wherever the scratch file lands.
+.*.txt
+_*.mjs
+_*.html
