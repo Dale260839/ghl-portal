@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { cache } from 'react';
 import { redirect } from 'next/navigation';
 
 import { getSession } from './session.ts';
@@ -36,6 +37,19 @@ export interface Access {
   grants: Record<string, boolean>;
   /** True when this person arrived through an invitation. */
   invited: boolean;
+  /**
+   * The projects this person was assigned, or `null` for no restriction.
+   *
+   * The distinction matters and is not cosmetic: `null` is a contractor, who
+   * sees everything of their own; `[]` is an invited person who has been given
+   * nothing yet, and must see nothing. Collapsing the two either blanks the
+   * contractor's dashboard or shows a new crew member every job on the books.
+   *
+   * Read live from the membership on each request rather than carried in the
+   * cookie, so assigning a project takes effect on the next page load instead
+   * of the next sign-in.
+   */
+  projectIds: string[] | null;
   can: (action: Action, resource: Resource) => boolean;
 }
 
@@ -43,7 +57,12 @@ export type AccessResult =
   | { ok: true; access: Access }
   | { ok: false; reason: 'signed-out' | 'revoked' };
 
-export async function currentAccess(): Promise<AccessResult> {
+/**
+ * Deduped per request: the layout and the page both need this, and it costs a
+ * membership read. `cache` scopes to one render pass, so assignment stays live
+ * between requests while a single navigation reads it once.
+ */
+export const currentAccess: () => Promise<AccessResult> = cache(async () => {
   const session = await getSession();
   if (session === null) return { ok: false, reason: 'signed-out' };
 
@@ -56,6 +75,7 @@ export async function currentAccess(): Promise<AccessResult> {
         role: session.role,
         grants: {},
         invited: false,
+        projectIds: null,
         can: (action, resource) => effectiveCan(session.role, action, resource),
       },
     };
@@ -83,10 +103,11 @@ export async function currentAccess(): Promise<AccessResult> {
       role,
       grants: current.grants,
       invited: true,
+      projectIds: current.membership.projectIds,
       can: (action, resource) => effectiveCan(role, action, resource, current.grants),
     },
   };
-}
+});
 
 /**
  * The page-level form: redirects rather than returning, because every caller's

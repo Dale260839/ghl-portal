@@ -1,4 +1,5 @@
 import { requireAccess } from '@/lib/access';
+import { clientProjectsFor } from '@/lib/client-scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getInvoices, forClient, isIssued, totalInvoices, type ClientInvoice } from '@/lib/ghl/invoices';
 import { Badge, Card, CardHeader, PortalEmpty, currency, shortDate } from '@/components/ui';
@@ -42,8 +43,7 @@ function isOverdue(invoice: ClientInvoice, today: string): boolean {
 }
 
 export default async function Payments() {
-  const { session } = await requireAccess();
-  const contactId = session.contactId;
+  const access = await requireAccess();
 
   const shell = (children: React.ReactNode) => (
     <div className="space-y-6">
@@ -58,7 +58,7 @@ export default async function Payments() {
   );
 
   const reader = getInvoices();
-  if (!reader.available || contactId === undefined) {
+  if (!reader.available) {
     return shell(
       <PortalEmpty
         title="Not available yet"
@@ -71,8 +71,20 @@ export default async function Payments() {
   // identity is not a GoHighLevel contact, but the project they are on knows
   // which contact it bills.
   const db = await currentDataSource();
-  const projects = await db.listProjectsForContact(contactId);
+  const projects = await clientProjectsFor(access, db);
   const contacts = [...new Set(projects.map((p) => p.primaryContactId).filter((c) => c !== ''))];
+
+  // No project resolves to no contact, and no contact must mean no invoices —
+  // never an unfiltered list. The filter below would drop everything anyway;
+  // returning here makes that a decision rather than a coincidence.
+  if (contacts.length === 0) {
+    return shell(
+      <PortalEmpty
+        title="No invoices yet"
+        body="Invoices will appear here once your contractor issues them."
+      />,
+    );
+  }
 
   let invoices: ClientInvoice[] = [];
   try {

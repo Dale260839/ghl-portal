@@ -71,6 +71,12 @@ export class BuildSuiteDataSource implements ProjectDataSource {
     return rows.map((row) => this.toProject(row));
   }
 
+  /** The invited-client read: exactly the projects they were assigned. */
+  async listProjectsByIds(projectIds: string[]): Promise<Project[]> {
+    const rows = await this.reader.listProjectRowsByIds(projectIds);
+    return rows.map((row) => this.toProject(row));
+  }
+
   /**
    * Assembled from the projects the contact owns, because BuildSuite's
    * `contacts` are GHL's and we hold no separate record. Returns null rather

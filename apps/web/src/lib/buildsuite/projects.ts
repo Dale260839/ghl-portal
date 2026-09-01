@@ -169,6 +169,7 @@ export interface BuildSuiteReader {
    * contractor, and the §9.1 gate is what constrains this read.
    */
   listProjectRowsForContact(ghlContactId: string, limit?: number): Promise<BuildSuiteProjectRow[]>;
+  listProjectRowsByIds(projectIds: string[], limit?: number): Promise<BuildSuiteProjectRow[]>;
 }
 
 export interface BuildSuiteUnavailable {
@@ -245,6 +246,31 @@ class SupabaseReader implements BuildSuiteReader {
       from: 'projects',
       columns: PROJECT_COLUMNS,
       filters: { ghl_contact_id: `eq.${id}` },
+      order: 'updated_at.desc',
+      limit,
+    });
+  }
+
+  /**
+   * Specific projects, by BuildSuite id.
+   *
+   * Not tenant-scoped, and constrained instead by the id list — which is only
+   * ever written by a contractor, against their own projects, on the Team
+   * screen. That makes it safe for a homeowner read: an invited client holds no
+   * auth profile, so there is no scope to read with, and this returns exactly
+   * what they were given and nothing else.
+   *
+   * An empty list returns empty rather than dropping the filter. That is the
+   * whole safety property, so it is asserted in a test.
+   */
+  async listProjectRowsByIds(projectIds: string[], limit = 50): Promise<BuildSuiteProjectRow[]> {
+    const ids = [...new Set(projectIds.map((id) => id.trim()).filter((id) => id !== ''))];
+    if (ids.length === 0) return [];
+
+    return await this.client.select<BuildSuiteProjectRow>({
+      from: 'projects',
+      columns: PROJECT_COLUMNS,
+      filters: { id: `in.(${ids.join(',')})` },
       order: 'updated_at.desc',
       limit,
     });

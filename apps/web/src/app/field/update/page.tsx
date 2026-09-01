@@ -3,7 +3,8 @@ import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getSession } from '@/lib/session';
 import { Card, CardHeader } from '@/components/ui';
-import { assignedProjectIds, projectsForField } from '@/lib/field-data';
+import { fieldProjectsFor } from '@/lib/field-scope';
+import { requireAccess } from '@/lib/access';
 
 /**
  * The daily update form (§12.2).
@@ -25,7 +26,7 @@ export default async function FieldUpdate() {
   const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
   // §9.4 — only projects this person is on, and with every money field already
   // dropped by `projectsForField`.
-  const assigned = projectsForField(projects, assignedProjectIds(tasks, session?.membershipId ?? ''));
+  const assigned = fieldProjectsFor(await requireAccess(), projects, tasks);
 
   return (
     <div className="space-y-5">

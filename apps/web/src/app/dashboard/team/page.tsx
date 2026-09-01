@@ -1,8 +1,15 @@
 import { requireTenantScope } from '@/lib/scope';
+import { currentDataSource } from '@/lib/data/current-source';
 import { getSession } from '@/lib/session';
 import { getHubTeam, INVITABLE_ROLES, type Membership } from '@/lib/hub-db/team';
 import { GRANTABLE_RESOURCES } from '@/lib/permissions';
-import { inviteTeamMember, revokeTeamMember, restoreTeamMember, saveTeamGrants } from '@/lib/actions';
+import {
+  inviteTeamMember,
+  revokeTeamMember,
+  restoreTeamMember,
+  saveTeamGrants,
+  saveTeamProjects,
+} from '@/lib/actions';
 import { Badge, Card, CardHeader, shortDate } from '@/components/ui';
 import { NotLinkedToContractor } from '@/components/not-linked';
 
@@ -73,9 +80,14 @@ export default async function Team({
     );
   }
 
-  const [members, grants] = await Promise.all([
+  // The projects a new member can be given. Without this the invite form has
+  // no way to say WHICH work someone gets, `project_ids` stays empty, and an
+  // invited person signs in successfully to a screen with nothing on it.
+  const db = await currentDataSource();
+  const [members, grants, projects] = await Promise.all([
     hub.team.listTeam(scope),
     hub.team.listGrants(scope),
+    db.listProjects(scope),
   ]);
 
   const grantsFor = (id: string): Record<string, boolean> =>
@@ -154,6 +166,54 @@ export default async function Team({
               Invite
             </button>
           </div>
+
+          {/* WHICH projects, not just which permissions. These are two different
+              questions and the form only ever asked the second one, so everyone
+              invited so far can see nothing: a crew member's projects and a
+              client's portal both come from this list.
+
+              Ticking nothing is allowed and means nothing — it is the safe
+              default for a person you want to add now and assign later, and it
+              fails closed rather than showing them everything. */}
+          <fieldset className="sm:col-span-4">
+            <legend className="text-xs font-medium text-navy-700">
+              Projects they can see
+            </legend>
+            {projects.length === 0 ? (
+              <p className="mt-1.5 text-xs text-navy-400">
+                No projects yet. You can invite them now and assign work later.
+              </p>
+            ) : (
+              <>
+                <div className="mt-2 grid max-h-44 gap-1 overflow-y-auto rounded-lg border border-navy-200 p-2 sm:grid-cols-2">
+                  {projects.map((project) => (
+                    <label
+                      key={project.buildsuiteProjectId}
+                      className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-xs transition hover:bg-navy-50"
+                    >
+                      <input
+                        type="checkbox"
+                        name="projectIds"
+                        value={project.buildsuiteProjectId}
+                        className="mt-0.5 shrink-0"
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-navy-800">
+                          {project.projectName}
+                        </span>
+                        <span className="block truncate text-navy-400">
+                          {project.buildsuiteProjectId}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-xs text-navy-400">
+                  Tick none and they can sign in but see no projects until you assign some.
+                </p>
+              </>
+            )}
+          </fieldset>
         </form>
         <p className="border-t border-navy-100 px-5 py-3 text-xs text-navy-400">
           You can invite field crew and clients. Another contractor is an account-level change,
@@ -231,6 +291,48 @@ export default async function Team({
                         className="rounded-lg border border-navy-200 px-3 py-1 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
                       >
                         Save
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Which projects, separate from which permissions. Without
+                    this, assignment could only ever be set at the moment of
+                    invitation and never corrected — so everyone invited before
+                    the invite form had a picker was permanently assigned
+                    nothing, with no way for the contractor to fix it. */}
+                {!member.revoked && projects.length > 0 && (
+                  <form action={saveTeamProjects} className="mt-3 border-t border-navy-100 pt-3">
+                    <input type="hidden" name="membershipId" value={member.id} />
+                    <p className="text-xs font-medium text-navy-700">
+                      Projects{' '}
+                      <span className="font-normal text-navy-400">
+                        {member.projectIds.length === 0
+                          ? '— none assigned, so they see nothing'
+                          : `— ${member.projectIds.length} assigned`}
+                      </span>
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+                      {projects.map((project) => (
+                        <label
+                          key={project.buildsuiteProjectId}
+                          className="flex items-center gap-1.5 text-xs text-navy-600"
+                        >
+                          <input
+                            type="checkbox"
+                            name="projectIds"
+                            value={project.buildsuiteProjectId}
+                            defaultChecked={member.projectIds.includes(project.buildsuiteProjectId)}
+                            className="rounded border-navy-300"
+                          />
+                          <span className="max-w-48 truncate">{project.projectName}</span>
+                        </label>
+                      ))}
+                      <button
+                        type="submit"
+                        className="rounded-lg border border-navy-200 px-3 py-1 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
+                      >
+                        Save projects
                       </button>
                     </div>
                   </form>

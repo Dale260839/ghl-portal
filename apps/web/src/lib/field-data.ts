@@ -115,6 +115,24 @@ export function assignedProjectIds(tasks: Task[], membershipId: string): string[
 }
 
 /**
+ * Every project a crew member may open: the ones the contractor assigned them,
+ * plus the ones they hold a task on.
+ *
+ * A union because both are genuine access decisions made by the contractor.
+ * Ticking a project on the invite form is the explicit one; handing someone a
+ * task on a job is the implicit one, and a task you cannot open the project for
+ * is not a task you can do.
+ *
+ * `assigned` of `[]` means assigned nothing, and — with no tasks — yields
+ * nothing. That is the correct answer for a person who has been invited but not
+ * yet given any work, and it is why this returns ids rather than a flag: there
+ * is no value here that means "everything".
+ */
+export function visibleProjectIds(assigned: string[], fromTasks: string[]): string[] {
+  return [...new Set([...assigned, ...fromTasks])];
+}
+
+/**
  * The tasks assigned to this person, on projects they are on.
  *
  * Both conditions, deliberately. A task assigned to someone else on a project

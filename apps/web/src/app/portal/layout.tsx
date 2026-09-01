@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { clientProjectsFor } from '@/lib/client-scope';
 import { requireAccess } from '@/lib/access';
 
 import { AppShell, type NavItem } from '@/components/app-shell';
@@ -55,8 +56,10 @@ export default async function PortalLayout({ children }: { children: React.React
 
   const viewing = isViewingAs(session);
 
-  if (session.role === 'client' && session.contactId !== undefined) {
-    const projects = await db.listProjectsForContact(session.contactId);
+  if (session.role === 'client') {
+    // Same resolution the dashboard uses, so the context bar cannot name a
+    // project the page below it does not show.
+    const projects = await clientProjectsFor(access, db);
     const first = projects[0];
     if (first !== undefined) {
       contextTitle = first.projectName;

@@ -341,3 +341,36 @@ test('§3.6 every path that mints a session carries the tenant profiles', () => 
     );
   }
 });
+
+test('§9.1 a client screen never resolves its own projects', () => {
+  // Every portal screen goes through `clientProjectsFor`, which is the only
+  // place that knows an invited homeowner has no contact id. A page calling the
+  // data source directly is how the two client kinds diverge again — and the
+  // divergence is silent, showing an empty portal rather than an error.
+  const portal = FILES.filter((f) => rel(f.path).startsWith('app/portal/'));
+  assert.ok(portal.length > 0, 'the portal has moved');
+
+  for (const file of portal) {
+    if (rel(file.path).includes('client-scope')) continue;
+    assert.equal(
+      /db\.listProjectsForContact\(|\.listProjectsByIds\(/.test(file.text),
+      false,
+      `${rel(file.path)} resolves client projects itself instead of via clientProjectsFor`,
+    );
+  }
+});
+
+test('§9.4 a field screen never resolves its own projects', () => {
+  // Same rule, other experience. `projectsForField` takes an id list, and
+  // building that list per screen is what let one of them drift onto a name.
+  const field = FILES.filter((f) => rel(f.path).startsWith('app/field/'));
+  assert.ok(field.length > 0, 'the field experience has moved');
+
+  for (const file of field) {
+    assert.equal(
+      /projectsForField\(/.test(file.text),
+      false,
+      `${rel(file.path)} builds its own visible-project list instead of using fieldProjectsFor`,
+    );
+  }
+});

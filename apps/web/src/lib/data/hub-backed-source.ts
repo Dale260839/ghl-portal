@@ -59,6 +59,10 @@ export class HubBackedDataSource implements ProjectDataSource {
     return this.commercial.listProjectsForContact(contactId);
   }
 
+  listProjectsByIds(projectIds: string[]): Promise<Project[]> {
+    return this.commercial.listProjectsByIds(projectIds);
+  }
+
   // ── The Hub's half — the records that used to vanish on restart ───────────
 
   listMilestones(scope: TenantScope, projectId: string): Promise<Milestone[]> {

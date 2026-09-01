@@ -67,6 +67,10 @@ function readerOf(rows: BuildSuiteProjectRow[]): BuildSuiteReader {
     async listProjectRowsForContact(contactId) {
       return contactId.trim() === '' ? [] : rows.filter((r) => r.ghl_contact_id === contactId);
     },
+    async listProjectRowsByIds(projectIds) {
+      const wanted = new Set(projectIds.filter((id) => id.trim() !== ''));
+      return wanted.size === 0 ? [] : rows.filter((r) => wanted.has(r.id));
+    },
     async listActiveProjects() {
       throw new Error('not used by the data source');
     },

@@ -25,6 +25,7 @@ import {
   toFieldProject,
   unseenCount,
   assignedProjectIds,
+  visibleProjectIds,
 } from './field-data.ts';
 import { PROJECTS, TASKS } from './data/fixtures.ts';
 import { MESSAGES } from './data/portal-fixtures.ts';
@@ -240,4 +241,39 @@ test('toFieldProject keeps everything a crew member actually needs', () => {
   ] as const) {
     assert.equal(kept in field, true, `${kept} should survive the projection`);
   }
+});
+
+// ── Assignment comes from two places (2026-09-01) ────────────────────────────
+
+test('a crew member sees projects assigned to them even with no tasks yet', () => {
+  // The gap that made every real invitation land on an empty screen: access was
+  // derived from tasks alone, and a freshly invited person holds none.
+  const target = PROJECTS[0]!.buildsuiteProjectId;
+  const ids = visibleProjectIds([target], assignedProjectIds(TASKS, 'membership-nobody'));
+
+  assert.deepEqual(
+    projectsForField(PROJECTS, ids).map((p) => p.buildsuiteProjectId),
+    [target],
+  );
+});
+
+test('the two sources union rather than replace each other', () => {
+  const fromTasks = assignedProjectIds(TASKS, TONY);
+  const extra = PROJECTS.find((p) => !fromTasks.includes(p.buildsuiteProjectId));
+  assert.ok(extra);
+
+  const ids = visibleProjectIds([extra.buildsuiteProjectId], fromTasks);
+  for (const id of fromTasks) assert.ok(ids.includes(id), 'a task assignment was dropped');
+  assert.ok(ids.includes(extra.buildsuiteProjectId), 'an explicit assignment was dropped');
+});
+
+test('assigned nothing and holding nothing still means nothing', () => {
+  // There must be no value of `assigned` that means "everything".
+  assert.deepEqual(projectsForField(PROJECTS, visibleProjectIds([], [])), []);
+});
+
+test('an assignment to a project that is not ours grants nothing', () => {
+  // The ids are validated on the way in, but the read must not depend on that.
+  const ids = visibleProjectIds(['BSP-NOT-OURS-0001'], []);
+  assert.deepEqual(projectsForField(PROJECTS, ids), []);
 });

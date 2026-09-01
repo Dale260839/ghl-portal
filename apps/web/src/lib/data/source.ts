@@ -37,6 +37,12 @@ export interface ProjectDataSource {
    * §9.1 gate is what constrains this one.
    */
   listProjectsForContact(contactId: string): Promise<Project[]>;
+  /**
+   * Specific projects by id — the read path for an invited client, who has no
+   * GHL contact id and no auth profile to scope with. Constrained by the id
+   * list, which only a contractor can write. Empty in, empty out.
+   */
+  listProjectsByIds(projectIds: string[]): Promise<Project[]>;
 }
 
 export class FixtureDataSource implements ProjectDataSource {
@@ -50,6 +56,12 @@ export class FixtureDataSource implements ProjectDataSource {
 
   async listProjects(scope: TenantScope): Promise<Project[]> {
     return PROJECTS.filter(this.owns(scope, 'projects'));
+  }
+
+  async listProjectsByIds(projectIds: string[]): Promise<Project[]> {
+    const wanted = new Set(projectIds);
+    if (wanted.size === 0) return [];
+    return PROJECTS.filter((p) => wanted.has(p.buildsuiteProjectId));
   }
 
   async getProject(scope: TenantScope, id: string): Promise<Project | null> {

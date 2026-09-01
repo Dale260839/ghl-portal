@@ -357,3 +357,39 @@ test('a field member inherits the contractor profiles; a client inherits none', 
   assert.deepEqual(clientRow.auth_profile_ids, [], 'a homeowner must not inherit BuildSuite access');
   assert.deepEqual(clientRow.project_ids, ['p1'], 'their access is the projects they are on');
 });
+
+test('setProjects filters on the contractor, not just the membership id', async () => {
+  // A membership id is guessable in a way a tenant boundary must not depend on.
+  // The update has to be filtered by the asserted contractor as well, so
+  // reassigning somebody else's crew member changes nothing.
+  const calls: { filters: Record<string, string> }[] = [];
+  const client = {
+    async update(args: { filters: Record<string, string> }) {
+      calls.push({ filters: args.filters });
+      return [];
+    },
+  };
+
+  const team = new HubTeam(client as never, 'secret', 'http://localhost');
+  await team.setProjects(
+    { locationId: 'loc', authProfileIds: ['p1'], contractorId: 'contractor-1' },
+    'membership-9',
+    ['bsp-1'],
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.filters.id, 'eq.membership-9');
+  assert.equal(
+    calls[0]!.filters.contractor_id,
+    'eq.contractor-1',
+    'the tenant filter is missing — another contractor could be reassigned',
+  );
+});
+
+test('setProjects refuses without a resolved contractor', async () => {
+  const team = new HubTeam({} as never, 'secret', 'http://localhost');
+  await assert.rejects(
+    () => team.setProjects({ locationId: 'loc', authProfileIds: ['p1'] }, 'm-1', ['bsp-1']),
+    /contractor/i,
+  );
+});

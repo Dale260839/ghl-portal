@@ -2,7 +2,9 @@ import { getSession } from '@/lib/session';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { Badge, Card, shortDate } from '@/components/ui';
-import { assignedProjectIds, isUnseen, projectsForField, tasksForField, unseenCount } from '@/lib/field-data';
+import { isUnseen, tasksForField, unseenCount } from '@/lib/field-data';
+import { fieldProjectsFor } from '@/lib/field-scope';
+import { requireAccess } from '@/lib/access';
 import { markTaskSeen } from '@/lib/actions';
 
 /**
@@ -34,7 +36,7 @@ export default async function FieldTasks() {
   const db = await currentDataSource(scope);
 
   const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
-  const mine = projectsForField(projects, assignedProjectIds(tasks, session?.membershipId ?? ''));
+  const mine = fieldProjectsFor(await requireAccess(), projects, tasks);
   const assigned = tasksForField(tasks, mine, session?.membershipId ?? '');
   const unseen = unseenCount(assigned);
 

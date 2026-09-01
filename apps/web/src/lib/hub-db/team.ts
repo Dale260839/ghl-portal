@@ -509,6 +509,30 @@ export class HubTeam {
   }
 
   /** Set the permission ticks for one person. */
+  /**
+   * Which projects a member may see.
+   *
+   * Separate from `setGrants` because they answer different questions: grants
+   * are WHAT someone may do, this is WHICH work they may do it on. Conflating
+   * them was how an invited person ended up with permissions over nothing.
+   *
+   * The contractor id is asserted from the scope and used as a filter on the
+   * update, so a membership belonging to another contractor cannot be
+   * reassigned even if its id is known.
+   */
+  async setProjects(
+    scope: TenantScope,
+    membershipId: string,
+    projectIds: string[],
+  ): Promise<void> {
+    const contractorId = this.contractorOf(scope, 'set projects');
+    await this.client.update({
+      from: 'hub_memberships',
+      filters: { id: `eq.${membershipId}`, contractor_id: `eq.${contractorId}` },
+      patch: { project_ids: projectIds, updated_at: new Date().toISOString() },
+    });
+  }
+
   async setGrants(
     scope: TenantScope,
     membershipId: string,

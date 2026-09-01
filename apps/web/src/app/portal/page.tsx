@@ -4,7 +4,9 @@ import { getSession } from '@/lib/session';
 import { scopeOfProject } from '@/lib/scope';
 import { toClientMilestones, toClientProject, toClientUpdates } from '@/lib/client-view';
 import { Badge, Card, CardHeader, ProgressBar, currency, shortDate } from '@/components/ui';
-import type { Contact } from '@/lib/data/types';
+import type { Contact, Project } from '@/lib/data/types';
+import { requireAccess } from '@/lib/access';
+import { clientProjectsFor } from '@/lib/client-scope';
 import { currentDataSource } from '@/lib/data/current-source';
 
 /**
@@ -22,26 +24,36 @@ export default async function ClientPortal({
   const params = await searchParams;
   const db = await currentDataSource();
 
-  // Resolve the requesting contact. A client resolves it from their session —
-  // never from the URL. A contractor previewing resolves it from the project.
-  let contact: Contact | null = null;
-  if (session?.role === 'client' && session.contactId !== undefined) {
-    contact = await db.getContact(session.contactId);
+  // Resolve the projects first, then the contact from the project.
+  //
+  // The other way round — contact first, projects from the contact — could not
+  // serve an invited homeowner at all: they have no GoHighLevel contact, so the
+  // lookup returned null and the screen said "no projects are associated with
+  // this account" to somebody who had just been given three.
+  //
+  // §1.4 still holds: a contact may have many projects, and `clientProjectsFor`
+  // returns all of them.
+  const access = await requireAccess();
+  let projects: Project[] = [];
+  if (session?.role === 'client') {
+    projects = await clientProjectsFor(access, db);
   } else if (session?.role === 'contractor' && params.preview !== undefined) {
-    const target = (await db.listProjects({ locationId: session.ghlLocationId ?? '', authProfileIds: session.authProfileIds ?? [] }).catch(() => [])).find((p) => p.buildsuiteProjectId === params.preview) ?? null;
-    contact = target === null ? null : await db.getContact(target.primaryContactId);
+    const all = await db
+      .listProjects({
+        locationId: session.ghlLocationId ?? '',
+        authProfileIds: session.authProfileIds ?? [],
+      })
+      .catch(() => []);
+    projects = all.filter((p) => p.buildsuiteProjectId === params.preview);
   }
 
-  if (contact === null) {
+  if (projects.length === 0) {
     return (
       <Card className="px-6 py-12 text-center">
         <p className="text-sm text-navy-600">No projects are associated with this account.</p>
       </Card>
     );
   }
-
-  // §1.4 — a contact may have many projects.
-  const projects = await db.listProjectsForContact(contact.id);
   const selectedId = params.project ?? params.preview ?? projects[0]?.buildsuiteProjectId;
   const project = projects.find((p) => p.buildsuiteProjectId === selectedId) ?? projects[0];
 
@@ -49,6 +61,17 @@ export default async function ClientPortal({
     return (
       <Card className="px-6 py-12 text-center">
         <p className="text-sm text-navy-600">No projects are associated with this account.</p>
+      </Card>
+    );
+  }
+
+  // From the project, not the session: an invited homeowner has no contact id
+  // of their own, and the project already names the contact it belongs to.
+  const contact: Contact | null = await db.getContact(project.primaryContactId);
+  if (contact === null) {
+    return (
+      <Card className="px-6 py-12 text-center">
+        <p className="text-sm text-navy-600">This project has no contact on record.</p>
       </Card>
     );
   }

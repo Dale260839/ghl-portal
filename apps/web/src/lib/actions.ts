@@ -518,13 +518,25 @@ export async function inviteTeamMember(formData: FormData) {
     throw new Error(`${role} is not a role a contractor can invite`);
   }
 
+  // Which projects this person gets. Checked against the projects the
+  // contractor actually has rather than trusted from the form: `formData` is
+  // whatever was posted, and an id pasted in by hand must not hand someone
+  // access to another contractor's job.
+  const requested = new Set(formData.getAll('projectIds').map((v) => String(v)));
+  const projectIds =
+    requested.size === 0
+      ? []
+      : (await (await currentDataSource(scope)).listProjects(scope))
+          .map((p) => p.buildsuiteProjectId)
+          .filter((id) => requested.has(id));
+
   const result = await team.invite(
     scope,
     {
       email: String(formData.get('email') ?? ''),
       fullName: String(formData.get('fullName') ?? ''),
       role: role as InvitableRole,
-      projectIds: [],
+      projectIds,
     },
     actor,
     // The host this request came in on, so the link works wherever the app is
@@ -570,6 +582,27 @@ export async function revokeTeamMember(formData: FormData) {
 export async function restoreTeamMember(formData: FormData) {
   const { scope, team } = await teamContext();
   await team.restore(scope, String(formData.get('membershipId') ?? ''));
+  revalidatePath('/dashboard/team');
+}
+
+/**
+ * Reassign which projects a member may see.
+ *
+ * The same validation as the invite form, for the same reason: the ids come
+ * from a form, and only the contractor's own projects may be handed out.
+ */
+export async function saveTeamProjects(formData: FormData) {
+  const { scope, team } = await teamContext();
+  const membershipId = String(formData.get('membershipId') ?? '');
+  if (membershipId === '') throw new Error('membershipId is required');
+
+  const requested = new Set(formData.getAll('projectIds').map((v) => String(v)));
+  const db = await currentDataSource(scope);
+  const projectIds = (await db.listProjects(scope))
+    .map((p) => p.buildsuiteProjectId)
+    .filter((id) => requested.has(id));
+
+  await team.setProjects(scope, membershipId, projectIds);
   revalidatePath('/dashboard/team');
 }
 
@@ -625,7 +658,11 @@ export async function acceptInvitation(formData: FormData) {
     // first scoped read refused before any screen could render. Two paths that
     // mint a session have to mint the same one.
     authProfileIds: result.membership.authProfileIds,
-    ...(result.membership.role === 'client' ? { contactId: result.membership.id } : {}),
+    // NOT `contactId: membership.id`. It was, and a membership id is not a
+    // GoHighLevel contact id — the lookup matched nothing, so every invited
+    // homeowner reached an empty portal that said no projects were associated
+    // with their account. An invited client's projects come from the ticked
+    // list on their membership; see `lib/client-scope.ts`.
   } as Parameters<typeof setSession>[0]);
 
   redirect(homeFor(result.membership.role));

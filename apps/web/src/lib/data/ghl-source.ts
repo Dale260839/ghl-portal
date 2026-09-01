@@ -101,6 +101,19 @@ export class GhlDataSource implements ProjectDataSource {
     return this.listProjectsForContactId(contactId);
   }
 
+  async listProjectsByIds(projectIds: string[]): Promise<Project[]> {
+    const wanted = new Set(projectIds);
+    if (wanted.size === 0) return [];
+    // Filtered client-side, like `listProjectsForContact` above and for the
+    // same reason: whether the custom object supports an `in` query is still
+    // open (see the note at the top of this file).
+    const all = await this.listProjects({
+      locationId: this.config.locationId,
+      authProfileIds: [],
+    });
+    return all.filter((p) => wanted.has(p.buildsuiteProjectId));
+  }
+
   // ── Supporting objects — pending their own object keys ────────────────────
   // Returning empty is the honest failure mode: the screens show their empty
   // states, and nothing silently fabricates a milestone that doesn't exist.

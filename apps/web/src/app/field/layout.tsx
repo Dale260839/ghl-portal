@@ -8,7 +8,8 @@ import { DataModeBanner } from '@/components/ui';
 import { ViewSwitcher, ViewingAsBanner } from '@/components/view-switcher';
 import { FieldNav, type FieldNavItem } from '@/components/field-nav';
 import { isViewingAs, viewAsEnabled } from '@/lib/view-as';
-import { assignedProjectIds, projectsForField, tasksForField, unseenCount } from '@/lib/field-data';
+import { tasksForField, unseenCount } from '@/lib/field-data';
+import { fieldProjectsFor } from '@/lib/field-scope';
 
 /**
  * The field shell — mobile-first, app-like (D4 §5, D2 Step 3).
@@ -24,7 +25,8 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   // Access, not just a session. For an invited crew member this re-reads the
   // membership on every request, so a contractor revoking them takes effect
   // now rather than at their next login.
-  const { session, role } = await requireAccess();
+  const access = await requireAccess();
+  const { session, role } = access;
   if (role !== 'field' && role !== 'contractor') redirect('/');
 
   const viewing = isViewingAs(session);
@@ -33,11 +35,11 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   const db = await currentDataSource(scope);
   const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
 
-  // Keyed on the membership id, not the person's name. A crew member is on a
-  // project because they have work on it, and §3.6 forbids matching a record by
-  // a name that can be edited.
+  // Keyed on ids, never on the person's name (§3.6): a crew member is on a
+  // project because the contractor assigned it to them or gave them a task on
+  // it. `fieldProjectsFor` holds that rule for every field screen.
   const membershipId = session.membershipId ?? '';
-  const mine = projectsForField(projects, assignedProjectIds(tasks, membershipId));
+  const mine = fieldProjectsFor(access, projects, tasks);
   const unseen = unseenCount(tasksForField(tasks, mine, membershipId));
 
   const nav: FieldNavItem[] = [
