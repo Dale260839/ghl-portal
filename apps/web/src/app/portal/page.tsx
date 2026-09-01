@@ -1,3 +1,4 @@
+import { requireTenantScope } from '@/lib/scope';
 import Link from 'next/link';
 import { getSession } from '@/lib/session';
 
@@ -38,12 +39,7 @@ export default async function ClientPortal({
   if (session?.role === 'client') {
     projects = await clientProjectsFor(access, db);
   } else if (session?.role === 'contractor' && params.preview !== undefined) {
-    const all = await db
-      .listProjects({
-        locationId: session.ghlLocationId ?? '',
-        authProfileIds: session.authProfileIds ?? [],
-      })
-      .catch(() => []);
+    const all = await db.listProjects(await requireTenantScope()).catch(() => []);
     projects = all.filter((p) => p.buildsuiteProjectId === params.preview);
   }
 

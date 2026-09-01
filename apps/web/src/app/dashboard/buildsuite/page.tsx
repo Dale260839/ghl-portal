@@ -1,3 +1,4 @@
+import { requireTenantScope } from '@/lib/scope';
 import { getBuildSuiteReader } from '@/lib/buildsuite/projects';
 import { getSession } from '@/lib/session';
 import { Badge, Card, CardHeader, StatTile, shortDate } from '@/components/ui';
@@ -34,10 +35,7 @@ export default async function BuildSuiteProjects() {
       </div>
     );
   }
-  const scope = {
-    locationId: session.ghlLocationId ?? '',
-    authProfileIds: session.authProfileIds,
-  };
+  const scope = await requireTenantScope();
 
   if (!reader.available) {
     return (

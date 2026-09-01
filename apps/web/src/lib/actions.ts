@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { accountForEmail, clearSession, getSession, homeFor, setSession, type Session } from './session';
 import { planReturn, planViewAs, realIdentity, viewAsEnabled } from './view-as';
 import { assertCan, ownsTask } from './permissions';
-import { requireTenantScope } from './scope';
+import { actionTenantScope, requireTenantScope } from './scope';
 import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db/records';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { GRANTABLE_RESOURCES } from './permissions';
@@ -130,11 +130,8 @@ function today(): string {
  * the role is checked server-side rather than by hiding the buttons.
  */
 /** The scope a review action runs under. Small helper so the branches agree. */
-function reviewScope(session: Session): TenantScope {
-  return {
-    locationId: session.ghlLocationId ?? '',
-    authProfileIds: session.authProfileIds ?? [],
-  };
+function reviewScope(session: Session): Promise<TenantScope> {
+  return actionTenantScope(session);
 }
 
 export async function reviewUpdate(formData: FormData) {
@@ -148,10 +145,7 @@ export async function reviewUpdate(formData: FormData) {
   const action = String(formData.get('action') ?? '');
 
   if (action === 'publish') {
-    const scope: TenantScope = {
-      locationId: session.ghlLocationId ?? '',
-      authProfileIds: session.authProfileIds ?? [],
-    };
+    const scope = await actionTenantScope(session);
     const db = await currentDataSource(scope);
     const updates = await db.listDailyUpdates(scope);
     const row = updates.find((u) => u.id === id);
@@ -182,12 +176,12 @@ export async function reviewUpdate(formData: FormData) {
     // §10 — recorded, and deliberately NOT visible to the client. The writer
     // derives client_visible from the status, so the two cannot drift apart.
     const writer = currentWriter();
-    await writer.saveClientSummary(reviewScope(session), id, clientSummary);
-    await writer.setApproval(reviewScope(session), id, 'Approved Internally', today());
+    await writer.saveClientSummary(await reviewScope(session), id, clientSummary);
+    await writer.setApproval(await reviewScope(session), id, 'Approved Internally', today());
   } else if (action === 'return') {
-    await currentWriter().returnForRevision(reviewScope(session), id);
+    await currentWriter().returnForRevision(await reviewScope(session), id);
   } else if (action === 'save') {
-    await currentWriter().saveClientSummary(reviewScope(session), id, clientSummary);
+    await currentWriter().saveClientSummary(await reviewScope(session), id, clientSummary);
   }
 
   revalidatePath('/dashboard/updates');
@@ -232,10 +226,11 @@ export async function submitFieldUpdate(formData: FormData) {
   const projectId = String(formData.get('projectId') ?? '');
   const blocker = String(formData.get('blocker') ?? '');
 
-  const fieldScope: TenantScope = {
-    locationId: session.ghlLocationId ?? '',
-    authProfileIds: session.authProfileIds ?? [],
-  };
+  // Built by `actionTenantScope`, not by hand. Assembling it here read
+  // `session.ghlLocationId`, which an invited crew member does not have — so
+  // submitting an update threw `refusing an unscoped read of submit update`
+  // for exactly the people the screen is for.
+  const fieldScope = await actionTenantScope(session);
 
   // Goes to the Hub's database when there is one. It used to go to an in-memory
   // array that the read path never consulted, so submitting did nothing

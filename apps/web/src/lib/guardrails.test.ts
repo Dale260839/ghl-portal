@@ -384,3 +384,30 @@ test('§9.4 a field screen never resolves its own projects', () => {
     );
   }
 });
+
+
+test('§3.6 only scope.ts builds a tenant scope from a session', () => {
+  // Six call sites assembled this by hand and every one broke identically for
+  // an invited member: they read `session.ghlLocationId`, which only a
+  // GoHighLevel sign-in sets, so the location was blank and assertScope
+  // refused. Fixing the page helper alone left every server action still
+  // throwing — the screens worked and submitting an update did not.
+  //
+  // The rule is not "remember the location". It is that a scope comes from one
+  // function, so there is one place for the next fact a scope needs.
+  for (const file of FILES) {
+    const path = rel(file.path);
+    if (path === 'lib/scope.ts') continue;
+
+    assert.equal(
+      /locationId:\s*session\./.test(file.text),
+      false,
+      `${path} builds a scope by hand; use requireTenantScope or actionTenantScope`,
+    );
+    assert.equal(
+      /ghlLocationId\s*\?\?\s*''/.test(file.text),
+      false,
+      `${path} defaults a blank location; a blank tenant filter is no filter`,
+    );
+  }
+});

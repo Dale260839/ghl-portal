@@ -1,3 +1,4 @@
+import { requireTenantScope } from '@/lib/scope';
 import { getDealsReader } from '@/lib/buildsuite/deals';
 import { getSession } from '@/lib/session';
 import { buildPipelineView, pipelineHeadline, type AgeBand } from '@/lib/pipeline-view';
@@ -77,10 +78,7 @@ export default async function Pipeline() {
     );
   }
 
-  const scope = {
-    locationId: session.ghlLocationId ?? '',
-    authProfileIds: session.authProfileIds,
-  };
+  const scope = await requireTenantScope();
 
   let view;
   try {
