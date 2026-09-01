@@ -276,6 +276,10 @@ export class HubTeam {
     scope: TenantScope,
     input: { email: string; fullName: string; role: InvitableRole; projectIds: string[] },
     actor: { name: string },
+    // Passed per call rather than fixed at construction, because the right
+    // answer is the host THIS request arrived on. A base url decided once at
+    // startup is how an invitation went out pointing at localhost.
+    baseUrl?: string,
   ): Promise<InviteResult> {
     const contractorId = this.contractorOf(scope, 'invite');
     const email = input.email.trim().toLowerCase();
@@ -319,7 +323,7 @@ export class HubTeam {
     return {
       membership: toMembership(membership!),
       token,
-      acceptUrl: `${this.appUrl}/invite/${encodeURIComponent(token)}`,
+      acceptUrl: `${(baseUrl ?? this.appUrl).replace(/\/+$/, '')}/invite/${encodeURIComponent(token)}`,
     };
   }
 

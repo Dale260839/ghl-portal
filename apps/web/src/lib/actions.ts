@@ -10,6 +10,8 @@ import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { GRANTABLE_RESOURCES } from './permissions';
 import { accountSwitchEnabled, findDevAccount } from './dev-accounts';
+import { appUrl } from './app-url';
+import { getGhlEmail, invitationEmail } from './ghl/email';
 import type { Resource } from './permissions';
 
 /** Which permission resource governs each archivable table. */
@@ -524,14 +526,37 @@ export async function inviteTeamMember(formData: FormData) {
       projectIds: [],
     },
     actor,
+    // The host this request came in on, so the link works wherever the app is
+    // running. Previously a fixed env var, which sent a localhost link.
+    await appUrl(),
   );
 
+  // Send it. GoHighLevel rather than a new provider: it already holds the
+  // contact, and a reply lands in the thread the contractor already uses.
+  let delivery = 'none';
+  const mail = getGhlEmail();
+  if (mail.available) {
+    const { subject, html } = invitationEmail({
+      inviterName: actor.name,
+      companyName: String(formData.get('companyName') ?? ''),
+      role: role as InvitableRole,
+      acceptUrl: result.acceptUrl,
+    });
+    const sent = await mail.email.send({
+      email: result.membership.email,
+      name: result.membership.fullName,
+      subject,
+      html,
+    });
+    delivery = sent.sent ? 'sent' : sent.reason;
+  }
+
   revalidatePath('/dashboard/team');
-  // The link is passed back through the URL because no mail sender is
-  // configured yet — the contractor sends it themselves. It is single-use and
-  // expires, and it goes to the person who was allowed to create it.
+  // The link comes back on the URL regardless of whether the email went. If
+  // sending is off or failed, the contractor can still send it themselves —
+  // and if it succeeded, they can still see what the person was sent.
   redirect(
-    `/dashboard/team?invited=${encodeURIComponent(result.membership.email)}&link=${encodeURIComponent(result.acceptUrl)}`,
+    `/dashboard/team?invited=${encodeURIComponent(result.membership.email)}&link=${encodeURIComponent(result.acceptUrl)}&delivery=${delivery}`,
   );
 }
 

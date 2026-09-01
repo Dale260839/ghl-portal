@@ -42,7 +42,7 @@ function statusOf(m: Membership): { label: string; tone: 'good' | 'warn' | 'neut
 export default async function Team({
   searchParams,
 }: {
-  searchParams: Promise<{ invited?: string; link?: string }>;
+  searchParams: Promise<{ invited?: string; link?: string; delivery?: string }>;
 }) {
   const scope = await requireTenantScope();
   const session = await getSession();
@@ -98,10 +98,21 @@ export default async function Team({
       {params.link !== undefined && (
         <Card className="border-emerald-600/20 bg-emerald-50/50 px-5 py-4">
           <p className="text-sm font-medium text-emerald-800">
-            Invitation created for {params.invited}
+            {params.delivery === 'sent'
+              ? `Invitation emailed to ${params.invited}`
+              : `Invitation created for ${params.invited}`}
           </p>
+          {/* The link is shown whether or not the email went. If sending is off
+              the contractor needs it; if it went, they can still see exactly
+              what the person received. */}
           <p className="mt-1 text-xs text-emerald-700">
-            Send them this link. It works once and expires in 7 days.
+            {params.delivery === 'sent'
+              ? 'Sent through GoHighLevel. This is the same link, in case they need it again.'
+              : params.delivery === 'disabled'
+                ? 'Email sending is off, so send them this link yourself.'
+                : params.delivery === 'failed'
+                  ? 'The email did not send. Send them this link yourself, and tell us it failed.'
+                  : 'Send them this link. It works once and expires in 7 days.'}
           </p>
           <code className="mt-2 block overflow-x-auto rounded-lg border border-emerald-600/20 bg-white px-3 py-2 text-xs break-all text-navy-700">
             {params.link}
