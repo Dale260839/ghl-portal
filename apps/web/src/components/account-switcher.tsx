@@ -109,15 +109,30 @@ export function AccountSwitcher({ accounts, current }: { accounts: DevAccount[];
                         {account.businessName || account.email}
                       </span>
                       <span className="block truncate text-xs text-navy-400">{account.email}</span>
+                      {/* The only question anyone asks of this menu is which
+                          account has something to look at. Three of sixty-four
+                          do, so the answer is worth putting on the row. */}
+                      {account.liveWork > 0 && (
+                        <span className="mt-0.5 block text-xs font-medium text-emerald-700">
+                          {account.liveWork} live proposal{account.liveWork === 1 ? '' : 's'}
+                        </span>
+                      )}
                     </span>
                     {/* Unlinked accounts are listed rather than hidden: they are
                         what a real unlinked contractor sees, and the only way to
                         test that path is to be one. */}
-                    {!account.linked && (
-                      <span className="mt-0.5 shrink-0 rounded-full bg-navy-100 px-1.5 py-0.5 text-[10px] text-navy-600">
-                        unlinked
-                      </span>
-                    )}
+                    <span className="mt-0.5 flex shrink-0 flex-col items-end gap-1">
+                      {!account.linked && (
+                        <span className="rounded-full bg-navy-100 px-1.5 py-0.5 text-[10px] text-navy-600">
+                          unlinked
+                        </span>
+                      )}
+                      {account.userType === 'admin' && (
+                        <span className="rounded-full bg-navy-100 px-1.5 py-0.5 text-[10px] text-navy-600">
+                          admin
+                        </span>
+                      )}
+                    </span>
                   </button>
                 </form>
               </li>
@@ -131,6 +146,7 @@ export function AccountSwitcher({ accounts, current }: { accounts: DevAccount[];
           </ul>
 
           <p className="border-t border-navy-100 px-3 py-2 text-xs text-navy-400">
+            {accounts.filter((a) => a.liveWork > 0).length} with live work ·{' '}
             {accounts.filter((a) => a.linked).length} linked ·{' '}
             {accounts.filter((a) => !a.linked).length} unlinked
           </p>

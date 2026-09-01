@@ -39,6 +39,10 @@ export interface DevAccount {
   businessName: string;
   /** False when nothing links this profile to a contractor. Shown, not hidden. */
   linked: boolean;
+  /** `contractor` or `admin`. Shown, because an admin is not a contractor. */
+  userType: string;
+  /** Live proposals filed against this contractor. The reason to pick one. */
+  liveWork: number;
 }
 
 interface ProfileRow {
@@ -74,10 +78,14 @@ export async function listDevAccounts(): Promise<DevAccount[]> {
   if (!config.configured) return [];
   const client = new BuildSuiteClient(config.config);
 
+  // `contractor` AND `admin`. Filtering to `contractor` alone excluded the one
+  // account with signed work on it — ralph@alliance4contractors.com owns AFC and
+  // is recorded as an admin, so the most useful account in the system was the
+  // one the switcher would not show.
   const profiles = await client.select<ProfileRow>({
     from: 'auth_profiles',
     columns: ['id', 'email', 'user_type', 'contractor_id', 'contact_id', 'location_id'],
-    filters: { user_type: 'eq.contractor' },
+    filters: { user_type: 'in.(contractor,admin)' },
     limit: 200,
   });
 
@@ -86,6 +94,22 @@ export async function listDevAccounts(): Promise<DevAccount[]> {
     columns: ['id', 'business_name', 'full_name', 'email', 'ghl_contact_id'],
     limit: 500,
   });
+
+  // How much live work each contractor has. Sorting by it puts the accounts
+  // worth opening at the top, which is the only question anyone asks of this
+  // menu: which of these has something to look at?
+  const proposals = await client.select<{ contractor_id: string | null }>({
+    from: 'proposals',
+    columns: ['contractor_id'],
+    filters: { status: 'in.(submitted,accepted)' },
+    limit: 500,
+  });
+  const workByContractor = new Map<string, number>();
+  for (const p of proposals) {
+    const id = p.contractor_id;
+    if (id === null || id === '00000000-0000-0000-0000-000000000000') continue;
+    workByContractor.set(id, (workByContractor.get(id) ?? 0) + 1);
+  }
 
   const byId = new Map(contractors.map((c) => [c.id, c]));
   const byGhl = new Map<string, ContractorRow[]>();
@@ -121,11 +145,16 @@ export async function listDevAccounts(): Promise<DevAccount[]> {
       contractorId: contractor?.id ?? null,
       businessName: contractor?.business_name ?? contractor?.full_name ?? '',
       linked: contractor !== null,
+      userType: profile.user_type ?? 'unknown',
+      liveWork: contractor === null ? 0 : (workByContractor.get(contractor.id) ?? 0),
     });
   }
 
-  // Linked first — those are the ones with work to look at — then by company.
+  // Accounts with actual work first, then linked ones, then the rest. Only
+  // three contractors in the whole database have live proposals, so without
+  // this the useful ones are buried alphabetically among sixty that are empty.
   return accounts.sort((a, b) => {
+    if (a.liveWork !== b.liveWork) return b.liveWork - a.liveWork;
     if (a.linked !== b.linked) return a.linked ? -1 : 1;
     return (a.businessName || a.email).localeCompare(b.businessName || b.email);
   });
