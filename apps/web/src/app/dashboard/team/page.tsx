@@ -4,6 +4,7 @@ import { getHubTeam, INVITABLE_ROLES, type Membership } from '@/lib/hub-db/team'
 import { GRANTABLE_RESOURCES } from '@/lib/permissions';
 import { inviteTeamMember, revokeTeamMember, restoreTeamMember, saveTeamGrants } from '@/lib/actions';
 import { Badge, Card, CardHeader, shortDate } from '@/components/ui';
+import { NotLinkedToContractor } from '@/components/not-linked';
 
 /**
  * Team — who the contractor has given access to, and to what.
@@ -56,6 +57,18 @@ export default async function Team({
           <p className="text-sm text-navy-600">The Hub database isn&apos;t connected.</p>
           <p className="mt-1.5 text-xs text-navy-400">Missing: {hub.missing.join(', ')}</p>
         </Card>
+      </div>
+    );
+  }
+
+  // The Hub files a team under `contractors.id`, and a session only knows an
+  // auth profile id. Without the link there is nothing to read, and saying so
+  // beats the 500 that `assertContractor` produces on its own.
+  if (scope.contractorId === undefined) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-xl font-semibold tracking-tight text-navy-900">Team</h1>
+        <NotLinkedToContractor what="Your team" email={session?.email} />
       </div>
     );
   }

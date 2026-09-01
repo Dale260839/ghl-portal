@@ -9,6 +9,7 @@ import { requireTenantScope } from './scope';
 import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db/records';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { GRANTABLE_RESOURCES } from './permissions';
+import { accountSwitchEnabled, findDevAccount } from './dev-accounts';
 import type { Resource } from './permissions';
 
 /** Which permission resource governs each archivable table. */
@@ -597,4 +598,42 @@ export async function acceptInvitation(formData: FormData) {
   } as Parameters<typeof setSession>[0]);
 
   redirect(homeFor(result.membership.role));
+}
+
+/**
+ * Sign in as another contractor. **Development scaffolding.**
+ *
+ * Refuses unless `ENABLE_ACCOUNT_SWITCH=true`, checked HERE and not only in the
+ * component that renders the menu. A hidden button is a UI fact; a server
+ * action is something anyone can post to, and this one hands out somebody
+ * else's data.
+ *
+ * The account is looked up by id rather than taken from the form, so a posted
+ * profile id that is not on the list does nothing.
+ */
+export async function switchAccount(formData: FormData) {
+  if (!accountSwitchEnabled()) {
+    throw new Error('account switching is disabled');
+  }
+
+  const session = await getSession();
+  if (session === null) throw new Error('not signed in');
+  if (realIdentity(session).role !== 'contractor') {
+    throw new Error('only a contractor account can switch');
+  }
+
+  const account = await findDevAccount(String(formData.get('authProfileId') ?? ''));
+  if (account === null) throw new Error('unknown account');
+
+  await setSession({
+    role: 'contractor',
+    name: account.businessName === '' ? account.email : account.businessName,
+    email: account.email,
+    authProfileIds: [account.authProfileId],
+    ghlLocationId: account.locationId,
+  });
+
+  // Everything reads through the scope, so every surface changes at once.
+  revalidatePath('/', 'layout');
+  redirect('/dashboard/engagements');
 }

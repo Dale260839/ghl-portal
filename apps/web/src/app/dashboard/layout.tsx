@@ -4,6 +4,8 @@ import { requireTenantScope } from '@/lib/scope';
 
 import { AppShell, type NavItem } from '@/components/app-shell';
 import { ViewSwitcher } from '@/components/view-switcher';
+import { AccountSwitcher } from '@/components/account-switcher';
+import { listDevAccounts } from '@/lib/dev-accounts';
 import { viewAsEnabled } from '@/lib/view-as';
 import { DataModeBanner } from '@/components/ui';
 import { currentDataSource, currentSourceKind } from '@/lib/data/current-source';
@@ -26,6 +28,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const scope = await requireTenantScope();
   const db = await currentDataSource(scope);
+  const devAccounts = await listDevAccounts();
 
   // Badge counts make the sidebar a worklist rather than a menu — a PM should
   // see from the nav alone that three updates are waiting.
@@ -61,7 +64,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
       contextSubtitle={`${session.name} · Project Manager`}
       nav={nav}
       userName={session.name}
-      headerExtra={viewAsEnabled() ? <ViewSwitcher current="contractor" viewing={false} /> : null}
+      headerExtra={
+        <>
+          {/* Development only, and off unless ENABLE_ACCOUNT_SWITCH=true. It
+              signs you in as another contractor rather than showing your own
+              data through another lens, which is what makes it useful for
+              checking tenancy and what makes it unsafe to ship enabled. */}
+          {devAccounts.length > 0 && (
+            <AccountSwitcher accounts={devAccounts} current={scope.authProfileIds[0]} />
+          )}
+          {viewAsEnabled() && <ViewSwitcher current="contractor" viewing={false} />}
+        </>
+      }
       banner={<DataModeBanner kind={await currentSourceKind()} />}
     >
       {children}

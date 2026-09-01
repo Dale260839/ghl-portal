@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session';
 import { getHubRecords, type ArchivedItem } from '@/lib/hub-db/records';
 import { restoreArchivedItem } from '@/lib/actions';
 import { Badge, Card, CardHeader, shortDate } from '@/components/ui';
+import { NotLinkedToContractor } from '@/components/not-linked';
 
 /**
  * The Archive.
@@ -42,6 +43,14 @@ export default async function Archive() {
           <p className="text-sm text-navy-600">The Hub database isn&apos;t connected.</p>
           <p className="mt-1.5 text-xs text-navy-400">Missing: {hub.missing.join(', ')}</p>
         </Card>
+      </Shell>
+    );
+  }
+
+  if (scope.contractorId === undefined) {
+    return (
+      <Shell>
+        <NotLinkedToContractor what="The archive" email={session?.email} />
       </Shell>
     );
   }

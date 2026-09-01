@@ -150,6 +150,10 @@ test('every mutating server action checks permission before it writes', () => {
     // checked against the database rather than trusted for being signed. It is
     // pinned separately below so this exemption cannot quietly widen.
     'acceptInvitation',
+    // Development scaffolding that swaps which contractor you are. It owns no
+    // project data, so the matrix has nothing to say about it. Its own gates
+    // are pinned below rather than taken on trust.
+    'switchAccount',
   ]);
 
   const bodies = [...actions.text.matchAll(/^export async function (\w+)[\s\S]*?\n\}/gm)];
@@ -281,4 +285,34 @@ test('every permission-checking helper actually checks permission', () => {
   const helper = actions.text.match(/async function hubWriteContext\([\s\S]*?\n\}/);
   assert.ok(helper, 'hubWriteContext has moved or been renamed — update DELEGATES');
   assert.match(helper[0], /assertCan\(/, 'hubWriteContext no longer checks permission');
+});
+
+test('the account switch is gated by a flag AND the real identity', () => {
+  // It hands out another contractor's data, so it is exempt from the permission
+  // rule only while it refuses by default. Both gates are asserted here because
+  // adding a name to `sessionOnly` must never be a way to ship an ungated write.
+  const actions = FILES.find((f) => rel(f.path) === 'lib/actions.ts');
+  assert.ok(actions);
+
+  const body = actions.text.match(/export async function switchAccount\([\s\S]*?\n\}/);
+  assert.ok(body, 'switchAccount has moved or been renamed');
+
+  assert.match(body[0], /accountSwitchEnabled\(\)/, 'it must check the flag server-side');
+  assert.match(body[0], /realIdentity\(/, 'it must check the REAL identity, not the assumed one');
+  assert.match(body[0], /findDevAccount\(/, 'it must look the account up, not trust the form');
+});
+
+test('the account switch is off unless explicitly enabled', () => {
+  // The inverse of DISABLE_VIEW_AS, deliberately. A deployment that sets nothing
+  // gets no switch, which is the right way round for a control that hands out
+  // somebody else's records.
+  const dev = FILES.find((f) => rel(f.path) === 'lib/dev-accounts.ts');
+  assert.ok(dev);
+
+  assert.match(dev.text, /ENABLE_ACCOUNT_SWITCH === 'true'/);
+  assert.equal(
+    /DISABLE_ACCOUNT_SWITCH|!== 'true'/.test(dev.text),
+    false,
+    'it must default off, not default on',
+  );
 });

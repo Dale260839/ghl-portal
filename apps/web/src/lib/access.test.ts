@@ -13,8 +13,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { effectiveCan } from './permissions.ts';
@@ -151,4 +151,52 @@ test('dashboard, timeline and messages are never tickable away', () => {
   for (const always of ["'/portal'", "'/portal/timeline'", "'/portal/messages'"]) {
     assert.equal(map.includes(`${always}:`), false, `${always} must not be tickable`);
   }
+});
+
+// ── A missing contractor must never be a 500 ────────────────────────────────
+
+test('every screen that reads the Hub handles an unlinked session', () => {
+  // `assertContractor` throws when a session cannot be resolved to a contractor,
+  // which is right — the alternative was reading under an auth profile id and
+  // silently showing nothing. But a throw reaches the user as a stack trace,
+  // and seven of 64 contractor profiles are in that state through no fault of
+  // their own.
+  //
+  // So any page touching a Hub layer has to check first. This finds the ones
+  // that forgot.
+  const app = join(LIB, '..', 'app');
+  const pages: string[] = [];
+
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name === 'page.tsx') pages.push(full);
+    }
+  };
+  walk(app);
+
+  const unguarded = pages.filter((path) => {
+    const text = readFileSync(path, 'utf8');
+    const readsHub = /getHubTeam|getHubRecords|getHubOperational/.test(text);
+    if (!readsHub) return false;
+
+    // Only DIRECT calls into a Hub layer can throw. The same method names
+    // reached through `currentDataSource` are safe, because that composes the
+    // Hub in only when a contractor resolved — so `db.listMilestones(...)` is
+    // fine and `hub.records.listArchived(...)` is not.
+    const throwsDirectly =
+      /(hub|records|ops|team)\.(records|team|ops)?\.?(listArchived|listTeam|listGrants|listDailyUpdates|listMilestones|listTasks|listIssues)\(/.test(
+        text,
+      );
+    if (!throwsDirectly) return false;
+
+    return !(/contractorId === undefined/.test(text) || /!identity\.resolved/.test(text));
+  });
+
+  assert.deepEqual(
+    unguarded.map((p) => p.slice(app.length + 1).split(sep).join('/')),
+    [],
+    'a screen reads the Hub without handling a session that has no contractor',
+  );
 });
