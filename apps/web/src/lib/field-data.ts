@@ -87,10 +87,31 @@ export function toFieldProject(project: Project): FieldProject {
  * §9.4's "unassigned projects" clause. Fixtures assign by superintendent; with
  * live data this filters on the project's Field Team association.
  */
-export function projectsForField(projects: Project[], fieldUser: string): FieldProject[] {
-  return projects
-    .filter((p) => p.superintendent === fieldUser)
-    .map(toFieldProject);
+/**
+ * The projects a crew member is on.
+ *
+ * ---------------------------------------------------------------------------
+ * THIS MATCHED ON A NAME UNTIL 2026-09-01, AND §3.6 FORBIDS THAT OUTRIGHT.
+ *
+ * It was `p.superintendent === fieldUser`. Two problems, and the second is why
+ * nobody noticed the first: a rename would silently empty somebody's phone on a
+ * job site, and on live BuildSuite data `superintendent` is empty on every row,
+ * so no crew member would ever have seen anything at all.
+ *
+ * A crew member is on a project because they have WORK on it. The Hub owns
+ * tasks now, and a task carries the membership it is assigned to, so the
+ * question has a real answer keyed on an id.
+ * ---------------------------------------------------------------------------
+ */
+export function projectsForField(projects: Project[], assignedProjectIds: string[]): FieldProject[] {
+  const mine = new Set(assignedProjectIds);
+  return projects.filter((p) => mine.has(p.buildsuiteProjectId)).map(toFieldProject);
+}
+
+/** The projects a person has open tasks on. Ids, never names. */
+export function assignedProjectIds(tasks: Task[], membershipId: string): string[] {
+  if (membershipId === '') return [];
+  return [...new Set(tasks.filter((t) => t.assignedTo === membershipId).map((t) => t.projectId))];
 }
 
 /**
@@ -104,11 +125,12 @@ export function projectsForField(projects: Project[], fieldUser: string): FieldP
 export function tasksForField(
   tasks: Task[],
   projects: FieldProject[],
-  fieldUser: string,
+  /** `hub_memberships.id`. An id, not a name — see `projectsForField`. */
+  membershipId: string,
 ): Task[] {
   const mine = new Set(projects.map((p) => p.buildsuiteProjectId));
   return tasks
-    .filter((t) => t.assignedTo === fieldUser && mine.has(t.projectId))
+    .filter((t) => t.assignedTo === membershipId && mine.has(t.projectId))
     // Newest assignment first, so a fresh ding is at the top of the screen.
     .sort((a, b) => b.assignedAt.localeCompare(a.assignedAt));
 }

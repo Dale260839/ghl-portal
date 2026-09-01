@@ -24,6 +24,7 @@ import {
   tasksForField,
   toFieldProject,
   unseenCount,
+  assignedProjectIds,
 } from './field-data.ts';
 import { PROJECTS, TASKS } from './data/fixtures.ts';
 import { MESSAGES } from './data/portal-fixtures.ts';
@@ -33,7 +34,7 @@ const TONY = 'Tony Alvarez';
 // ── §9.4 · money ─────────────────────────────────────────────────────────────
 
 test('§9.4 a field project has no money property at all', () => {
-  const mine = projectsForField(PROJECTS, TONY);
+  const mine = projectsForField(PROJECTS, assignedProjectIds(TASKS, TONY));
   assert.ok(mine.length > 0, 'the field user must have projects for this to prove anything');
 
   const banned = [
@@ -74,7 +75,7 @@ test('§9.4 the source project really does carry those values', () => {
 test('§9.4 no key on a field project even looks financial', () => {
   // Catches a future field named `vendorCost` or `profitPercent` that nobody
   // remembered to add to the Omit.
-  const [project] = projectsForField(PROJECTS, TONY);
+  const [project] = projectsForField(PROJECTS, assignedProjectIds(TASKS, TONY));
   assert.ok(project);
 
   for (const key of Object.keys(project)) {
@@ -94,10 +95,20 @@ test('§9.4 no key on a field project even looks financial', () => {
 // ── §9.4 · unassigned projects ───────────────────────────────────────────────
 
 test('§9.4 a field user sees only the projects they are on', () => {
-  const mine = projectsForField(PROJECTS, TONY);
-  const others = PROJECTS.filter((p) => p.superintendent !== TONY);
+  // "On a project" means holding a task on it. NOT being named its
+  // superintendent: that was a §3.6 name match, and on live BuildSuite rows
+  // `superintendent` is empty on every single one, so keying off it showed a
+  // crew member nothing at all.
+  const assigned = assignedProjectIds(TASKS, TONY);
+  const mine = projectsForField(PROJECTS, assigned);
+  const others = PROJECTS.filter((p) => !assigned.includes(p.buildsuiteProjectId));
 
   assert.ok(others.length > 0, 'fixtures must include a project this user is not on');
+  assert.deepEqual(
+    mine.map((p) => p.buildsuiteProjectId).sort(),
+    [...assigned].sort(),
+    'the visible set is exactly the assigned set — no more, no fewer',
+  );
 
   const mineIds = new Set(mine.map((p) => p.buildsuiteProjectId));
   for (const other of others) {
@@ -105,16 +116,33 @@ test('§9.4 a field user sees only the projects they are on', () => {
   }
 });
 
+test('being named superintendent is not what grants access', () => {
+  // Guards the regression directly. Tony is superintendent of a project he
+  // holds no task on; it must not appear.
+  const assigned = assignedProjectIds(TASKS, TONY);
+  const suptOnly = PROJECTS.filter(
+    (p) => p.superintendent === TONY && !assigned.includes(p.buildsuiteProjectId),
+  );
+  assert.ok(suptOnly.length > 0, 'fixtures must separate the two ideas for this to prove anything');
+
+  const shown = new Set(
+    projectsForField(PROJECTS, assigned).map((p) => p.buildsuiteProjectId),
+  );
+  for (const p of suptOnly) {
+    assert.equal(shown.has(p.buildsuiteProjectId), false, 'a name match granted access');
+  }
+});
+
 test('an unknown field user sees nothing rather than everything', () => {
   // Fail closed: a name that matches nobody must not fall through to "all".
-  assert.deepEqual(projectsForField(PROJECTS, 'Nobody At All'), []);
-  assert.deepEqual(projectsForField(PROJECTS, ''), []);
+  assert.deepEqual(projectsForField(PROJECTS, assignedProjectIds(TASKS, 'membership-nobody')), []);
+  assert.deepEqual(projectsForField(PROJECTS, assignedProjectIds(TASKS, '')), []);
 });
 
 // ── Assignment, and the ding (D4 §5) ─────────────────────────────────────────
 
 test('only tasks assigned to this person are returned', () => {
-  const mine = projectsForField(PROJECTS, TONY);
+  const mine = projectsForField(PROJECTS, assignedProjectIds(TASKS, TONY));
   const tasks = tasksForField(TASKS, mine, TONY);
 
   assert.ok(tasks.length > 0);
@@ -127,7 +155,8 @@ test('only tasks assigned to this person are returned', () => {
 });
 
 test('a task assigned to me on a project I am not on is still not shown', () => {
-  const foreign = PROJECTS.find((p) => p.superintendent !== TONY);
+  const assigned = assignedProjectIds(TASKS, TONY);
+  const foreign = PROJECTS.find((p) => !assigned.includes(p.buildsuiteProjectId));
   assert.ok(foreign);
 
   const stray = {
@@ -137,14 +166,14 @@ test('a task assigned to me on a project I am not on is still not shown', () => 
     assignedTo: TONY,
   };
 
-  const mine = projectsForField(PROJECTS, TONY);
+  const mine = projectsForField(PROJECTS, assigned);
   const shown = tasksForField([...TASKS, stray], mine, TONY).map((t) => t.id);
 
   assert.equal(shown.includes('task-stray'), false, 'both conditions must hold, not either');
 });
 
 test('the ding counts unseen assignments only', () => {
-  const mine = projectsForField(PROJECTS, TONY);
+  const mine = projectsForField(PROJECTS, assignedProjectIds(TASKS, TONY));
   const tasks = tasksForField(TASKS, mine, TONY);
 
   const expected = tasks.filter((t) => t.seenAt === null).length;
@@ -157,7 +186,7 @@ test('the ding counts unseen assignments only', () => {
 });
 
 test('newest assignment sorts first', () => {
-  const mine = projectsForField(PROJECTS, TONY);
+  const mine = projectsForField(PROJECTS, assignedProjectIds(TASKS, TONY));
   const tasks = tasksForField(TASKS, mine, TONY);
 
   for (let i = 1; i < tasks.length; i++) {
@@ -171,7 +200,7 @@ test('newest assignment sorts first', () => {
 // ── §9.4 · private client messages ───────────────────────────────────────────
 
 test('§9.4 the field thread contains nothing the client can see', () => {
-  const mine = projectsForField(PROJECTS, TONY);
+  const mine = projectsForField(PROJECTS, assignedProjectIds(TASKS, TONY));
   const ids = new Set(mine.map((p) => p.buildsuiteProjectId));
   const thread = fieldMessages(MESSAGES, ids);
 
@@ -182,7 +211,7 @@ test('§9.4 the field thread contains nothing the client can see', () => {
 });
 
 test('§9.4 the field thread contains nothing from another crew’s project', () => {
-  const mine = projectsForField(PROJECTS, TONY);
+  const mine = projectsForField(PROJECTS, assignedProjectIds(TASKS, TONY));
   const ids = new Set(mine.map((p) => p.buildsuiteProjectId));
 
   for (const message of fieldMessages(MESSAGES, ids)) {

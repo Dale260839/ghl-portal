@@ -8,7 +8,7 @@ import { DataModeBanner } from '@/components/ui';
 import { ViewSwitcher, ViewingAsBanner } from '@/components/view-switcher';
 import { FieldNav, type FieldNavItem } from '@/components/field-nav';
 import { isViewingAs, viewAsEnabled } from '@/lib/view-as';
-import { projectsForField, tasksForField, unseenCount } from '@/lib/field-data';
+import { assignedProjectIds, projectsForField, tasksForField, unseenCount } from '@/lib/field-data';
 
 /**
  * The field shell — mobile-first, app-like (D4 §5, D2 Step 3).
@@ -33,8 +33,12 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   const db = await currentDataSource(scope);
   const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
 
-  const mine = projectsForField(projects, session.name);
-  const unseen = unseenCount(tasksForField(tasks, mine, session.name));
+  // Keyed on the membership id, not the person's name. A crew member is on a
+  // project because they have work on it, and §3.6 forbids matching a record by
+  // a name that can be edited.
+  const membershipId = session.membershipId ?? '';
+  const mine = projectsForField(projects, assignedProjectIds(tasks, membershipId));
+  const unseen = unseenCount(tasksForField(tasks, mine, membershipId));
 
   const nav: FieldNavItem[] = [
     { href: '/field', label: 'Today', icon: 'today' },

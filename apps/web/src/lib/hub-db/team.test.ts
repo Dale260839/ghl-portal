@@ -327,3 +327,33 @@ test('only resources a tick could actually affect are offered', () => {
   assert.equal(isGrantable('visibilitySettings'), false);
   assert.equal(isGrantable('project'), false);
 });
+
+// ── What an invitation grants on the BuildSuite side ────────────────────────
+
+test('a field member inherits the contractor profiles; a client inherits none', async () => {
+  // THE distinction. The field interface reads the contractor's projects, so a
+  // crew member with no profile is bounced out by assertScope — which is exactly
+  // what happened to the first field invitation that went out.
+  //
+  // A homeowner inheriting them would be handed every project the contractor
+  // has. Their access is project_ids plus the §9.1 gate, and an empty profile
+  // list is what keeps BuildSuite closed to them.
+  const field = fakeTeam();
+  await field.team.invite(
+    scope,
+    { email: 'crew@example.com', fullName: 'Crew', role: 'field', projectIds: [] },
+    actor,
+  );
+  const fieldRow = (field.calls.find((c) => c.url.includes('hub_memberships'))!.body as Record<string, unknown>[])[0]!;
+  assert.deepEqual(fieldRow.auth_profile_ids, [...scope.authProfileIds]);
+
+  const client = fakeTeam();
+  await client.team.invite(
+    scope,
+    { email: 'owner@example.com', fullName: 'Owner', role: 'client', projectIds: ['p1'] },
+    actor,
+  );
+  const clientRow = (client.calls.find((c) => c.url.includes('hub_memberships'))!.body as Record<string, unknown>[])[0]!;
+  assert.deepEqual(clientRow.auth_profile_ids, [], 'a homeowner must not inherit BuildSuite access');
+  assert.deepEqual(clientRow.project_ids, ['p1'], 'their access is the projects they are on');
+});

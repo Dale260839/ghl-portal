@@ -3,7 +3,7 @@ import 'server-only';
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
 import { getHubClient, type HubClient } from './client.ts';
-import { assertContractor, type TenantScope } from '../tenancy.ts';
+import { assertContractor, assertScope, type TenantScope } from '../tenancy.ts';
 import { sign, verify } from '../auth/session-crypto.ts';
 import type { Role } from '../demo-accounts.ts';
 
@@ -290,11 +290,25 @@ export class HubTeam {
       throw new Error(`${input.role} is not a role a contractor can invite`);
     }
 
+    // A FIELD member inherits the inviter's BuildSuite profiles; a CLIENT does
+    // not, and the difference is the whole privacy model.
+    //
+    // The field interface reads the contractor's projects to know what work
+    // exists, so a crew member with no profile is bounced straight back out by
+    // `assertScope` — which is what happened to the first field invitation.
+    //
+    // A homeowner must never inherit them: that would hand them every project
+    // the contractor has. Their access is `project_ids` plus the §9.1 gate, and
+    // an empty profile list is what keeps BuildSuite closed to them.
+    const inheritedProfiles =
+      input.role === 'field' ? [...assertScope(scope, 'invite').authProfileIds] : [];
+
     const [membership] = await this.client.insert<MembershipRow>({
       from: 'hub_memberships',
       rows: [
         {
           contractor_id: contractorId,
+          auth_profile_ids: inheritedProfiles,
           email,
           full_name: input.fullName.trim(),
           role: input.role,

@@ -2,7 +2,7 @@ import { getSession } from '@/lib/session';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { Card, shortDate } from '@/components/ui';
-import { fieldMessages, projectsForField } from '@/lib/field-data';
+import { assignedProjectIds, fieldMessages, projectsForField } from '@/lib/field-data';
 import { sendFieldMessage } from '@/lib/actions';
 import { FieldConfirmation } from '@/components/field-nav';
 import { MESSAGES } from '@/lib/data/portal-fixtures';
@@ -28,8 +28,9 @@ export default async function FieldMessages({
   const scope = await requireTenantScope();
   const db = await currentDataSource(scope);
 
-  const projects = await db.listProjects(scope);
-  const mine = projectsForField(projects, session?.name ?? '');
+  // Tasks decide which projects are this person's, so both are needed.
+  const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
+  const mine = projectsForField(projects, assignedProjectIds(tasks, session?.membershipId ?? ''));
   const mineIds = new Set(mine.map((p) => p.buildsuiteProjectId));
   const thread = fieldMessages(MESSAGES, mineIds);
 

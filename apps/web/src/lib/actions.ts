@@ -67,8 +67,9 @@ export async function signIn(_prev: { error?: string } | undefined, formData: Fo
           email: m.email,
           membershipId: m.id,
           // The BuildSuite profiles this member reads under, from the
-          // membership row. A contractor needs one; field crew and clients get
-          // an empty array because they read only the Hub's tables.
+          // membership row. A contractor and a field member carry the
+          // contractor's profiles; a client carries none, because their access
+          // is their projects plus the gate and BuildSuite stays closed to them.
           //
           // It used to be `[m.contractorId]`, which put a contractor id where an
           // auth profile id belongs — the same conflation that hid a
@@ -619,6 +620,11 @@ export async function acceptInvitation(formData: FormData) {
     name: result.membership.fullName === '' ? result.membership.email : result.membership.fullName,
     email: result.membership.email,
     membershipId: result.membership.id,
+    // The SAME fields `signIn` sets. Leaving these out is what made accepting an
+    // invitation land on a TenancyError: the session had no profiles, so the
+    // first scoped read refused before any screen could render. Two paths that
+    // mint a session have to mint the same one.
+    authProfileIds: result.membership.authProfileIds,
     ...(result.membership.role === 'client' ? { contactId: result.membership.id } : {}),
   } as Parameters<typeof setSession>[0]);
 

@@ -316,3 +316,28 @@ test('the account switch is off unless explicitly enabled', () => {
     'it must default off, not default on',
   );
 });
+
+test('§3.6 every path that mints a session carries the tenant profiles', () => {
+  // The bug this exists to prevent, found on 2026-09-01 by a real invited user:
+  // `signIn` set `authProfileIds` and `acceptInvitation` did not. Accepting an
+  // invitation therefore produced a session with no tenant, and the first
+  // scoped read threw TenancyError before any screen could render — the new
+  // user's very first click.
+  //
+  // Two functions minting the same object is a shape that drifts. Anything that
+  // opens a session has to answer "whose data is this?", so the check is on
+  // every call site rather than on the two we know about.
+  const actions = FILES.find((f) => rel(f.path) === 'lib/actions.ts');
+  assert.ok(actions);
+
+  const calls = actions.text.match(/setSession\(\{[\s\S]*?\n {2}\}/g) ?? [];
+  assert.ok(calls.length >= 2, 'setSession call sites have moved or been reshaped');
+
+  for (const call of calls) {
+    assert.match(
+      call,
+      /authProfileIds/,
+      'a session is being opened without the profiles that scope every read',
+    );
+  }
+});
