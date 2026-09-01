@@ -382,7 +382,7 @@ export function punchListProgress(
  * A BuildSuite project has no §7 stage, so this falls back to the status
  * BuildSuite itself recorded. Never invents a mapping between the two.
  */
-export function stageLabel(project: Project): string {
+export function stageLabel(project: Pick<Project, 'projectStage' | 'sourceStatus'>): string {
   return project.projectStage ?? project.sourceStatus ?? 'Unknown';
 }
 

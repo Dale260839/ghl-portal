@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from './session.ts';
 import type { TenantScope } from './tenancy.ts';
 import { resolveContractor } from './buildsuite/contractor-identity.ts';
+import { locationForAuthProfiles } from './buildsuite/profile-location.ts';
 import type { Project } from './data/types.ts';
 
 /**
@@ -27,8 +28,26 @@ export async function requireTenantScope(): Promise<TenantScope> {
     // dashboard that looks like a bug.
     redirect('/?error=no-profile');
   }
+  // The location, which an invited member's session does not carry: they never
+  // signed in through GoHighLevel, so nothing put one in their cookie. It is
+  // read from the auth profile they inherited rather than stored again.
+  //
+  // `assertScope` rejects a blank location, so without this every scoped read
+  // threw for every invited person — a successful login followed immediately by
+  // a server error.
+  let locationId = (session.ghlLocationId ?? '').trim();
+  if (locationId === '') {
+    locationId = (await locationForAuthProfiles(session.authProfileIds)) ?? '';
+  }
+  if (locationId === '') {
+    // Fail closed, and say which of the two it is. Blank here means the profile
+    // itself names no sub-account, which is a data problem rather than a
+    // sign-in problem, and guessing a location would cross a tenant boundary.
+    redirect('/?error=no-location');
+  }
+
   const base: TenantScope = {
-    locationId: session.ghlLocationId ?? '',
+    locationId,
     authProfileIds: session.authProfileIds,
   };
 

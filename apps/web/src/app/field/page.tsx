@@ -1,6 +1,8 @@
 import { submitFieldUpdate } from '@/lib/actions';
 
 import { requireTenantScope } from '@/lib/scope';
+import { requireAccess } from '@/lib/access';
+import { fieldProjectsFor } from '@/lib/field-scope';
 import { Badge, Card, CardHeader, shortDate } from '@/components/ui';
 import { stageLabel } from '@/lib/data/types';
 import { currentDataSource } from '@/lib/data/current-source';
@@ -23,9 +25,13 @@ export default async function FieldToday({
   const db = await currentDataSource(scope);
   const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
 
-  // §12.2 / §9.4 — a field user sees only assigned projects. Fixtures assign by
-  // superintendent; with live data this filters on the project's Field Team.
-  const assigned = projects.filter((p) => p.superintendent === 'Tony Alvarez');
+  // §12.2 / §9.4 — a field user sees only assigned projects.
+  //
+  // This filtered on `superintendent === 'Tony Alvarez'`: a fixture author's
+  // name, hardcoded, in the screen every crew member lands on. Every real user
+  // saw an empty Today list, and the §3.6 violation was invisible because the
+  // demo account happened to be Tony.
+  const assigned = fieldProjectsFor(await requireAccess(), projects, tasks);
   const assignedIds = new Set(assigned.map((p) => p.buildsuiteProjectId));
   const todaysTasks = tasks.filter((t) => assignedIds.has(t.projectId));
 

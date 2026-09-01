@@ -372,5 +372,15 @@ test('§9.4 a field screen never resolves its own projects', () => {
       false,
       `${rel(file.path)} builds its own visible-project list instead of using fieldProjectsFor`,
     );
+
+    // §3.6, the specific shape it took twice: filtering on `superintendent`,
+    // once against a session name and once against a hardcoded 'Tony Alvarez'.
+    // The first check above would not have caught either, because neither went
+    // through `projectsForField` — they rolled their own `.filter`.
+    assert.equal(
+      /\.superintendent\b/.test(file.text),
+      false,
+      `${rel(file.path)} filters on a name field; access is keyed on ids (§3.6)`,
+    );
   }
 });

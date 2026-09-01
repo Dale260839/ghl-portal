@@ -75,7 +75,9 @@ export async function signIn(_prev: { error?: string } | undefined, formData: Fo
           // auth profile id belongs — the same conflation that hid a
           // contractor's own records on 2026-09-01.
           authProfileIds: m.authProfileIds,
-          ...(m.role === 'client' ? { contactId: m.id } : {}),
+          // No `contactId` for a client. A membership id is not a GoHighLevel
+          // contact id, and putting one there sent the portal looking up a
+          // contact that does not exist; see `lib/client-scope.ts`.
         } as Session);
         redirect(homeFor(m.role));
       }
