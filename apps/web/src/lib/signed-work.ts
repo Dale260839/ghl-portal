@@ -1,34 +1,42 @@
-import { isSignedWork, type Deal } from './buildsuite/deals.ts';
+import { pickCurrentProposal, type Proposal } from './buildsuite/proposals.ts';
 import type { Project } from './data/types.ts';
 
 /**
- * Joining `deals` to `projects`, and narrowing the list to work that was won.
+ * Joining `proposals` to `projects`, and narrowing the list to signed work.
  *
- * The question "which of these projects is signed work?" has been open since
- * 2026-08-20 and it blocks the filter Sing asked for. Day 1 found the answer:
- * it is not on `projects` at all, it is `signature_signed_at` / `sent_to_crm_at`
- * on the **deal**. So the filter needs a join, and the join needs a key.
+ * ---------------------------------------------------------------------------
+ * THIS READ `deals` UNTIL 2026-09-01 AND IT WAS WRONG.
  *
- * **The key is `deals.source_project_id → projects.buildsuiteProjectId`.** It is
- * the only populated link. `ghl_opportunity_id` is empty on all 182 deals and
- * `ghl_contact_id` on 180 of them, so neither could carry this today (C-3).
+ * `isSignedWork` used to mean `deals.signature_signed_at || deals.sent_to_crm_at`.
+ * Sing confirmed that `deals` is the DealsEngine flow and has nothing to do with
+ * matching or signing, and the screen proved him right: two projects showed as
+ * **Signed** on `sent_to_crm_at` alone, and one of them ("mike kitchen") had no
+ * proposal at all. A project with nobody's price on it was being labelled as
+ * won work.
+ *
+ * Signature lives on `proposals` — `signature_status` and `signature_signed_at`
+ * — alongside the contractor doing the work. So this joins proposals now, and
+ * agrees with the Active Work screen instead of contradicting it.
+ * ---------------------------------------------------------------------------
+ *
+ * **The key is `proposals.project_id → projects.buildsuiteProjectId`.**
  *
  * ---------------------------------------------------------------------------
  * THE RULE THAT DECIDES THE WHOLE FILE
  *
  * A project can be in three states, not two:
  *
- *   **signed**   — it has a deal, and that deal was won
- *   **unsigned** — it has a deal, and that deal was not
- *   **unknown**  — no deal points at it, so we cannot say either way
+ *   **signed**   — it has a proposal, and that proposal was signed
+ *   **unsigned** — it has a proposal, and it was not signed
+ *   **unknown**  — no proposal points at it, so we cannot say either way
  *
  * The filter hides only `unsigned`. An `unknown` project stays on the list.
  *
  * That is deliberate and it is the conservative direction: we hide work only
  * when we hold positive evidence it is unsigned. Measured on the Alliance
- * tenant, 8 of 9 projects have a deal and one has none — and across the whole
- * database only 26% of deals carry a project id at all, so the reverse join is
- * sparse. Treating "no deal" as "not signed" would hide most of the book of
+ * database, 46 proposals cover far fewer than 101 projects, so most projects
+ * have no proposal at all. Treating "no proposal" as "not signed" would hide
+ * most of the book of
  * work, and to a contractor that is indistinguishable from data loss.
  * ---------------------------------------------------------------------------
  */
@@ -38,40 +46,46 @@ export type SignedStatus = 'signed' | 'unsigned' | 'unknown';
 export interface ProjectSigning {
   project: Project;
   status: SignedStatus;
-  /** The deal that decided it, when there is one. */
-  deal: Deal | null;
+  /** The proposal that decided it, when there is one. */
+  proposal: Proposal | null;
 }
 
 /**
- * Index the deals by the project they became.
+ * Index proposals by the project they are for.
  *
- * A project can have more than one deal pointing at it — nothing in BuildSuite
- * forbids it — so a *signed* deal wins over an unsigned one. Otherwise whichever
- * row happened to come back first would decide whether a contractor sees their
- * own signed job.
+ * A project can carry several — the one signed project in the database has
+ * seven — so `pickCurrentProposal` decides which represents it: signed over
+ * accepted over submitted, then most recent. Without an explicit rule, whichever
+ * row came back first would decide whether a contractor sees their own signed
+ * job.
  */
-export function indexDealsByProject(deals: Deal[]): Map<string, Deal> {
-  const byProject = new Map<string, Deal>();
-
-  for (const deal of deals) {
-    if (deal.projectId === null) continue;
-    const existing = byProject.get(deal.projectId);
-    if (existing === undefined || (!isSignedWork(existing) && isSignedWork(deal))) {
-      byProject.set(deal.projectId, deal);
-    }
+export function indexProposalsByProject(proposals: Proposal[]): Map<string, Proposal> {
+  const grouped = new Map<string, Proposal[]>();
+  for (const proposal of proposals) {
+    const list = grouped.get(proposal.projectId);
+    if (list === undefined) grouped.set(proposal.projectId, [proposal]);
+    else list.push(proposal);
   }
 
+  const byProject = new Map<string, Proposal>();
+  for (const [projectId, list] of grouped) {
+    const current = pickCurrentProposal(list);
+    if (current !== null) byProject.set(projectId, current);
+  }
   return byProject;
 }
 
-export function signingOf(project: Project, byProject: Map<string, Deal>): ProjectSigning {
-  const deal = byProject.get(project.buildsuiteProjectId) ?? null;
-  if (deal === null) return { project, status: 'unknown', deal: null };
-  return { project, status: isSignedWork(deal) ? 'signed' : 'unsigned', deal };
+export function signingOf(project: Project, byProject: Map<string, Proposal>): ProjectSigning {
+  const proposal = byProject.get(project.buildsuiteProjectId) ?? null;
+  if (proposal === null) return { project, status: 'unknown', proposal: null };
+  return { project, status: proposal.signed ? 'signed' : 'unsigned', proposal };
 }
 
-export function joinDealsToProjects(projects: Project[], deals: Deal[]): ProjectSigning[] {
-  const byProject = indexDealsByProject(deals);
+export function joinProposalsToProjects(
+  projects: Project[],
+  proposals: Proposal[],
+): ProjectSigning[] {
+  const byProject = indexProposalsByProject(proposals);
   return projects.map((project) => signingOf(project, byProject));
 }
 
@@ -79,7 +93,7 @@ export interface SignedWorkSummary {
   total: number;
   signed: number;
   unsigned: number;
-  /** No deal points at these. They are never hidden. */
+  /** No proposal points at these. They are never hidden. */
   unknown: number;
   /** How many rows the filter would remove if it were switched on right now. */
   wouldHide: number;
@@ -111,8 +125,8 @@ export function applySignedOnly(rows: ProjectSigning[], on: boolean): ProjectSig
  * The filter's off switch — **off unless explicitly enabled**.
  *
  * The inverse of how `DISABLE_VIEW_AS` works, and on purpose. Nothing in the
- * database has ever been signed: 0 of 182 deals. So switching this on today
- * removes every project that has a deal and leaves only the ones we cannot
+ * database is signed: 4 proposals, all on one project. So switching this on
+ * today removes nearly everything and leaves only the ones we cannot
  * judge. A contractor opening the dashboard to a near-empty list would read it
  * as the product being broken, and they would be right to.
  *
@@ -144,14 +158,14 @@ export function signedWorkBanner(summary: SignedWorkSummary, filterOn: boolean):
   if (summary.signed === 0) {
     const scope =
       summary.unknown === 0
-        ? `None of these ${summary.total} projects is on a signed deal`
-        : `None of these ${summary.total} projects is on a signed deal (${summary.unknown} ${
+        ? `None of these ${summary.total} projects has a signed proposal`
+        : `None of these ${summary.total} projects has a signed proposal (${summary.unknown} ${
             summary.unknown === 1 ? 'has' : 'have'
-          } no deal to check)`;
+          } no proposal to check)`;
     return `Showing all work. ${scope} — the signed-only filter turns on when signatures start landing.`;
   }
 
   return `Showing all work. ${summary.signed} of ${summary.total} ${
     summary.total === 1 ? 'project is' : 'projects are'
-  } on a signed deal.`;
+  } on a signed proposal.`;
 }

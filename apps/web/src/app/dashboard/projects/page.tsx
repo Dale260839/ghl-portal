@@ -4,11 +4,11 @@ import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, HealthBadge, ProgressBar, currency, shortDate } from '@/components/ui';
 import { hasOperationalDetail, moneyLabel, stageLabel } from '@/lib/data/types';
 import { currentDataSource } from '@/lib/data/current-source';
-import { getDealsReader } from '@/lib/buildsuite/deals';
+import { getProposalsReader } from '@/lib/buildsuite/proposals';
 import { getHubRecords } from '@/lib/hub-db/records';
 import {
   applySignedOnly,
-  joinDealsToProjects,
+  joinProposalsToProjects,
   signedOnlyFilterEnabled,
   signedWorkBanner,
   summarizeSignedWork,
@@ -19,8 +19,10 @@ import {
 /** How each signing state reads on a row. `unknown` says so rather than guessing. */
 const SIGNING: Record<SignedStatus, { label: string; tone: 'good' | 'warn' | 'neutral' } | null> = {
   signed: { label: 'Signed', tone: 'good' },
-  unsigned: { label: 'Unsigned', tone: 'warn' },
-  unknown: { label: 'No deal', tone: 'neutral' },
+  unsigned: { label: 'Quoted', tone: 'warn' },
+  // "Deal" is the DealsEngine's word for something else entirely. A project
+  // with no proposal has nobody's price on it, so that is what it says.
+  unknown: { label: 'No proposal', tone: 'neutral' },
 };
 
 export default async function ProjectsList() {
@@ -41,15 +43,18 @@ export default async function ProjectsList() {
   const allProjects = everyProject.filter((p) => !archivedIds.has(p.buildsuiteProjectId));
   const archivedCount = everyProject.length - allProjects.length;
 
-  // The join needs BuildSuite. When it is unreachable every project is
-  // `unknown` — which is the honest answer, and the filter then hides nothing.
-  const reader = getDealsReader();
-  const deals = reader.available ? await reader.listDealsForProjects(
-    scope,
-    allProjects.map((p) => p.buildsuiteProjectId),
-  ) : [];
+  // Signature lives on `proposals`, not `deals`. Reading `deals` here labelled
+  // two projects "Signed" on `sent_to_crm_at` alone — one of which had no
+  // proposal at all — and contradicted the Active Work screen, which was right.
+  //
+  // When BuildSuite is unreachable every project is `unknown`, which is the
+  // honest answer, and the filter then hides nothing.
+  const reader = getProposalsReader();
+  const proposals = reader.available
+    ? await reader.listForProjects(scope, allProjects.map((p) => p.buildsuiteProjectId))
+    : [];
 
-  const joined: ProjectSigning[] = joinDealsToProjects(allProjects, deals);
+  const joined: ProjectSigning[] = joinProposalsToProjects(allProjects, proposals);
   const summary = summarizeSignedWork(joined);
   const filterOn = signedOnlyFilterEnabled();
   const rows = applySignedOnly(joined, filterOn);
@@ -76,6 +81,16 @@ export default async function ProjectsList() {
       {banner !== null && (
         <div className="rounded-lg border border-navy-200 bg-navy-50 px-4 py-3 text-sm text-navy-600">
           {banner}
+          {/* This screen can only speak about projects it can LIST. A project
+              BuildSuite's RLS hides is absent entirely, signed or not — and the
+              one signed project in the database is exactly that case. Active
+              Work reads proposals, which stay readable, so it can legitimately
+              show signed work that never appears here. Saying so beats letting
+              someone find two screens disagreeing and trust neither. */}
+          <span className="mt-1 block text-xs text-navy-400">
+            Counts cover projects visible to this account. Work whose project record is
+            restricted still appears under Active Work.
+          </span>
         </div>
       )}
 
