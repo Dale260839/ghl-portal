@@ -1,4 +1,4 @@
-import { validateHandoffPayload, type HandoffPayload } from '@buildsuite/contracts';
+import { validateHandoffPayload, isProjectId, type HandoffPayload } from '@buildsuite/contracts';
 
 import type { Deal } from '../buildsuite/deals.ts';
 
@@ -54,7 +54,7 @@ export type HandoffAttempt =
 export interface HandoffProjectFacts {
   /** `projects.id` — a UUID today. */
   id: string;
-  /** `projects.project_code` — `BSA-NNN`, populated on 48 of 101. */
+  /** `projects.project_code` — `BSA-NNN`, the join key (C-3). 49 of 102. */
   projectCode: string | null;
   title: string;
   address: string;
@@ -75,18 +75,30 @@ export interface HandoffProjectFacts {
 export function buildHandoffFromDeal(deal: Deal, project: HandoffProjectFacts): HandoffAttempt {
   const gaps: HandoffGap[] = [];
 
-  // 1 · The shared key. Per C-3's proposed resolution BuildSuite generates it
-  //     and GoHighLevel copies it — so BuildSuite is the one that must mint a
-  //     value in the contracted format. Neither column it has today is one.
-  const key = project.projectCode ?? project.id;
-  if (!/^BSP-\d{4}-\d{6}$/.test(key)) {
+  // 1 · The shared key. C-3 was RESOLVED on 2026-09-01: the key is
+  //     `projects.project_code`, format BSA-NNN. §5's BSP-YYYY-NNNNNN was a
+  //     format BuildSuite never implemented, so this no longer falls back to
+  //     `projects.id` — a UUID is not the join key, and quietly substituting
+  //     one would attach every downstream record by a key GoHighLevel is not
+  //     being given.
+  const key = project.projectCode;
+  if (key === null || key.trim() === '') {
     gaps.push({
       field: 'buildsuite_project_id',
       reason:
-        `"${key}" is not BSP-YYYY-NNNNNN (§5). BuildSuite has no column in that format: ` +
-        'projects.id is a UUID and projects.project_code is BSA-NNN. Either BuildSuite mints ' +
-        'the contracted id, or §5 changes — this is open decision C-3 and not ours to pick.',
-      owner: 'decision',
+        'this project has no project_code. 53 of 102 projects do not, and a handoff ' +
+        'without the join key would attach its records to nothing. BuildSuite assigns ' +
+        'the code — Chris raised having the database assign it on insert, which would ' +
+        'close this permanently.',
+      owner: 'BuildSuite',
+    });
+  } else if (!isProjectId(key)) {
+    gaps.push({
+      field: 'buildsuite_project_id',
+      reason:
+        `"${key}" is not a recognised project key (expected BSA-NNN per C-3). ` +
+        'A malformed code is worse than a missing one: it looks joinable and is not.',
+      owner: 'BuildSuite',
     });
   }
 
@@ -126,7 +138,10 @@ export function buildHandoffFromDeal(deal: Deal, project: HandoffProjectFacts): 
   }
 
   const partial: Partial<HandoffPayload> = {
-    buildsuite_project_id: key,
+    // Omitted rather than sent as null when the project has no code. The gap
+    // above already says why; a null join key in the payload would read as a
+    // value that failed validation rather than one that was never there.
+    ...(key !== null && key.trim() !== '' ? { buildsuite_project_id: key } : {}),
     project_name: name,
     project_address: project.address,
     ...(project.contractAmount !== null ? { contract_amount: project.contractAmount } : {}),

@@ -75,25 +75,58 @@ test('the real project shape cannot satisfy the §8.2 contract', () => {
   assert.deepEqual(fields, ['buildsuite_project_id', 'contract_amount']);
 });
 
-test('the shared key is a decision, and the mapping refuses to pick one', () => {
-  // §5 wants BSP-YYYY-NNNNNN. BuildSuite has a UUID id and a BSA-NNN code.
-  // Choosing between them here is exactly the mistake the rules warn against.
+// These two tests previously asserted the opposite — that a BSA code was
+// refused and that the mapping must NOT choose a key, because C-3 was open.
+// Chris resolved C-3 on 2026-09-01: the key is `projects.project_code`. The
+// rule they encode has changed at the source, so they now encode the new one.
+
+test('a project with no code is a BuildSuite gap, not a decision', () => {
+  // 53 of 102 projects have no code. That is missing data with an owner, not
+  // an open question — the handoff cannot fire, and BuildSuite has to fill it.
   const attempt = buildHandoffFromDeal(SIGNED, project());
   assert.equal(attempt.ok, false);
 
   const key = attempt.gaps.find((g) => g.field === 'buildsuite_project_id');
   assert.ok(key);
-  assert.equal(key.owner, 'decision');
-  assert.match(key.reason, /BSP-YYYY-NNNNNN/);
-  assert.match(key.reason, /C-3/, 'it must point at the open decision, not resolve it');
+  assert.equal(key.owner, 'BuildSuite', 'C-3 is resolved; this is no longer a decision');
+  assert.match(key.reason, /project_code/);
 });
 
-test('a BSA code is refused as loudly as a UUID', () => {
-  // 48 of 101 projects carry one, and its shape is close enough to look right.
+test('a BSA code is now the join key and passes', () => {
+  // Still not `ok` overall — this fixture has no contract amount — but the KEY
+  // is no longer among the reasons why.
   const attempt = buildHandoffFromDeal(SIGNED, project({ projectCode: 'BSA-002' }));
-
   assert.equal(attempt.ok, false);
-  assert.ok(attempt.gaps.some((g) => g.field === 'buildsuite_project_id'));
+
+  assert.equal(
+    attempt.gaps.some((g) => g.field === 'buildsuite_project_id'),
+    false,
+    'BSA-NNN is the format C-3 settled on',
+  );
+  assert.equal(attempt.partial.buildsuite_project_id, 'BSA-002');
+});
+
+test('a UUID is never substituted for a missing code', () => {
+  // The old mapping fell back to `projects.id`. A UUID is not the join key,
+  // and sending one would attach records by a key GHL is not given.
+  const attempt = buildHandoffFromDeal(SIGNED, project({ projectCode: null }));
+  assert.equal(attempt.ok, false);
+
+  assert.equal(attempt.partial.buildsuite_project_id, undefined, 'absent, not a UUID');
+  assert.equal(
+    JSON.stringify(attempt.partial).includes('80ef9efa'),
+    false,
+    'the UUID leaked into the payload',
+  );
+});
+
+test('a malformed code is refused rather than passed through', () => {
+  const attempt = buildHandoffFromDeal(SIGNED, project({ projectCode: 'BSA-2' }));
+  assert.equal(attempt.ok, false);
+
+  const key = attempt.gaps.find((g) => g.field === 'buildsuite_project_id');
+  assert.ok(key, 'a code that only looks right is worse than a missing one');
+  assert.match(key.reason, /not a recognised project key/i);
 });
 
 test('a budget band is not a contract amount', () => {
@@ -133,8 +166,10 @@ test('the gaps are grouped by who has to act', () => {
   assert.equal(attempt.ok, false);
 
   const byOwner = gapsByOwner(attempt.gaps);
-  assert.equal(byOwner.decision.length, 1, 'the shared key');
-  assert.equal(byOwner.BuildSuite.length, 1, 'the contract amount');
+  // Both gaps are BuildSuite's now: the missing project_code and the missing
+  // contract amount. Nothing is left waiting on a decision at this boundary.
+  assert.equal(byOwner.decision.length, 0, 'C-3 was the only decision gap here');
+  assert.equal(byOwner.BuildSuite.length, 2, 'the project code and the contract amount');
 });
 
 test('a failed mapping still returns what it could build', () => {
