@@ -82,13 +82,48 @@ export default async function Invoices() {
   );
 
   if (signed.length === 0) {
+    // "No signed contracts" and "signed contracts we cannot see" are different
+    // facts, and showing the first when the second is true is exactly the kind
+    // of silent empty state that has hidden real defects all week.
+    //
+    // On 2026-09-03 this is not hypothetical: all four signed proposals in the
+    // database belong to THIS contractor and point at one project that returns
+    // zero rows to our key, while 102 others are visible. Reporting "none" for
+    // that would be false.
+    const byContractor = await reader
+      .listLive(scope, scope.contractorId)
+      .catch(() => [] as typeof proposals);
+    const visible = new Set(projects.map((p) => p.buildsuiteProjectId));
+    const unreachable = byContractor.filter((p) => p.signed && !visible.has(p.projectId));
+
     return shell(
       <Card className="px-5 py-12 text-center">
-        <p className="text-sm text-navy-600">No signed contracts yet.</p>
-        <p className="mx-auto mt-2 max-w-lg text-xs leading-relaxed text-navy-400">
-          An invoice comes from a signed contract&apos;s payment schedule. Nothing is drafted
-          until a proposal carries a signature.
-        </p>
+        {unreachable.length === 0 ? (
+          <>
+            <p className="text-sm text-navy-600">No signed contracts yet.</p>
+            <p className="mx-auto mt-2 max-w-lg text-xs leading-relaxed text-navy-400">
+              An invoice comes from a signed contract&apos;s payment schedule. Nothing is drafted
+              until a proposal carries a signature.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-navy-600">
+              {unreachable.length} signed{' '}
+              {unreachable.length === 1 ? 'contract is' : 'contracts are'} attached to a project
+              this sign-in cannot read.
+            </p>
+            <p className="mx-auto mt-2 max-w-xl text-xs leading-relaxed text-navy-400">
+              The signature is real — it is on the proposal. The project it belongs to returns
+              nothing to our database key, so there is no job to invoice against. That is a
+              permissions setting in BuildSuite, not missing work, and it is the same row that
+              has been invisible since 2026-08-31.
+            </p>
+            <p className="mx-auto mt-2 max-w-xl text-xs text-navy-400">
+              Until it is readable, the invoice flow cannot be exercised on real data.
+            </p>
+          </>
+        )}
       </Card>,
     );
   }
