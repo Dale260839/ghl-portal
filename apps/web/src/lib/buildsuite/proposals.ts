@@ -192,6 +192,11 @@ export interface BuildSuiteProposalsReader {
   /** Every proposal for a set of projects. Scope is required. */
   listForProjects(scope: TenantScope, projectIds: string[]): Promise<Proposal[]>;
   /**
+   * One proposal's markdown document, for the payment schedule inside it.
+   * Kept off `PROPOSAL_COLUMNS` because it is ~4.6KB per row.
+   */
+  readContent(scope: TenantScope, projectId: string, proposalId: string): Promise<string | null>;
+  /**
    * This contractor's live engagements.
    *
    * `contractorId` is REQUIRED. `proposals` has no `auth_profile_id`, so
@@ -233,6 +238,36 @@ export class SupabaseProposalsReader implements BuildSuiteProposalsReader {
       limit: 500,
     });
     return rows.map(normalizeProposal);
+  }
+
+  /**
+   * The proposal document itself, for ONE proposal.
+   *
+   * `content` is excluded from `PROPOSAL_COLUMNS` and stays excluded: it is
+   * ~4.6KB of markdown per row, and pulling it on every list to read one
+   * payment schedule would multiply every proposal query by the size of a
+   * document nothing else on the screen uses.
+   *
+   * Scoped the same way `listForProjects` is — by only ever being asked about
+   * a project id the caller already resolved through a scoped read. The filter
+   * carries the project id as well as the proposal id so a known proposal id
+   * alone cannot pull another tenant's document.
+   */
+  async readContent(
+    scope: TenantScope,
+    projectId: string,
+    proposalId: string,
+  ): Promise<string | null> {
+    assertScope(scope, 'proposal content');
+    if (projectId.trim() === '' || proposalId.trim() === '') return null;
+
+    const rows = await this.client.select<{ content: string | null }>({
+      from: 'proposals',
+      columns: ['content'],
+      filters: { id: `eq.${proposalId}`, project_id: `eq.${projectId}` },
+      limit: 1,
+    });
+    return rows[0]?.content ?? null;
   }
 
   async listLive(scope: TenantScope, contractorId: string, limit = 200): Promise<Proposal[]> {

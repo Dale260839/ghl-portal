@@ -8,6 +8,9 @@ import { assertCan, ownsTask } from './permissions';
 import { actionTenantScope, requireTenantScope } from './scope';
 import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db/records';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
+import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
+import { getProposalsReader } from './buildsuite/proposals';
+import { paymentScheduleDrafts } from './payment-schedule';
 import { GRANTABLE_RESOURCES } from './permissions';
 import { accountSwitchEnabled, findDevAccount } from './dev-accounts';
 import { appUrl } from './app-url';
@@ -588,6 +591,80 @@ export async function restoreTeamMember(formData: FormData) {
  * The same validation as the invite form, for the same reason: the ids come
  * from a form, and only the contractor's own projects may be handed out.
  */
+/**
+ * Save a contractor's review of one invoice line.
+ *
+ * Seeds the proposal's drafts first, so the row exists whether or not this
+ * screen has been opened before — seeding upserts on the line and never
+ * overwrites contractor-supplied fields.
+ *
+ * The amount is parsed strictly: an empty box means "not supplied yet", which
+ * is NOT zero. Zero is a figure a contractor could send to a homeowner by
+ * accident, so it can only be reached by typing it.
+ */
+export async function saveInvoiceDraft(formData: FormData) {
+  const session = await getSession();
+  if (session === null) throw new Error('not signed in');
+  assertCan(session.role, 'update', 'invoice');
+
+  const scope = await actionTenantScope(session);
+  const hub = getHubInvoiceDrafts();
+  if (!hub.available) {
+    throw new Error(`the Hub database is not connected (missing ${hub.missing.join(', ')})`);
+  }
+
+  const projectId = String(formData.get('projectId') ?? '');
+  const proposalId = String(formData.get('proposalId') ?? '');
+  const lineOrder = Number(formData.get('lineOrder') ?? 0);
+  if (projectId === '' || proposalId === '' || !Number.isInteger(lineOrder) || lineOrder < 1) {
+    throw new Error('projectId, proposalId and lineOrder are required');
+  }
+
+  const rawAmount = String(formData.get('amount') ?? '').trim();
+  let amount: number | null = null;
+  if (rawAmount !== '') {
+    const parsed = Number(rawAmount);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      throw new Error(`"${rawAmount}" is not an amount that can be invoiced`);
+    }
+    amount = parsed;
+  }
+
+  const text = (name: string): string | null => {
+    const value = String(formData.get(name) ?? '').trim();
+    return value === '' ? null : value;
+  };
+
+  // The proposal document, so the stored draft records what was actually
+  // parsed rather than what this form happened to post back.
+  const reader = getProposalsReader();
+  const content = reader.available
+    ? await reader.readContent(scope, projectId, proposalId)
+    : null;
+
+  const actor = { name: session.name };
+  await hub.drafts.seedFromSchedule(
+    scope,
+    { projectId, proposalId, drafts: paymentScheduleDrafts(content, null) },
+    actor,
+  );
+
+  const existing = await hub.drafts.listForProposal(scope, proposalId);
+  const row = existing.find((d) => d.lineOrder === lineOrder);
+  if (row === undefined) {
+    throw new Error(`line ${lineOrder} is not in this proposal's payment schedule`);
+  }
+
+  await hub.drafts.save(
+    scope,
+    row.id,
+    { title: text('title'), amount, description: text('description') },
+    actor,
+  );
+
+  revalidatePath('/dashboard/invoices');
+}
+
 export async function saveTeamProjects(formData: FormData) {
   const { scope, team } = await teamContext();
   const membershipId = String(formData.get('membershipId') ?? '');

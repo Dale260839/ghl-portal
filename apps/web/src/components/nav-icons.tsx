@@ -149,6 +149,14 @@ export const IconArchive = (
   </Icon>
 );
 
+export const IconInvoices = (
+  <Icon>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <path d="M14 2v6h6" />
+    <path d="M12 11v6M10.5 12.5h2.25a1.25 1.25 0 0 1 0 2.5h-1.5a1.25 1.25 0 0 0 0 2.5H13.5" />
+  </Icon>
+);
+
 export const IconTeam = (
   <Icon>
     <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />

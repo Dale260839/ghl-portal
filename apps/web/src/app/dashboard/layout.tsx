@@ -15,6 +15,7 @@ import {
   IconArchive,
   IconEngagements,
   IconIssues,
+  IconInvoices,
   IconTeam,
   IconPipeline,
   IconProjects,
@@ -51,6 +52,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: '/dashboard/updates', label: 'Field Updates', icon: IconUpdates, badge: pendingReview },
     { href: '/dashboard/issues', label: 'Issues', icon: IconIssues, badge: openIssues },
     { href: '/dashboard/buildsuite', label: 'From BuildSuite', icon: IconBuildSuite },
+    { href: '/dashboard/invoices', label: 'Invoices', icon: IconInvoices },
     { href: '/dashboard/team', label: 'Team', icon: IconTeam },
     // Last, because it is where you go to undo something rather than to work.
     { href: '/dashboard/archive', label: 'Archive', icon: IconArchive },
