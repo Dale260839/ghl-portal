@@ -21,6 +21,21 @@ import type { Deal } from '../buildsuite/deals.ts';
  *     and `projects.project_code` is `BSA-NNN` (48/101). Zero rows match the
  *     contracted pattern, so the handoff would reject **every** real project.
  *
+ *     UPDATE 2026-09-03, from Sing: this is no longer an open question about
+ *     *what* the key is, only about which side changes. C-3 is answered —
+ *     BuildSuite generates it, GoHighLevel copies it, and the value is
+ *     `project_code`. It has two shapes, `BSA-044` and `BSA-ASJF-006`, both
+ *     allocated by a Postgres function at insert. Codes are permanent. So
+ *     BuildSuite is not going to mint `BSP-YYYY-NNNNNN`, and **§5 is the side
+ *     that has to move.** The blank half of the column is a *pending* state,
+ *     not missing data.
+ *
+ *     The mapping below is deliberately NOT changed to match yet. Acting on
+ *     this means editing §5, and §5 is a verbatim contract. `classifyProjectCode`
+ *     encodes what Sing confirmed, tested, so the answer is available the moment
+ *     Chris decides to move the contract — and until then the guard test still
+ *     holds this file to reporting C-3 rather than resolving it.
+ *
  *  2. **`contract_amount` must be a number.** BuildSuite holds `budget_range`,
  *     a band — `10k_25k`, `$50,000 - $100,000`. A band is not an amount and
  *     picking one end of it would put a wrong number on a contract.
@@ -36,6 +51,50 @@ import type { Deal } from '../buildsuite/deals.ts';
  * precisely**, so the ask to Sing and Chris carries field names and counts.
  * ---------------------------------------------------------------------------
  */
+
+/**
+ * The two real shapes of `projects.project_code`, confirmed by Sing 2026-09-03
+ * against deployed BuildSuite code. Allocation is a Postgres function at insert
+ * time, never application code, so these are the only shapes that exist.
+ *
+ *   BSA-044        feed and client projects, one Alliance-wide series
+ *   BSA-ASJF-006   contractor-created, four letters the contractor picks at
+ *                  first login, then their own running count
+ *
+ * A code is permanent. Winning a feed project does not rename it; the winner's
+ * own number goes to `award_code` instead. **Identity keys on `project_code`,
+ * always** — that is Sing's instruction and the reason this file no longer
+ * falls back to `projects.id`.
+ */
+export const PROJECT_CODE_PATTERNS = {
+  feed: /^BSA-\d+$/,
+  contractor: /^BSA-[A-Z]{2,6}-\d+$/,
+} as const;
+
+export type ProjectCodeState = 'pending' | 'feed' | 'contractor' | 'malformed';
+
+/**
+ * Classify a `project_code`, distinguishing **pending from missing**.
+ *
+ * Roughly half of BuildSuite's project codes are null and that is NOT a data
+ * fault: a contractor-created project stays null until that contractor picks
+ * their four letters, and every one of their existing projects is numbered
+ * oldest-first the moment they do. So a null is a state that resolves itself,
+ * and the Hub renders it as pending rather than erroring on it.
+ */
+export function classifyProjectCode(code: string | null): ProjectCodeState {
+  if (code === null || code.trim() === '') return 'pending';
+  const value = code.trim();
+  if (PROJECT_CODE_PATTERNS.feed.test(value)) return 'feed';
+  if (PROJECT_CODE_PATTERNS.contractor.test(value)) return 'contractor';
+  return 'malformed';
+}
+
+/** True once a code is a real, usable identity. */
+export function hasUsableProjectCode(code: string | null): boolean {
+  const state = classifyProjectCode(code);
+  return state === 'feed' || state === 'contractor';
+}
 
 /** What the Hub can see, and what BuildSuite must add. */
 export interface HandoffGap {
@@ -78,6 +137,13 @@ export function buildHandoffFromDeal(deal: Deal, project: HandoffProjectFacts): 
   // 1 · The shared key. Per C-3's proposed resolution BuildSuite generates it
   //     and GoHighLevel copies it — so BuildSuite is the one that must mint a
   //     value in the contracted format. Neither column it has today is one.
+  //
+  //     DELIBERATELY UNCHANGED as of 2026-09-03, though Sing has now confirmed
+  //     what the key is. Resolving it here means editing §5, a verbatim
+  //     contract, and the guard test on this branch exists precisely to stop
+  //     this mapping from resolving C-3 on its own. `classifyProjectCode` above
+  //     records what Sing confirmed so the answer is not lost; wiring it in is
+  //     Chris's call to make, not this file's.
   const key = project.projectCode ?? project.id;
   if (!/^BSP-\d{4}-\d{6}$/.test(key)) {
     gaps.push({
