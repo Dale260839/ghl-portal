@@ -397,7 +397,10 @@ test('§3.6 only scope.ts builds a tenant scope from a session', () => {
   // function, so there is one place for the next fact a scope needs.
   for (const file of FILES) {
     const path = rel(file.path);
-    if (path === 'lib/scope.ts') continue;
+    // The one place a scope is built from a session. It lives in
+    // `tenant-scope.ts` so it can be tested without a Next runtime;
+    // `scope.ts` re-exports it and adds the redirect/throw wrappers.
+    if (path === 'lib/scope.ts' || path === 'lib/tenant-scope.ts') continue;
 
     assert.equal(
       /locationId:\s*session\./.test(file.text),

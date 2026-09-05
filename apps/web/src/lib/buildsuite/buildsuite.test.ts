@@ -139,6 +139,7 @@ test('config reports which vars are missing rather than throwing', () => {
 
 const row: BuildSuiteProjectRow = {
   id: '7b9eefb9-41d2-424a-8885-68ac4f941454',
+  project_code: null,
   title: 'mike kitchen',
   status: 'active',
   source: 'contractor',

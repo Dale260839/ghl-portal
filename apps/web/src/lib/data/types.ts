@@ -23,6 +23,11 @@ export interface Project {
 
   // Identity
   buildsuiteProjectId: string;
+  /**
+   * `projects.project_code` — `BSA-NNN`, the join key (C-3) and the homeowner's
+   * second factor. Null on 53 of 102 live projects, so it is never assumed.
+   */
+  projectCode: string | null;
   projectName: string;
   projectAddress: string;
   projectType: string;

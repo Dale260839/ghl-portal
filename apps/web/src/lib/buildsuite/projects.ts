@@ -21,6 +21,9 @@ import { assertScope, type TenantScope } from '../tenancy.ts';
 /** The subset of `projects` the Hub reads. Deliberately narrow (see SelectOptions). */
 export const PROJECT_COLUMNS = [
   'id',
+  // The join key (C-3). Populated on 49 of 102 — a project without one
+  // cannot hand off and cannot be used as a homeowner's second factor.
+  'project_code',
   'title',
   'status',
   'source',
@@ -56,6 +59,7 @@ export type BuildSuiteStatus = 'active' | 'matched' | 'new' | 'draft' | 'complet
 
 export interface BuildSuiteProjectRow {
   id: string;
+  project_code: string | null;
   title: string | null;
   status: BuildSuiteStatus | null;
   source: string | null;
@@ -170,6 +174,10 @@ export interface BuildSuiteReader {
    */
   listProjectRowsForContact(ghlContactId: string, limit?: number): Promise<BuildSuiteProjectRow[]>;
   listProjectRowsByIds(projectIds: string[], limit?: number): Promise<BuildSuiteProjectRow[]>;
+  findProjectForClientLogin(
+    projectCode: string,
+    clientEmail: string,
+  ): Promise<{ id: string; ghlContactId: string } | null>;
 }
 
 export interface BuildSuiteUnavailable {
@@ -274,6 +282,54 @@ class SupabaseReader implements BuildSuiteReader {
       order: 'updated_at.desc',
       limit,
     });
+  }
+
+  /**
+   * The homeowner login lookup (C-2): does a project exist with THIS code and
+   * THIS client email?
+   *
+   * ---------------------------------------------------------------------------
+   * BOTH HALVES ARE FILTERED SERVER-SIDE, AND `client_email` IS NEVER SELECTED.
+   *
+   * `PROJECT_COLUMNS` deliberately omits `client_email` (D-010 minimisation).
+   * The obvious way to add a login would be to start selecting it, which would
+   * reverse that decision for every screen in the app.
+   *
+   * Instead the address is used as a FILTER and never as a column: PostgREST
+   * compares it inside the database and returns only an id and a contact id. A
+   * wrong email returns zero rows, and no client address is ever transferred to
+   * this process at all — including for the matching row.
+   *
+   * Not tenant-scoped, deliberately: a homeowner is not a tenant and has no
+   * scope to read with. It is constrained by needing both halves, and it mints
+   * nothing — see `client-lookup.ts`.
+   * ---------------------------------------------------------------------------
+   */
+  async findProjectForClientLogin(
+    projectCode: string,
+    clientEmail: string,
+  ): Promise<{ id: string; ghlContactId: string } | null> {
+    const code = projectCode.trim().toUpperCase();
+    const email = clientEmail.trim().toLowerCase();
+
+    // Validated, not escaped. Anything that is not a well-formed code or a
+    // plausible address never reaches the query — which fails closed and
+    // removes the question of PostgREST filter injection rather than answering
+    // it. A `,` or `)` in a filter value would otherwise change its meaning.
+    if (!/^BSA-\d{3}$/.test(code)) return null;
+    if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(email)) return null;
+
+    const rows = await this.client.select<{ id: string; ghl_contact_id: string | null }>({
+      from: 'projects',
+      columns: ['id', 'ghl_contact_id'],
+      filters: { project_code: `eq.${code}`, client_email: `eq.${email}` },
+      limit: 2,
+    });
+
+    // Exactly one, or nothing. Two projects sharing a code is a data fault, and
+    // picking one of them would sign somebody into a job that may not be theirs.
+    if (rows.length !== 1) return null;
+    return { id: rows[0]!.id, ghlContactId: rows[0]!.ghl_contact_id ?? '' };
   }
 
   async countByStatus(scope: TenantScope): Promise<Record<string, number>> {

@@ -32,6 +32,7 @@ const scope: TenantScope = { locationId: LOCATION, authProfileIds: [PROFILE_A, P
  *  opportunity id are all empty on every live row today. */
 function row(over: Partial<BuildSuiteProjectRow> = {}): BuildSuiteProjectRow {
   return {
+    project_code: null,
     id: '80ef9efa-62b5-4d54-9ac3-d7940ea42e87',
     title: 'john home',
     status: 'active',
@@ -66,6 +67,12 @@ function readerOf(rows: BuildSuiteProjectRow[]): BuildSuiteReader {
     },
     async listProjectRowsForContact(contactId) {
       return contactId.trim() === '' ? [] : rows.filter((r) => r.ghl_contact_id === contactId);
+    },
+    async findProjectForClientLogin(projectCode: string, clientEmail: string) {
+      const p = rows.find(
+        (r) => r.project_code === projectCode && clientEmail === 'client@example.com',
+      );
+      return p === undefined ? null : { id: p.id, ghlContactId: p.ghl_contact_id ?? '' };
     },
     async listProjectRowsByIds(projectIds) {
       const wanted = new Set(projectIds.filter((id) => id.trim() !== ''));
