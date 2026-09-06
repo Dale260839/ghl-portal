@@ -17,6 +17,7 @@ import {
   CHANGE_ORDERS,
   DOCUMENTS,
   MESSAGES,
+  PAYMENT_SCHEDULE,
   PHOTOS,
   PUNCH_LIST,
   SCHEDULE_ITEMS,
@@ -25,6 +26,7 @@ import {
 import { ISSUES, PROJECTS } from './data/fixtures.ts';
 import type {
   BudgetLine,
+  ClientPaymentLine,
   Issue,
   ChangeOrder,
   MaterialSelection,
@@ -192,6 +194,51 @@ export function budgetFor(project: Project): BudgetLine[] {
   if (!portalOpen(project)) return [];
   if (!project.showBudgetToClient) return [];
   return BUDGET_LINES.filter((b) => b.projectId === project.buildsuiteProjectId);
+}
+
+/**
+ * The client-facing payment schedule.
+ *
+ * Gated the same way documents and photos are: the portal master switch, then
+ * each line's own `clientVisible`. Payments are inherently the client's to see —
+ * they have to know what they owe — so there is no separate money switch here,
+ * unlike the budget; the per-line flag is what withholds a line that a
+ * contractor has not yet chosen to surface.
+ *
+ * The type carries no cost or margin field, so this cannot leak an internal
+ * figure even if a fixture tried to.
+ */
+export function paymentsFor(project: Project): ClientPaymentLine[] {
+  if (!portalOpen(project)) return [];
+  return PAYMENT_SCHEDULE.filter(
+    (p) => p.projectId === project.buildsuiteProjectId && p.clientVisible,
+  ).sort((a, b) => a.position - b.position);
+}
+
+/**
+ * Payment totals, derived one place so no screen re-computes them differently.
+ *
+ * `paid` and `outstanding` follow the line status, not a guess: a line counts as
+ * outstanding once it is invoiced and not yet paid, which is exactly what a
+ * homeowner reads as "what I owe right now".
+ */
+export function paymentSummary(lines: ClientPaymentLine[]): {
+  contractValue: number;
+  paid: number;
+  outstanding: number;
+  upcoming: number;
+} {
+  let contractValue = 0;
+  let paid = 0;
+  let outstanding = 0;
+  let upcoming = 0;
+  for (const line of lines) {
+    contractValue += line.amount;
+    if (line.status === 'Paid') paid += line.amount;
+    else if (line.status === 'Invoiced' || line.status === 'Due') outstanding += line.amount;
+    else upcoming += line.amount;
+  }
+  return { contractValue, paid, outstanding, upcoming };
 }
 
 /** Column totals, so the screen never re-derives them differently. */

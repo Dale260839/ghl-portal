@@ -324,6 +324,37 @@ export interface BudgetLine {
 }
 
 /**
+ * One line of the client-facing payment schedule, §6.4.
+ *
+ * The client half of the same schedule the invoicing code composes from
+ * (`lib/buildsuite/payment-schedule.ts`): milestone, percentage, amount and the
+ * terms text, all of which live in the client's own proposal. It adds only
+ * what a homeowner needs to see about a line's progress — its status, and the
+ * invoice number and dates once one exists. It carries NO internal figure:
+ * there is no cost or margin field for one to leak through.
+ */
+export interface ClientPaymentLine {
+  id: string;
+  projectId: string;
+  /** Position in the schedule. Line 1 is the deposit. */
+  position: number;
+  milestone: string;
+  /** Share of the contract, 0-100. */
+  percentage: number;
+  amount: number;
+  status: 'Not due' | 'Due' | 'Invoiced' | 'Paid';
+  /** The GHL invoice number once one is raised, else ''. */
+  invoiceNumber: string;
+  /** '' until the line is invoiced. */
+  dueDate: string;
+  /** '' until the line is paid. */
+  paidDate: string;
+  /** The terms text from the proposal, e.g. "Due upon signed contract". */
+  terms: string;
+  clientVisible: boolean;
+}
+
+/**
  * §6.9 / Artifact 90 `Punch List Item`. A closeout task — the small fixes and
  * touch-ups agreed near the end of a project — as it appears in the Hub.
  *

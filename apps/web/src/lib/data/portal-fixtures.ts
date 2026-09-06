@@ -1,6 +1,7 @@
 import type {
   BudgetLine,
   ChangeOrder,
+  ClientPaymentLine,
   MaterialSelection,
   Message,
   ProjectDocument,
@@ -492,5 +493,74 @@ export const PUNCH_LIST: PunchListItem[] = [
     // Withheld: an internal cosmetic touch-up the crew is handling quietly.
     internalNotes: 'Handle on the next visit; no need to put in front of the client.',
     clientVisible: false,
+  },
+];
+
+/**
+ * §6.4 the payment schedule, as the homeowner sees it.
+ *
+ * The same four-milestone shape the invoicing code composes from, hung off the
+ * Johnson Kitchen project so it lines up with the rest of the demo. One line is
+ * paid, one is invoiced and outstanding, two are not yet due — a real draw
+ * schedule mid-project. Every line is client-visible: a homeowner is meant to
+ * see what they have paid and what is coming. Amounts sum to the $48,500
+ * contract.
+ */
+export const PAYMENT_SCHEDULE: ClientPaymentLine[] = [
+  {
+    id: 'pay-1',
+    projectId: PROJECT,
+    position: 1,
+    milestone: 'Contract Signing & Scheduling',
+    percentage: 30,
+    amount: 14550,
+    status: 'Paid',
+    invoiceNumber: '000188',
+    dueDate: '2026-07-15',
+    paidDate: '2026-07-14',
+    terms: 'Due upon signed contract — secures your spot on the schedule and covers material procurement',
+    clientVisible: true,
+  },
+  {
+    id: 'pay-2',
+    projectId: PROJECT,
+    position: 2,
+    milestone: 'Cabinet Delivery & Rough-In',
+    percentage: 30,
+    amount: 14550,
+    status: 'Invoiced',
+    invoiceNumber: '000192',
+    dueDate: '2026-08-30',
+    paidDate: '',
+    terms: 'Due when cabinets are delivered and rough-in begins',
+    clientVisible: true,
+  },
+  {
+    id: 'pay-3',
+    projectId: PROJECT,
+    position: 3,
+    milestone: 'Countertop & Tile',
+    percentage: 25,
+    amount: 12125,
+    status: 'Not due',
+    invoiceNumber: '',
+    dueDate: '',
+    paidDate: '',
+    terms: 'Due at the start of countertop templating and tile',
+    clientVisible: true,
+  },
+  {
+    id: 'pay-4',
+    projectId: PROJECT,
+    position: 4,
+    milestone: 'Final Walkthrough & Completion',
+    percentage: 15,
+    amount: 7275,
+    status: 'Not due',
+    invoiceNumber: '',
+    dueDate: '',
+    paidDate: '',
+    terms: 'Due upon completion and final walkthrough',
+    clientVisible: true,
   },
 ];
