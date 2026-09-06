@@ -38,10 +38,10 @@ test('the payload matches the real GHL shape, with an ad-hoc line item', () => {
   assert.equal(p.title, 'INVOICE');
   assert.equal(p.name, 'BSA-044 · Invoice 1 of 1'); // the project code rides along
   assert.equal(p.contactDetails.id, 'f1zrPKs0KMb7cHQ5267x');
-  assert.equal(p.invoiceItems.length, 1);
-  assert.equal(p.invoiceItems[0]!.name, 'Contract Signing & Scheduling');
-  assert.equal(p.invoiceItems[0]!.amount, 1773.75);
-  assert.equal(p.invoiceItems[0]!.qty, 1);
+  assert.equal(p.items.length, 1);
+  assert.equal(p.items[0]!.name, 'Contract Signing & Scheduling');
+  assert.equal(p.items[0]!.amount, 1773.75);
+  assert.equal(p.items[0]!.qty, 1);
   assert.match(p.termsNotes, /Due upon signed contract/);
 });
 

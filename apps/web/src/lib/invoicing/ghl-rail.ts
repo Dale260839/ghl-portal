@@ -63,7 +63,7 @@ export interface GhlInvoicePayload {
   businessDetails: { name: string };
   discount: { type: 'percentage'; value: number };
   contactDetails: { id: string; name: string; email: string; phoneNo?: string };
-  invoiceItems: GhlInvoiceItem[];
+  items: GhlInvoiceItem[];
   issueDate: string;
   dueDate: string;
   termsNotes: string;
@@ -107,7 +107,7 @@ export function buildGhlInvoicePayload(
       email: recipient.email,
       ...(recipient.phone ? { phoneNo: recipient.phone } : {}),
     },
-    invoiceItems: [
+    items: [
       {
         name: invoice.milestone,
         description: invoice.terms,
