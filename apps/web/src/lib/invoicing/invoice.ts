@@ -39,6 +39,8 @@ export interface DraftInvoice {
   readonly milestone: string;
   /** The line description a contractor sees, milestone plus terms when present. */
   readonly description: string;
+  /** The raw terms text on its own, for a rail that wants it as a separate field. */
+  readonly terms: string;
   /** Dollar amount, or `null` when the schedule line carried none. */
   readonly amount: number | null;
   readonly percentage: number | null;
@@ -91,6 +93,7 @@ function draftFrom(line: PaymentScheduleLine, total: number, ctx: InvoiceContext
     totalCount: total,
     milestone: line.milestone,
     description: describeLine(line),
+    terms: line.terms,
     amount: line.amount,
     percentage: line.percentage,
     clientName: ctx.clientName,
@@ -128,24 +131,33 @@ export function composeFirstInvoice(
 
 // ── The rail seam ───────────────────────────────────────────────────────────
 /**
- * Delivering a draft, behind one interface.
+ * Creating a draft on a rail, behind one interface.
  *
- * The rail is GoHighLevel first. Nothing in this repo actually posts an invoice
- * yet: doing so is a write against a live system and needs the GHL invoice API
- * wired plus confirmation of the mapping, which is not ours to assume (see the
- * live-system guardrails in CLAUDE.md). So this defines the seam and a rail that
- * honestly refuses, rather than a path that pretends to send.
+ * The rail is GoHighLevel, confirmed by Chris. The word is `createDraft`, not
+ * `send`, and the distinction is the whole safety model: the Hub only ever
+ * creates a DRAFT invoice. A person reviews it and sends it from GHL. There is
+ * deliberately no code path in this repo that sends an invoice to a client, so
+ * no bug and no future refactor can bill someone automatically.
  *
- * A real GHL rail and, later, a Stripe rail each implement this. The composition
- * above does not change when one is added.
+ * The recipient is passed in rather than carried on the draft, because the draft
+ * is composed from BuildSuite data that never includes a GHL contact id.
+ * Composition stays rail-agnostic; the rail supplies the GHL specifics.
  */
-export type InvoiceSendResult =
-  | { readonly sent: true; readonly rail: string; readonly externalId: string }
-  | { readonly sent: false; readonly reason: string };
+export interface InvoiceRecipient {
+  /** The client's GoHighLevel contact id. The invoice attaches to this. */
+  readonly ghlContactId: string;
+  readonly name: string;
+  readonly email: string;
+  readonly phone?: string;
+}
+
+export type InvoiceRailResult =
+  | { readonly created: true; readonly rail: string; readonly externalId: string; readonly editUrl?: string }
+  | { readonly created: false; readonly reason: string };
 
 export interface InvoiceRail {
   readonly name: string;
-  send(invoice: DraftInvoice): Promise<InvoiceSendResult>;
+  createDraft(invoice: DraftInvoice, recipient: InvoiceRecipient): Promise<InvoiceRailResult>;
 }
 
 /**
@@ -153,12 +165,12 @@ export interface InvoiceRail {
  *
  * Deliberately not a no-op that reports success: a composed draft that silently
  * never reaches anyone is worse than one that fails loudly, because a contractor
- * would believe a client had been billed.
+ * would believe a client had been invoiced.
  */
 export const unconfiguredRail: InvoiceRail = {
   name: 'unconfigured',
-  async send() {
-    return { sent: false, reason: 'no invoice rail is wired yet (GHL invoicing pending)' };
+  async createDraft() {
+    return { created: false, reason: 'no invoice rail is wired yet (GHL invoicing pending)' };
   },
 };
 

@@ -115,9 +115,13 @@ test('readyToSend requires both an amount and a real project code', () => {
   assert.equal(readyToSend(noAmount!), false, 'no amount yet');
 });
 
-test('the unconfigured rail refuses rather than pretending to send', async () => {
+test('the unconfigured rail refuses rather than pretending to create', async () => {
   const first = composeFirstInvoice(RICH, CTX)!;
-  const result = await unconfiguredRail.send(first);
-  assert.equal(result.sent, false);
-  assert.match(result.sent === false ? result.reason : '', /pending/i);
+  const result = await unconfiguredRail.createDraft(first, {
+    ghlContactId: 'c1',
+    name: 'Dana',
+    email: 'dana@example.com',
+  });
+  assert.equal(result.created, false);
+  assert.match(result.created === false ? result.reason : '', /pending/i);
 });
