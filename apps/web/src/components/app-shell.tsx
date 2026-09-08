@@ -97,7 +97,7 @@ export function AppShell({
               <form action={signOut}>
                 <button
                   type="submit"
-                  className="rounded-md border border-navy-100 px-2.5 py-1.5 text-xs font-medium text-navy-600 transition hover:bg-navy-50"
+                  className="press rounded-full border border-navy-200 bg-white px-3 py-1.5 text-xs font-medium text-navy-600 shadow-[0_1px_2px_rgba(10,31,68,0.06)] transition-colors hover:border-navy-400/40 hover:bg-navy-50"
                 >
                   Sign out
                 </button>

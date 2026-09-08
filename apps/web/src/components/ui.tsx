@@ -155,7 +155,8 @@ export function DataModeBanner({ kind }: { kind: 'fixture' | 'buildsuite' | 'ghl
     return (
       <div className="border-b border-navy-200 bg-navy-50 px-4 py-1.5 text-center text-xs text-navy-600">
         <strong className="font-semibold">Live BuildSuite data</strong> — real projects, clients and
-        dates. Field updates, milestones and budgets need the Hub tables, which are not created yet.
+        dates. Field updates, milestones and budgets arrive once this deployment is connected to
+        the Hub database.
       </div>
     );
   }
