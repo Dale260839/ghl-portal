@@ -28,6 +28,12 @@ import {
 
 type Tone = 'good' | 'warn' | 'bad';
 
+// BuildSuite ids are UUIDs; the fixtures use short codes. Show the short form
+// so a long id never crowds the project name off its line.
+function shortId(id: string): string {
+  return id.length > 16 ? id.slice(0, 8) : id;
+}
+
 function StatusPill({ label, tone }: { label: string; tone: Tone }) {
   const cls =
     tone === 'good'
@@ -102,8 +108,10 @@ export default async function PortfolioDashboard() {
   };
 
   // Recent activity: real updates and approved change orders, newest first.
-  const nameOf = (pid: string) =>
-    projects.find((p) => p.buildsuiteProjectId === pid)?.projectName ?? pid;
+  // Null for a project this tenant no longer has (deleted, or another owner's),
+  // so the feed never prints a bare id where a name should be.
+  const nameOf = (pid: string): string | null =>
+    projects.find((p) => p.buildsuiteProjectId === pid)?.projectName ?? null;
   const activity = [
     ...updates.map((u) => ({
       id: u.id,
@@ -127,6 +135,7 @@ export default async function PortfolioDashboard() {
       }),
     ),
   ]
+    .filter((a) => a.where !== null)
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 5);
 
@@ -216,7 +225,7 @@ export default async function PortfolioDashboard() {
                           {p.projectName}
                         </Link>
                         <span className="mt-0.5 shrink-0 text-[11px] text-navy-400">
-                          {p.buildsuiteProjectId}
+                          {shortId(p.buildsuiteProjectId)}
                         </span>
                       </div>
                       <div className="mt-0.5 truncate text-xs text-navy-400">
