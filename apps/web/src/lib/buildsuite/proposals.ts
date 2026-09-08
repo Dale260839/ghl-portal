@@ -92,7 +92,7 @@ export interface Proposal {
   /** null when unattached — the all-zero placeholder is normalized away. */
   contractorId: string | null;
   status: ProposalStatus;
-  /** Free text on 46 of 46 (`price`); the numeric `total` is set on only 8. */
+  /** Free text on every row (`price`); the numeric `total` is set on 10 of 48. */
   priceText: string;
   /** The real number when BuildSuite has one, else null. Never guessed. */
   amount: number | null;
@@ -121,9 +121,12 @@ export function normalizeProposal(row: BuildSuiteProposalRow): Proposal {
   const contractor = nonEmpty(row.contractor_id);
   const status = nonEmpty(row.status) || 'unknown';
 
-  // `total` is populated on 8 of 46; `price` is free text on all of them. Only a
-  // real number is treated as an amount — parsing "around 12k" into 12000 is the
-  // kind of helpfulness that puts a wrong figure on a contract.
+  // `total` is populated on 10 of 48 (2026-09-09), including two SIGNED rows.
+  // `price` is free text and holds BOTH shapes — a band like "$2,000 - $5,000"
+  // on older rows and a numeric string like "24500.00" on newer ones. It is
+  // never parsed for money: only the numeric columns are, because turning
+  // "around 12k" into 12000 is the kind of helpfulness that puts a wrong figure
+  // on a contract.
   const amount =
     typeof row.total === 'number' && Number.isFinite(row.total)
       ? row.total
