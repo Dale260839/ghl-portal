@@ -5,6 +5,7 @@ import type { Project } from './data/types.ts';
 import { getSession } from './session.ts';
 import { currentDataSource } from './data/current-source.ts';
 import { projectFor } from './portal-gates.ts';
+import { tenantScopeFor } from './tenant-scope.ts';
 
 /**
  * Portal reads that need the request.
@@ -39,16 +40,32 @@ export async function currentPortalProject(params: {
     return { project: chosen, allProjects };
   }
 
-  if (session?.role === 'contractor' && params.preview !== undefined) {
-    const project = projectFor(params.preview);
-    return { project, allProjects: project === null ? [] : [project] };
-  }
+  if (session?.role === 'contractor') {
+    // A contractor's preview is read through their own tenant scope, so a live
+    // BuildSuite id resolves as readily as a fixture id. Until 8 Sep this only
+    // consulted the fixtures, and "Preview client view" on a real project showed
+    // "No project". The §9.1 gate still runs downstream; this only chooses which
+    // project it runs against. Fixtures remain the fallback so the demo data
+    // keeps working where BuildSuite is not reachable.
+    const scope = await tenantScopeFor(session);
+    const scoped = scope === null ? null : await currentDataSource(scope);
 
-  // A contractor browsing the portal without a preview id gets the first
-  // project they own, so the nav is explorable rather than dead.
-  if (session?.role === 'contractor' && session.authProfileIds !== undefined) {
-    const owned = PROJECTS.filter((p) => session.authProfileIds!.includes(p.ownerAuthProfileId));
-    return { project: owned[0] ?? null, allProjects: owned };
+    if (params.preview !== undefined) {
+      const live = scoped === null || scope === null ? null : await scoped.getProject(scope, params.preview);
+      const project = live ?? projectFor(params.preview);
+      return { project, allProjects: project === null ? [] : [project] };
+    }
+
+    // No preview id: the first project they own, so the nav is explorable
+    // rather than dead.
+    if (scoped !== null && scope !== null) {
+      const owned = await scoped.listProjects(scope);
+      if (owned.length > 0) return { project: owned[0] ?? null, allProjects: owned };
+    }
+    if (session.authProfileIds !== undefined) {
+      const owned = PROJECTS.filter((p) => session.authProfileIds!.includes(p.ownerAuthProfileId));
+      return { project: owned[0] ?? null, allProjects: owned };
+    }
   }
 
   return { project: null, allProjects: [] };
