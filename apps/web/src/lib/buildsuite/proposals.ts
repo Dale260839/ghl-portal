@@ -111,6 +111,27 @@ export interface BuildSuiteProposalRow {
  * number and happens to be stored as text.
  * ---------------------------------------------------------------------------
  */
+/**
+ * A URL we would actually put behind a link, or null.
+ *
+ * `nonEmpty` is not enough here. One live row stores the four-character STRING
+ * "null" rather than SQL NULL, which is truthy and non-empty — so the screen
+ * rendered `<a href="null">Signed contract</a>`: a dead link labelled as the
+ * signed contract, which is worse than no link at all because a contractor
+ * would report the document as missing.
+ *
+ * Also requires it to look like a link. A value that is neither absent nor a
+ * URL is a data fault, and guessing at it would put something unopenable in
+ * front of a person about to invoice against it.
+ */
+function usableUrl(value: string | null): string | null {
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (text === '') return null;
+  if (/^(null|undefined|none|n\/a|false|0)$/i.test(text)) return null;
+  return /^https?:\/\//i.test(text) ? text : null;
+}
+
 const EXACT_PRICE = /^\$?\s*[\d,]+(?:\.\d{1,2})?$/;
 
 function exactPrice(value: string | number | null): number | null {
@@ -162,8 +183,28 @@ export interface Proposal {
   /**
    * A link to the signed contract PDF, when one exists.
    *
-   * Lives on the proposal, NOT on `projects` — the ask to add a column there
-   * would create a second copy to keep in sync, and the join already exists.
+   * ---------------------------------------------------------------------------
+   * THIS URL IS PUBLIC AND UNAUTHENTICATED. TREAT IT AS SENSITIVE.
+   *
+   * Sing, 2026-09-09: anyone holding the URL can open the client's signed
+   * contract — prices, address, the lot. There is no auth on it.
+   *
+   * So it may be LINKED from a page that is already behind login, and it must
+   * not travel any further than that: not into an email, not into anything
+   * shared or indexed, and never into a client-facing projection. Chris has not
+   * ruled on it, so the conservative reading holds until he does.
+   *
+   * `rel="noreferrer"` on every link, so the storage host is not told which
+   * page it was opened from. A guardrail test keeps it out of the portal.
+   * ---------------------------------------------------------------------------
+   *
+   * Written by the GoHighLevel webhook from the document's `pdfLink`, so it
+   * stays null on a test fire — their test payload carries no document fields.
+   * Only a real signature populates it.
+   *
+   * Lives on the proposal, NOT on `projects`. `deals.signed_pdf_url` is written
+   * at the same moment but is the contractor-side copy; the Hub reads proposals,
+   * where the link, the total and `signature_status` arrive together.
    */
   signedPdfUrl: string | null;
   timeline: string;
@@ -207,7 +248,7 @@ export function normalizeProposal(row: BuildSuiteProposalRow): Proposal {
     priceText: nonEmpty(row.price),
     amount,
     amountSource,
-    signedPdfUrl: nonEmpty(row.signed_pdf_url) || null,
+    signedPdfUrl: usableUrl(row.signed_pdf_url),
     timeline: nonEmpty(row.timeline),
     createdAt: nonEmpty(row.created_at),
     updatedAt: nonEmpty(row.updated_at) || nonEmpty(row.created_at),

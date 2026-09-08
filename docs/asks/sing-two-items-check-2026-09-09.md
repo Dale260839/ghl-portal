@@ -1,5 +1,31 @@
 # The two items — what I can and cannot see
 
+> **ANSWERED 2026-09-09, later the same day.** Sing confirmed: the link lives on
+> `proposals.signed_pdf_url`, the `deals` copy is contractor-side and we should
+> not need it, and the exact total arrives on the same row as the signature. So
+> the table question is settled — we read proposals, and nothing needs adding to
+> `projects`.
+>
+> **Two things came back that changed our code**, both now done:
+>
+> **The URL is public and unauthenticated.** Anyone holding it opens the
+> client's contract, prices and address included. It is linked only from pages
+> behind the contractor's login, every link carries `rel="noreferrer"`, and two
+> guardrail tests now fail if it reaches a portal screen or an email, or if a
+> link drops the referrer policy. Both were verified by reintroducing the
+> violation. A tooltip tells the contractor the link is public before they paste
+> it somewhere.
+>
+> **One row stores the literal string `"null"`.** `027b2b2f` — not SQL NULL, the
+> four characters. Our check was "non-empty", so the screen rendered
+> `<a href="null">Signed contract</a>`: a dead link labelled as the contract,
+> which reads as a missing document rather than an absent one. Now a value must
+> look like an `http(s)` URL to be linked at all.
+>
+> Still to come from Sing: `proposals.content` backfilled onto the mirrored
+> rows, so the signed records carry a payment schedule. Confirmed absent — both
+> new signed rows have `content: NULL` — which is why they draft nothing today.
+
 **To:** Sing · **From:** Dale · **Date:** 2026-09-09
 **All figures measured live, read-only, minutes before writing this.**
 

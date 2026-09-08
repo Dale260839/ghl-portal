@@ -321,3 +321,36 @@ test('the signed contract link is surfaced when there is one', () => {
   // Blank is null, not an empty string a screen would render as a live link.
   assert.equal(normalizeProposal(row({ signed_pdf_url: '   ' })).signedPdfUrl, null);
 });
+
+// ── The signed contract link is public — treat it as sensitive ──────────────
+
+test('§ the literal string "null" is not a link', () => {
+  // A real live row (027b2b2f) stores the four characters "null" rather than
+  // SQL NULL. Rendered, that is <a href="null">Signed contract</a> — a dead
+  // link labelled as the contract, which is worse than showing nothing because
+  // a contractor reports the document as missing rather than absent.
+  for (const junk of ['null', 'NULL', 'undefined', 'none', 'N/A', 'false', '0', '   ', '']) {
+    assert.equal(
+      normalizeProposal(row({ signed_pdf_url: junk })).signedPdfUrl,
+      null,
+      `"${junk}" was treated as a link`,
+    );
+  }
+});
+
+test('a value that is not a URL is refused rather than linked', () => {
+  for (const junk of ['pending', 'see GHL', '/relative/path', 'ftp://x/y']) {
+    assert.equal(normalizeProposal(row({ signed_pdf_url: junk })).signedPdfUrl, null);
+  }
+});
+
+test('a real signed URL survives, from either host', () => {
+  // Both shapes occur live: Supabase Storage on the older rows, GoHighLevel on
+  // the newer ones.
+  for (const url of [
+    'https://bkngicyqgdwzmoeahqdi.supabase.co/storage/v1/object/public/proposals/x/signed_a1.pdf',
+    'https://services.leadconnectorhq.com/proposals/document/public/download-pdf?p=location/x',
+  ]) {
+    assert.equal(normalizeProposal(row({ signed_pdf_url: url })).signedPdfUrl, url);
+  }
+});

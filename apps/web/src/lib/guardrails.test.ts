@@ -424,3 +424,33 @@ test('§3.6 only scope.ts builds a tenant scope from a session', () => {
     );
   }
 });
+
+test('§9.1 the public signed-contract URL never reaches a client surface', () => {
+  // Sing, 2026-09-09: the signed PDF link is PUBLIC and unauthenticated —
+  // anyone holding it opens the client's contract, prices and address included.
+  //
+  // It is fine behind the contractor's login and must go no further. The two
+  // ways it escapes are a portal screen rendering it, and an email carrying it,
+  // so both are checked. Chris has not ruled on wider sharing; until he does,
+  // the conservative reading is the one in force.
+  const leaky = FILES.filter((f) => {
+    const path = rel(f.path);
+    const clientFacing =
+      path.startsWith('app/portal/') || path.startsWith('lib/email/') || path.includes('invitation');
+    return clientFacing && /signedPdfUrl|signed_pdf_url/.test(f.text);
+  }).map((f) => rel(f.path));
+
+  assert.deepEqual(leaky, [], 'a public contract link reached a client-facing surface');
+});
+
+test('every signed-contract link carries rel="noreferrer"', () => {
+  // Otherwise the storage host is told which of our pages the contractor opened
+  // it from, which leaks the tenant and the screen alongside the document.
+  for (const file of FILES) {
+    if (!/href=\{[^}]*signedPdfUrl/.test(file.text)) continue;
+    const anchors = file.text.match(/<a\b[\s\S]{0,400}?signedPdfUrl[\s\S]{0,400}?>/g) ?? [];
+    for (const anchor of anchors) {
+      assert.match(anchor, /rel="noreferrer"/, `${rel(file.path)} links it without noreferrer`);
+    }
+  }
+});

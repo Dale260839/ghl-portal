@@ -176,6 +176,11 @@ export default async function Engagements() {
                       href={e.proposal.signedPdfUrl}
                       target="_blank"
                       rel="noreferrer"
+                      // The link is public and unauthenticated (Sing,
+                      // 2026-09-09) — anyone holding the URL opens the
+                      // contract. Say so, because a contractor who does not
+                      // know that will paste it into a group chat.
+                      title="Opens the signed contract. This link is public — do not share it outside the parties on the contract."
                       className="mt-0.5 inline-block text-xs font-medium text-navy-600 underline underline-offset-2 hover:text-navy-900"
                     >
                       Signed contract

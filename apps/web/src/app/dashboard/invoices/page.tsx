@@ -172,6 +172,11 @@ export default async function Invoices() {
                       href={proposal.signedPdfUrl}
                       target="_blank"
                       rel="noreferrer"
+                      // The link is public and unauthenticated (Sing,
+                      // 2026-09-09) — anyone holding the URL opens the
+                      // contract. Say so, because a contractor who does not
+                      // know that will paste it into a group chat.
+                      title="Opens the signed contract. This link is public — do not share it outside the parties on the contract."
                       className="text-xs font-medium text-navy-600 underline underline-offset-2 hover:text-navy-900"
                     >
                       Signed contract
