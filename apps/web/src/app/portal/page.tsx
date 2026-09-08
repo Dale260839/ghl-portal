@@ -39,7 +39,12 @@ export default async function ClientPortal({
   if (session?.role === 'client') {
     projects = await clientProjectsFor(access, db);
   } else if (session?.role === 'contractor' && params.preview !== undefined) {
-    const all = await db.listProjects(await requireTenantScope()).catch(() => []);
+    // Through the contractor's own scoped source, as the inner screens already
+    // do: the project then carries its real location, and the child reads
+    // below can be scoped from it instead of from a blank.
+    const scope = await requireTenantScope();
+    const scoped = await currentDataSource(scope);
+    const all = await scoped.listProjects(scope).catch(() => []);
     projects = all.filter((p) => p.buildsuiteProjectId === params.preview);
   }
 

@@ -76,9 +76,23 @@ export async function actionTenantScope(session: Session): Promise<TenantScope> 
  * Takes a whole `Project` rather than an id on purpose — you can only call it if
  * you already hold a project you were allowed to read.
  */
+/**
+ * A BuildSuite row does not record a GoHighLevel location, so a project read
+ * through an instance that was not given one — the homeowner's contact read,
+ * the invited-id read — arrives with a blank `ghlLocationId`. `assertScope`
+ * rightly refuses a blank location, and until 8 Sep that refusal surfaced the
+ * moment a live project's gate opened: the client home threw on its first
+ * child read. The location is only ever used to key a data-source instance;
+ * every BuildSuite read filters on the owner, never on location. So a project
+ * whose location is genuinely unknown scopes its children under this
+ * placeholder, and the owner filter still does all the tenancy work.
+ */
+export const UNKNOWN_LOCATION = 'buildsuite:location-unknown';
+
 export function scopeOfProject(project: Project): TenantScope {
+  const location = project.ghlLocationId.trim();
   return {
-    locationId: project.ghlLocationId,
+    locationId: location === '' ? UNKNOWN_LOCATION : location,
     authProfileIds: [project.ownerAuthProfileId],
   };
 }
