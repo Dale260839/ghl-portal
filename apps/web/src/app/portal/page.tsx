@@ -5,7 +5,7 @@ import { getSession } from '@/lib/session';
 import { scopeOfProject } from '@/lib/scope';
 import { toClientMilestones, toClientProject, toClientUpdates } from '@/lib/client-view';
 import { Badge, Card, CardHeader, ProgressBar, currency, shortDate } from '@/components/ui';
-import type { Contact, Project } from '@/lib/data/types';
+import { hasFinancials, hasOperationalDetail, type Contact, type Project } from '@/lib/data/types';
 import { requireAccess } from '@/lib/access';
 import { clientProjectsFor } from '@/lib/client-scope';
 import { currentDataSource } from '@/lib/data/current-source';
@@ -152,20 +152,33 @@ export default async function ClientPortal({
           <Badge tone="accent">{view.currentMilestone}</Badge>
         </div>
 
-        <div className="mt-5">
-          <ProgressBar value={view.progressPercentage} label={false} />
-          <div className="mt-2 flex justify-between text-xs text-navy-400">
-            <span>{view.progressPercentage}% complete</span>
+        {/* BuildSuite records no progress; a 0% bar there would be a statement
+            nobody made. Show the bar only where the figure is real. */}
+        {hasOperationalDetail(project) ? (
+          <div className="mt-5">
+            <ProgressBar value={view.progressPercentage} label={false} />
+            <div className="mt-2 flex justify-between text-xs text-navy-400">
+              <span>{view.progressPercentage}% complete</span>
+              {view.estimatedCompletionDate !== null && (
+                <span>Estimated completion {shortDate(view.estimatedCompletionDate)}</span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 flex flex-wrap justify-between gap-2 text-xs text-navy-400">
+            <span>Progress updates begin once your crew starts logging work.</span>
             {view.estimatedCompletionDate !== null && (
               <span>Estimated completion {shortDate(view.estimatedCompletionDate)}</span>
             )}
           </div>
-        </div>
+        )}
 
         <dl className="mt-5 grid gap-4 border-t border-navy-100 pt-4 sm:grid-cols-3">
           <div>
             <dt className="text-xs tracking-wide text-navy-400 uppercase">Up next</dt>
-            <dd className="mt-1 text-sm font-medium text-navy-900">{view.nextMilestone}</dd>
+            <dd className="mt-1 text-sm font-medium text-navy-900">
+              {view.nextMilestone !== '' ? view.nextMilestone : 'Not scheduled yet'}
+            </dd>
           </div>
           <div>
             <dt className="text-xs tracking-wide text-navy-400 uppercase">Last updated</dt>
@@ -210,7 +223,10 @@ export default async function ClientPortal({
           </ol>
         </Card>
 
-        {view.budget !== null ? (
+        {/* The switch may be on while the source holds only a budget band. A
+            ledger of $0 lines with a "Pay now" is not a budget, it is six false
+            statements — so the card needs real money as well as permission. */}
+        {view.budget !== null && hasFinancials(project) ? (
           <Card>
             <CardHeader title="Budget summary" />
             <dl className="divide-y divide-navy-100 text-sm">
@@ -253,7 +269,9 @@ export default async function ClientPortal({
           <Card>
             <CardHeader title="Budget summary" />
             <p className="px-5 py-8 text-center text-sm text-navy-400">
-              Your contractor hasn&apos;t enabled budget visibility for this project.
+              {view.budget !== null
+                ? 'Pricing for this project isn’t published yet. Your contract ledger appears here once invoicing begins.'
+                : 'Your contractor hasn’t enabled budget visibility for this project.'}
             </p>
           </Card>
         )}
