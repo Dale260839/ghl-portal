@@ -105,7 +105,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
               data through another lens, which is what makes it useful for
               checking tenancy and what makes it unsafe to ship enabled.
               Streamed: its three wide reads must never hold up the page. */}
-          <Suspense fallback={null}>
+          <Suspense
+            fallback={
+              // A visible stand-in, so the admin switch is never "missing" while
+              // its account list streams in. Replaced in place by the real pill.
+              <span
+                aria-hidden="true"
+                className="inline-flex items-center gap-2 rounded-full border border-amber-accent/40 bg-amber-soft py-1 pr-2.5 pl-1 text-xs font-medium text-amber-800/70"
+              >
+                <span className="shimmer h-6 w-6 rounded-full" />
+                <span className="hidden sm:inline">Switch account</span>
+                <span className="sm:hidden">Account</span>
+              </span>
+            }
+          >
             <AccountSwitcherSlot current={scope.authProfileIds[0]} />
           </Suspense>
           {viewAsEnabled() && <ViewSwitcher current="contractor" viewing={false} />}
