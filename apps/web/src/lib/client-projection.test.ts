@@ -165,13 +165,62 @@ test('§10 an Approved Internally update stays internal', () => {
 
 test('§10 client updates carry the summary and never the work log', () => {
   const updates = DAILY_UPDATES.filter((u) => u.projectId === kitchen.buildsuiteProjectId);
-  for (const view of toClientUpdates(updates, kitchen)) {
+  const views = toClientUpdates(updates, kitchen);
+  assert.ok(views.length > 0, 'nothing was published, so this proves nothing');
+
+  for (const view of views) {
     assert.deepEqual(Object.keys(view).sort(), [
       'clientSummary',
       'id',
       'publishDate',
       'updateDate',
     ]);
+  }
+
+  // The shape check above passes if `clientSummary` is populated from the WRONG
+  // field — swapping it for `workCompleted` keeps the same four keys. It did,
+  // and this test did not notice (2026-09-09). So check the value, not the key.
+  for (const view of views) {
+    const source = updates.find((u) => u.id === view.id)!;
+    assert.equal(view.clientSummary, source.clientSummary);
+    // The dates a client reads are the recorded ones. A wrong date on a
+    // progress update is a wrong claim about when work happened.
+    assert.equal(view.updateDate, source.updateDate);
+    assert.equal(view.publishDate, source.publishDate);
+    assert.notEqual(
+      view.clientSummary,
+      source.workCompleted,
+      'the crew work log was published in place of the client summary',
+    );
+  }
+});
+
+test('§10 approval alone denies, with client visibility held constant', () => {
+  // ---------------------------------------------------------------------------
+  // Every unapproved fixture also has `clientVisible: false`, so the two
+  // conditions are perfectly confounded and no fixture can tell them apart.
+  // The approval clause could have been deleted and the whole suite would still
+  // have passed — verified on 2026-09-09 by deleting it.
+  //
+  // This is the only combination that isolates it: visible to the client, and
+  // NOT approved for publication. §10 keeps `Client Visible = No` at
+  // `Approved Internally` in real data; here it is forced true precisely so the
+  // approval clause is the only thing left that can deny.
+  // ---------------------------------------------------------------------------
+  const published = DAILY_UPDATES.find(
+    (u) => u.managerApprovalStatus === 'Approved & Published',
+  )!;
+  const project = PROJECTS.find((p) => p.buildsuiteProjectId === published.projectId)!;
+
+  assert.equal(toClientUpdates([published], project).length, 1, 'the control case must pass');
+
+  for (const status of ['Pending', 'Returned', 'Approved Internally'] as const) {
+    const notPublished = { ...published, id: `probe-${status}`, managerApprovalStatus: status };
+    assert.deepEqual(
+      toClientUpdates([notPublished], project),
+      [],
+      `"${status}" reached a client with clientVisible still true`,
+    );
   }
 });
 
