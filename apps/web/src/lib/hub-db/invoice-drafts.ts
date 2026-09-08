@@ -37,6 +37,16 @@ export interface StoredInvoiceDraft {
   description: string | null;
   notes: string | null;
   status: DraftStatus;
+  /**
+   * The rail's id, once this invoice exists there. Non-null is the ONLY thing
+   * that says "already created" — status does not, because creating a draft in
+   * GoHighLevel is not sending it and the status stays short of `sent`.
+   */
+  externalId: string | null;
+  externalUrl: string | null;
+  railCreatedAt: string | null;
+  /** Which rail it was created on. Free text, set by `recordRailCreation`. */
+  sentVia: string | null;
   sentAt: string | null;
   updatedAt: string;
   updatedBy: string | null;
@@ -55,6 +65,10 @@ interface DraftRow {
   description: string | null;
   notes: string | null;
   status: string | null;
+  external_id: string | null;
+  external_url: string | null;
+  rail_created_at: string | null;
+  sent_via: string | null;
   sent_at: string | null;
   updated_at: string;
   updated_by: string | null;
@@ -84,6 +98,10 @@ function toDraft(row: DraftRow): StoredInvoiceDraft {
     status: (['draft', 'ready', 'sent', 'void'] as const).includes(status as DraftStatus)
       ? (status as DraftStatus)
       : 'draft',
+    externalId: row.external_id ?? null,
+    externalUrl: row.external_url ?? null,
+    railCreatedAt: row.rail_created_at ?? null,
+    sentVia: row.sent_via ?? null,
     sentAt: row.sent_at,
     updatedAt: row.updated_at,
     updatedBy: row.updated_by,
@@ -184,6 +202,49 @@ export class HubInvoiceDrafts {
         status: 'in.(draft,ready)',
       },
       patch: { ...patch, updated_at: new Date().toISOString(), updated_by: actor.name },
+    });
+  }
+
+  /**
+   * Record that this draft now exists on a rail.
+   *
+   * Filtered on `external_id is null` as well as the contractor, so a second
+   * create for the same line cannot overwrite the first one's id. Two live
+   * invoices for one instalment is the failure that matters here: a homeowner
+   * could be asked to pay both.
+   *
+   * Does NOT set `sent_at` or move status to `sent`. A GoHighLevel draft has
+   * not been sent to anybody — a person still clicks send there, which is
+   * Chris's rule.
+   */
+  async recordRailCreation(
+    scope: TenantScope,
+    draftId: string,
+    rail: { name: string; externalId: string; externalUrl?: string },
+    actor: { name: string },
+  ): Promise<void> {
+    const contractorId = assertContractor(scope, 'record invoice creation');
+    if (draftId.trim() === '') throw new TypeError('draftId is required');
+    if (rail.externalId.trim() === '') {
+      throw new TypeError('a rail reported success without an id — refusing to record it');
+    }
+
+    await this.client.update({
+      from: 'hub_invoice_drafts',
+      filters: {
+        id: `eq.${draftId}`,
+        contractor_id: `eq.${contractorId}`,
+        external_id: 'is.null',
+      },
+      patch: {
+        external_id: rail.externalId,
+        external_url: rail.externalUrl ?? null,
+        rail_created_at: new Date().toISOString(),
+        sent_via: rail.name,
+        status: 'ready',
+        updated_at: new Date().toISOString(),
+        updated_by: actor.name,
+      },
     });
   }
 }

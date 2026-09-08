@@ -5,8 +5,8 @@ import { resolveContractor } from '@/lib/buildsuite/contractor-identity';
 import { getHubInvoiceDrafts } from '@/lib/hub-db/invoice-drafts';
 import { joinProposalsToProjects } from '@/lib/signed-work';
 import { paymentScheduleDrafts, percentTotal, parsePaymentSchedule } from '@/lib/payment-schedule';
-import { saveInvoiceDraft } from '@/lib/actions';
-import { Badge, Card, CardHeader, currency } from '@/components/ui';
+import { saveInvoiceDraft, createInvoiceOnRail } from '@/lib/actions';
+import { Badge, Card, CardHeader, currency, shortDate } from '@/components/ui';
 import { NotLinkedToContractor } from '@/components/not-linked';
 
 /**
@@ -262,19 +262,64 @@ export default async function Invoices() {
                           className="rounded-lg border border-navy-200 px-3 py-2 text-sm sm:col-span-3"
                         />
                       </form>
+
+                      {/* Creating the invoice in GoHighLevel. A separate form
+                          from Save on purpose: saving is the contractor's own
+                          notes, this reaches another system. */}
+                      <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-navy-100 pt-3">
+                        {saved?.externalId ? (
+                          <>
+                            <Badge tone="good">In GoHighLevel</Badge>
+                            <span className="text-xs text-navy-500">
+                              {saved.externalId}
+                              {saved.railCreatedAt !== null && ` · ${shortDate(saved.railCreatedAt)}`}
+                            </span>
+                            {saved.externalUrl !== null && (
+                              <a
+                                href={saved.externalUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs font-medium text-navy-700 underline"
+                              >
+                                Open it to send
+                              </a>
+                            )}
+                          </>
+                        ) : (
+                          <form action={createInvoiceOnRail} className="flex items-center gap-3">
+                            <input type="hidden" name="draftId" value={saved?.id ?? ''} />
+                            <input type="hidden" name="proposalId" value={proposal.id} />
+                            <button
+                              type="submit"
+                              disabled={saved === undefined || saved.amount === null}
+                              className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700 disabled:opacity-40"
+                            >
+                              Create in GoHighLevel
+                            </button>
+                            <span className="text-xs text-navy-400">
+                              {saved === undefined
+                                ? 'Save this line first.'
+                                : saved.amount === null
+                                  ? 'Enter an amount first.'
+                                  : 'Creates a draft. You send it from GoHighLevel.'}
+                            </span>
+                          </form>
+                        )}
+                      </div>
                     </li>
                   );
                 })}
               </ul>
             )}
 
-            {/* Deliberately no Send button. The rail — GoHighLevel invoicing or
-                Stripe — is still an open decision, and a button that cannot
-                send is worse than no button. The review above is stored, so
-                none of this work is lost whichever way it goes. */}
+            {/* There is still no Send button, and that is the design rather
+                than an omission. "Create in GoHighLevel" makes a DRAFT there;
+                a person opens it and clicks send, which is Chris's rule — the
+                contractor adds a note first, and nothing reaches a homeowner
+                without somebody deciding it should. */}
             <p className="border-t border-navy-100 px-5 py-3 text-xs text-navy-400">
-              Sending is not wired yet — the invoicing rail is still being decided. Everything
-              entered here is saved and will carry across.
+              Creating an invoice puts a draft in GoHighLevel. Nobody is emailed and nothing is
+              charged until you open it there and send it.
             </p>
           </Card>
         );

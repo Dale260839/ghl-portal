@@ -86,6 +86,22 @@ export function LoginForm({ accounts }: { accounts: DemoAccount[] }) {
       >
         {pending ? 'Signing in…' : 'Sign in'}
       </button>
+
+      {/* The homeowner door. It was built and nothing linked to it, so the only
+          way in was to know the URL — which is not a door.
+
+          A separate route on purpose: a homeowner signs in with an emailed
+          link, not a password, and putting both on one form invites somebody to
+          type a project code into a password box. */}
+      <p className="mt-5 border-t border-navy-100 pt-4 text-center text-sm text-navy-500">
+        Are you a homeowner?{' '}
+        <a
+          href="/signin"
+          className="font-medium text-navy-800 underline underline-offset-2 hover:text-navy-900"
+        >
+          Sign in with your project code
+        </a>
+      </p>
     </form>
   );
 }

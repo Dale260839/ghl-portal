@@ -20,6 +20,7 @@ import { actionTenantScope, requireTenantScope } from './scope';
 import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db/records';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
+import { resolveInvoiceRail, draftFromStored } from './invoicing/rail.ts';
 import { getProposalsReader } from './buildsuite/proposals';
 import { paymentScheduleDrafts } from './payment-schedule';
 import { GRANTABLE_RESOURCES } from './permissions';
@@ -832,4 +833,88 @@ export async function requestSignIn(
 
   return { message: signInRequestMessage(outcome) };
 
+}
+
+/**
+ * Create this invoice on the rail. **A write to a live system.**
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THIS DOES AND DOES NOT DO
+ *
+ * It creates a DRAFT in GoHighLevel and stops. Nobody is emailed, nothing is
+ * charged, and the invoice sits in GHL until a person opens it and clicks send
+ * — which is Chris's rule verbatim: the send is always a human step, so the
+ * contractor can add a note first.
+ *
+ * So `sent_at` stays null and the status stops at `ready`. Recording this as
+ * "sent" would tell a contractor a homeowner had been invoiced when they had
+ * not.
+ *
+ * It refuses to create a second invoice for a line that already has one. Two
+ * live invoices for one instalment is a homeowner asked to pay twice, and the
+ * check is in the database as well as here (`external_id is null` in the
+ * update's filter, plus a unique index) because a double-submit races.
+ * ---------------------------------------------------------------------------
+ */
+export async function createInvoiceOnRail(formData: FormData) {
+  const session = await getSession();
+  if (session === null) throw new Error('not signed in');
+  // Issuing an invoice is a contractor act. §12.1 — only they control money.
+  assertCan(session.role, 'create', 'invoice');
+
+  const scope = await actionTenantScope(session);
+  const hub = getHubInvoiceDrafts();
+  if (!hub.available) {
+    throw new Error(`the Hub database is not connected (missing ${hub.missing.join(', ')})`);
+  }
+
+  const draftId = String(formData.get('draftId') ?? '');
+  const proposalId = String(formData.get('proposalId') ?? '');
+  if (draftId === '' || proposalId === '') {
+    throw new Error('draftId and proposalId are required');
+  }
+
+  // Read the draft back rather than trusting the form for anything that ends up
+  // on a document a homeowner receives.
+  const stored = await hub.drafts.listForProposal(scope, proposalId);
+  const draft = stored.find((d) => d.id === draftId);
+  if (draft === undefined) throw new Error('that invoice draft is not one of yours');
+
+  if (draft.externalId !== null) {
+    throw new Error(
+      `this invoice already exists on ${draft.sentVia ?? 'the rail'} as ${draft.externalId}. ` +
+        'Creating another would be a second invoice for the same instalment.',
+    );
+  }
+  if (draft.amount === null) {
+    throw new Error('this invoice has no amount yet. Enter one before creating it.');
+  }
+
+  const db = await currentDataSource(scope);
+  const project = await db.getProject(scope, draft.projectId);
+  if (project === null) throw new Error('that project is not readable');
+
+  const rail = resolveInvoiceRail();
+  const invoice = draftFromStored(draft, project);
+  const result = await rail.createDraft(invoice, {
+    ghlContactId: project.primaryContactId,
+    name: project.clientName,
+    // The address is not ours to supply — the rail attaches to the contact,
+    // which already holds it. Passing one here would be a second source of
+    // truth for where an invoice goes.
+    email: '',
+  });
+
+  if (!result.created) {
+    throw new Error(`${rail.name} refused to create the invoice: ${result.reason}`);
+  }
+
+  await hub.drafts.recordRailCreation(
+    scope,
+    draftId,
+    { name: result.rail, externalId: result.externalId, externalUrl: result.editUrl },
+    { name: session.name },
+  );
+
+  revalidatePath('/dashboard/invoices');
 }
