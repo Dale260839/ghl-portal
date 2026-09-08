@@ -1,5 +1,6 @@
 import { BuildSuiteClient, readBuildSuiteConfig } from './client.ts';
 import { assertScope, type TenantScope } from '../tenancy.ts';
+import { createTtlCache } from '../ttl-cache.ts';
 
 /**
  * Which contractor is this session?
@@ -147,13 +148,26 @@ export function getContractorResolver(): ContractorResolver | null {
   return cached;
 }
 
+/**
+ * Held per tenant for ten minutes. Resolving is two or three sequential reads
+ * and every contractor navigation needs the answer, so it was the single
+ * largest fixed cost of a click — for a mapping that changes when someone edits
+ * a profile, not between page loads. Keyed on the sorted profile ids (D-013).
+ * An unresolved result is held too: relinking a profile shows up within ten
+ * minutes, which is fine for a one-off fix on the BuildSuite side.
+ */
+const identityCache = createTtlCache<IdentityResult>(10 * 60_000);
+
 export async function resolveContractor(scope: TenantScope): Promise<IdentityResult> {
   const resolver = getContractorResolver();
   if (resolver === null) return { resolved: false, reason: 'unavailable' };
-  return resolver.resolve(scope);
+  const safe = assertScope(scope, 'contractor identity');
+  const key = [...safe.authProfileIds].sort().join(',');
+  return identityCache.get(key, () => resolver.resolve(safe));
 }
 
 /** Test seam. */
 export function resetContractorResolver(): void {
   cached = null;
+  identityCache.clear();
 }

@@ -1,5 +1,6 @@
 import { cache } from 'react';
 import type { BuildSuiteProjectRow, BuildSuiteReader } from '../buildsuite/projects.ts';
+import { createTtlCache } from '../ttl-cache.ts';
 import { assertScope, ownedByScope, type TenantScope } from '../tenancy.ts';
 import type { Contact, DailyUpdate, Issue, Milestone, Project, Task } from './types.ts';
 import type { ProjectDataSource } from './source.ts';
@@ -46,14 +47,21 @@ import type { ProjectDataSource } from './source.ts';
  * call, which is enough to defeat Next's automatic fetch memoization. React's
  * `cache()` collapses the calls for the life of the request. Keyed on the reader
  * (a per-process singleton) and the scope object, which `requireTenantScope`
- * now hands out once per request, so the key is stable. Nothing survives the
- * request — the next one reads BuildSuite fresh (D-013).
+ * now hands out once per request, so the key is stable.
+ *
+ * Beneath that, the rows are held per tenant for thirty seconds across
+ * requests. Projects are created and edited in BuildSuite, not here, so the Hub
+ * is already reading a snapshot; thirty seconds of it costs nothing visible and
+ * saves the one wide query every click was paying for. Keyed on the sorted
+ * profile ids, which is exactly the tenant filter the query applies (D-013).
  */
+const rowsTtl = createTtlCache<BuildSuiteProjectRow[]>(30_000);
+
 const rowsForScope: (
   reader: BuildSuiteReader,
   safe: TenantScope,
 ) => Promise<BuildSuiteProjectRow[]> = cache(async (reader, safe) =>
-  reader.listProjectRows(safe),
+  rowsTtl.get([...safe.authProfileIds].sort().join(','), () => reader.listProjectRows(safe)),
 );
 
 export class BuildSuiteDataSource implements ProjectDataSource {
