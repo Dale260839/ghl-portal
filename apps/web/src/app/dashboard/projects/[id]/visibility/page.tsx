@@ -6,6 +6,7 @@ import { updateVisibility } from '@/lib/actions';
 import { requireTenantScope } from '@/lib/scope';
 import { VISIBILITY_LABELS, VISIBILITY_SWITCHES } from '@/lib/data/mutations';
 import { toClientProject } from '@/lib/client-view';
+import { hasFinancials, hasOperationalDetail } from '@/lib/data/types';
 import { Badge, Card, CardHeader, currency } from '@/components/ui';
 import { currentDataSource } from '@/lib/data/current-source';
 
@@ -123,7 +124,14 @@ export default async function VisibilitySettings({
                 {[
                   ['Project name', projection.view.projectName],
                   ['Stage', projection.view.projectStage],
-                  ['Progress', `${projection.view.progressPercentage}%`],
+                  // BuildSuite records no progress and no ledger; a 0% or $0 here
+                  // would be a statement nobody made, so say where the figure lives.
+                  [
+                    'Progress',
+                    hasOperationalDetail(project)
+                      ? `${projection.view.progressPercentage}%`
+                      : 'not tracked yet',
+                  ],
                   ['Current milestone', projection.view.currentMilestone],
                   [
                     'Estimated completion',
@@ -139,13 +147,17 @@ export default async function VisibilitySettings({
                     'Contract amount',
                     projection.view.budget === null
                       ? 'withheld'
-                      : currency(projection.view.budget.contractAmount),
+                      : hasFinancials(project)
+                        ? currency(projection.view.budget.contractAmount)
+                        : 'not held in BuildSuite',
                   ],
                   [
                     'Remaining balance',
                     projection.view.budget === null
                       ? 'withheld'
-                      : currency(projection.view.budget.remainingBalance),
+                      : hasFinancials(project)
+                        ? currency(projection.view.budget.remainingBalance)
+                        : 'not held in BuildSuite',
                   ],
                 ].map(([label, value]) => (
                   <div key={label} className="flex items-center justify-between gap-4 px-5 py-2.5">
