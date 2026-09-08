@@ -162,7 +162,25 @@ export interface InvoiceRecipient {
 
 export type InvoiceRailResult =
   | { readonly created: true; readonly rail: string; readonly externalId: string; readonly editUrl?: string }
-  | { readonly created: false; readonly reason: string };
+  | {
+      readonly created: false;
+      readonly reason: string;
+      /**
+       * The rail could not confirm either way — the invoice MAY exist there.
+       *
+       * This is not pedantry. A 2xx with an unparseable body, or a connection
+       * dropped after the request landed, means the write probably committed
+       * and we have no id for it. Reporting that as a plain failure invites the
+       * contractor to click again, and the second click creates a real second
+       * invoice for the same instalment — the exact thing the unique index on
+       * `external_id` exists to prevent, except the index cannot help when
+       * there is no id to record.
+       *
+       * A caller seeing this must tell a person to go and look, never retry on
+       * their behalf.
+       */
+      readonly uncertain?: boolean;
+    };
 
 export interface InvoiceRail {
   readonly name: string;

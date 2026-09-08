@@ -116,3 +116,55 @@ test('a blank location id is treated as unconfigured, not as a location', () => 
 
   assert.equal(rail.name, 'unconfigured');
 });
+
+// ── Ambiguous failures (found in the 2026-09-08 review) ─────────────────────
+
+import { createGhlInvoiceRail } from './ghl-rail.ts';
+
+function railWith(fetchImpl: typeof fetch) {
+  return createGhlInvoiceRail({ token: 't', locationId: 'loc', fetchImpl });
+}
+
+const RECIPIENT = { ghlContactId: 'c1', name: 'Ellen', email: 'e@example.com' };
+const INVOICE = () => draftFromStored(stored(), PROJECT);
+
+test('a 2xx we cannot parse is UNCERTAIN, not a clean failure', async () => {
+  // GHL accepted it, so the invoice probably exists. Reporting a plain failure
+  // invites a retry, and the retry creates a second real invoice.
+  const rail = railWith((async () =>
+    new Response('<html>gateway</html>', { status: 200 })) as unknown as typeof fetch);
+
+  const result = await rail.createDraft(INVOICE(), RECIPIENT);
+  assert.equal(result.created, false);
+  assert.equal(result.created === false && result.uncertain, true);
+});
+
+test('a 2xx with no invoice id is uncertain', async () => {
+  const rail = railWith((async () =>
+    new Response(JSON.stringify({ ok: true }), { status: 200 })) as unknown as typeof fetch);
+
+  const result = await rail.createDraft(INVOICE(), RECIPIENT);
+  assert.equal(result.created === false && result.uncertain, true);
+});
+
+test('a 5xx is uncertain but a 4xx is a clean refusal', async () => {
+  // A 4xx was rejected and nothing was written — safe to retry. A 5xx may have
+  // committed before failing.
+  const five = railWith((async () => new Response('{}', { status: 502 })) as unknown as typeof fetch);
+  const four = railWith((async () => new Response('{}', { status: 400 })) as unknown as typeof fetch);
+
+  const a = await five.createDraft(INVOICE(), RECIPIENT);
+  const b = await four.createDraft(INVOICE(), RECIPIENT);
+
+  assert.equal(a.created === false && a.uncertain, true, 'a 5xx must not invite a retry');
+  assert.equal(b.created === false && (b.uncertain ?? false), false, 'a 4xx is safe to retry');
+});
+
+test('a dropped connection is uncertain — the request may have landed', async () => {
+  const rail = railWith((async () => {
+    throw new Error('ECONNRESET');
+  }) as unknown as typeof fetch);
+
+  const result = await rail.createDraft(INVOICE(), RECIPIENT);
+  assert.equal(result.created === false && result.uncertain, true);
+});

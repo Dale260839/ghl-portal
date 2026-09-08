@@ -178,26 +178,47 @@ export function createGhlInvoiceRail(config: GhlRailConfig): InvoiceRail {
           body: JSON.stringify(payload),
         });
       } catch (error) {
-        return { created: false, reason: `could not reach GHL: ${error instanceof Error ? error.message : 'unknown'}` };
+        // The request may have landed before the connection failed. We cannot
+        // know, so we must not let a retry happen unsupervised.
+        return {
+          created: false,
+          uncertain: true,
+          reason: `could not reach GHL: ${error instanceof Error ? error.message : 'unknown'}`,
+        };
       }
 
       const text = await response.text();
       if (!response.ok) {
         // Summarised, not echoed wholesale, so a token in a header cannot travel
         // through an error into a log.
-        return { created: false, reason: `GHL refused the draft (HTTP ${response.status})` };
+        // A 4xx was rejected and nothing was written. A 5xx may have committed
+        // before failing, so it is uncertain rather than a clean refusal.
+        return {
+          created: false,
+          uncertain: response.status >= 500,
+          reason: `GHL refused the draft (HTTP ${response.status})`,
+        };
       }
 
       let body: unknown;
       try {
         body = JSON.parse(text);
       } catch {
-        return { created: false, reason: 'GHL returned a non-JSON response to a created draft' };
+        // The status was OK, so GHL almost certainly created it.
+        return {
+          created: false,
+          uncertain: true,
+          reason: 'GHL accepted the draft but returned a response we could not read',
+        };
       }
 
       const id = extractInvoiceId(body);
       if (id === null) {
-        return { created: false, reason: 'GHL created something but returned no invoice id' };
+        return {
+          created: false,
+          uncertain: true,
+          reason: 'GHL accepted the draft but returned no invoice id',
+        };
       }
 
       return {

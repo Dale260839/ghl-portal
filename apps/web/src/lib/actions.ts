@@ -906,6 +906,17 @@ export async function createInvoiceOnRail(formData: FormData) {
   });
 
   if (!result.created) {
+    // An uncertain failure is NOT a failure a contractor should retry. The
+    // invoice may already exist on the rail with no id on our side, and a
+    // second click would make a real second invoice for the same instalment.
+    // Send them to look rather than guessing on their behalf.
+    if (result.uncertain === true) {
+      throw new Error(
+        `${rail.name} could not confirm this either way (${result.reason}). ` +
+          'The invoice MAY have been created. Check GoHighLevel before trying again — ' +
+          'creating it twice would invoice the homeowner twice.',
+      );
+    }
     throw new Error(`${rail.name} refused to create the invoice: ${result.reason}`);
   }
 
