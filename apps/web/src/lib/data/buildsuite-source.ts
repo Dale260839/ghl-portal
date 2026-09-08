@@ -1,6 +1,9 @@
+import { cache } from 'react';
 import type { BuildSuiteProjectRow, BuildSuiteReader } from '../buildsuite/projects.ts';
+import { createTtlCache, type TtlCache } from '../ttl-cache.ts';
 import { assertScope, ownedByScope, type TenantScope } from '../tenancy.ts';
 import type { Contact, DailyUpdate, Issue, Milestone, Project, Task } from './types.ts';
+import { applyVisibility, type VisibilityOverlaySource } from './visibility-overlay.ts';
 import type { ProjectDataSource } from './source.ts';
 
 /**
@@ -36,21 +39,106 @@ import type { ProjectDataSource } from './source.ts';
  * beside real projects, which is the one thing that must not happen.
  * ---------------------------------------------------------------------------
  */
+/**
+ * One project-rows read per tenant per request.
+ *
+ * Every layout and page on a contractor route reads projects, and `getProject`
+ * is itself a list-then-find, so a single navigation was issuing this 200-row
+ * query two or three times. The client also mints a fresh `AbortSignal` per
+ * call, which is enough to defeat Next's automatic fetch memoization. React's
+ * `cache()` collapses the calls for the life of the request. Keyed on the reader
+ * (a per-process singleton) and the scope object, which `requireTenantScope`
+ * now hands out once per request, so the key is stable.
+ *
+ * Beneath that, the rows are held per tenant for thirty seconds across
+ * requests. Projects are created and edited in BuildSuite, not here, so the Hub
+ * is already reading a snapshot; thirty seconds of it costs nothing visible and
+ * saves the one wide query every click was paying for. Keyed on the sorted
+ * profile ids, which is exactly the tenant filter the query applies (D-013).
+ *
+ * The TTL store hangs off the *reader*, not the module. In production there is
+ * one reader, so that is the same thing; in tests every case builds its own
+ * fake reader with its own rows, and a module-level store keyed only by tenant
+ * served the first case's rows to the rest. Scoping the store to the reader
+ * isolates them without a single test knowing the cache exists.
+ */
+const rowsTtlByReader = new WeakMap<BuildSuiteReader, TtlCache<BuildSuiteProjectRow[]>>();
+
+function rowsTtlFor(reader: BuildSuiteReader): TtlCache<BuildSuiteProjectRow[]> {
+  let store = rowsTtlByReader.get(reader);
+  if (store === undefined) {
+    store = createTtlCache<BuildSuiteProjectRow[]>(30_000);
+    rowsTtlByReader.set(reader, store);
+  }
+  return store;
+}
+
+const rowsForScope: (
+  reader: BuildSuiteReader,
+  safe: TenantScope,
+) => Promise<BuildSuiteProjectRow[]> = cache(async (reader, safe) =>
+  rowsTtlFor(reader).get([...safe.authProfileIds].sort().join(','), () =>
+    reader.listProjectRows(safe),
+  ),
+);
+
+/**
+ * The homeowner's reads, memoized the same way.
+ *
+ * A client navigation read the contact's projects in the portal layout and then
+ * again in the page through a different function, and neither was covered by
+ * the cache above — so every client click paid one to three uncached
+ * round-trips, which is the slowness reported on 8 Sep. These share one read
+ * per request and hold it for thirty seconds per reader. The keys are the
+ * read's own keys (the GoHighLevel contact id, or the ticked project ids), which
+ * is exactly what constrains those reads (§9.1); nothing here widens them.
+ */
+const contactRowsFor: (
+  reader: BuildSuiteReader,
+  contactId: string,
+) => Promise<BuildSuiteProjectRow[]> = cache(async (reader, contactId) =>
+  rowsTtlFor(reader).get(`contact:${contactId}`, () =>
+    reader.listProjectRowsForContact(contactId),
+  ),
+);
+
+const idsRowsFor: (
+  reader: BuildSuiteReader,
+  idsKey: string,
+) => Promise<BuildSuiteProjectRow[]> = cache(async (reader, idsKey) =>
+  rowsTtlFor(reader).get(`ids:${idsKey}`, () =>
+    reader.listProjectRowsByIds(idsKey === '' ? [] : idsKey.split(',')),
+  ),
+);
+
 export class BuildSuiteDataSource implements ProjectDataSource {
   readonly kind = 'buildsuite' as const;
 
   private readonly reader: BuildSuiteReader;
   private readonly locationId: string;
+  /**
+   * The Hub's stored visibility switches, laid over every project this source
+   * serves (§6.1). Optional: without it — tests, or a deployment with no Hub
+   * connection — every switch stays off, which is the safe default.
+   */
+  private readonly visibility: VisibilityOverlaySource | undefined;
 
-  constructor(reader: BuildSuiteReader, locationId: string) {
+  constructor(reader: BuildSuiteReader, locationId: string, visibility?: VisibilityOverlaySource) {
     this.reader = reader;
     this.locationId = locationId;
+    this.visibility = visibility;
+  }
+
+  private async withVisibility(projects: Project[]): Promise<Project[]> {
+    if (this.visibility === undefined || projects.length === 0) return projects;
+    const byId = await this.visibility.visibilityFor(projects.map((p) => p.buildsuiteProjectId));
+    return applyVisibility(projects, byId);
   }
 
   async listProjects(scope: TenantScope): Promise<Project[]> {
     const safe = assertScope(scope, 'projects');
-    const rows = await this.reader.listProjectRows(safe);
-    return rows.map((row) => this.toProject(row));
+    const rows = await rowsForScope(this.reader, safe);
+    return this.withVisibility(rows.map((row) => this.toProject(row)));
   }
 
   async getProject(scope: TenantScope, buildsuiteProjectId: string): Promise<Project | null> {
@@ -67,14 +155,17 @@ export class BuildSuiteDataSource implements ProjectDataSource {
    * contractor, and the §9.1 gate is what constrains this read.
    */
   async listProjectsForContact(contactId: string): Promise<Project[]> {
-    const rows = await this.reader.listProjectRowsForContact(contactId);
-    return rows.map((row) => this.toProject(row));
+    const rows = await contactRowsFor(this.reader, contactId);
+    return this.withVisibility(rows.map((row) => this.toProject(row)));
   }
 
   /** The invited-client read: exactly the projects they were assigned. */
   async listProjectsByIds(projectIds: string[]): Promise<Project[]> {
-    const rows = await this.reader.listProjectRowsByIds(projectIds);
-    return rows.map((row) => this.toProject(row));
+    const key = [...new Set(projectIds.map((id) => id.trim()).filter((id) => id !== ''))]
+      .sort()
+      .join(',');
+    const rows = await idsRowsFor(this.reader, key);
+    return this.withVisibility(rows.map((row) => this.toProject(row)));
   }
 
   /**
@@ -83,7 +174,7 @@ export class BuildSuiteDataSource implements ProjectDataSource {
    * than an empty shell when the contact owns nothing we can see.
    */
   async getContact(contactId: string): Promise<Contact | null> {
-    const rows = await this.reader.listProjectRowsForContact(contactId);
+    const rows = await contactRowsFor(this.reader, contactId);
     if (rows.length === 0) return null;
 
     const named = rows.find((r) => r.client_name !== null && r.client_name.trim() !== '');

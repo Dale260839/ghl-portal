@@ -34,3 +34,73 @@ body {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Motion system ────────────────────────────────────────────────────────────
+ * One small vocabulary, used everywhere, so the product moves as one thing:
+ *   .enter            a route's content settles in (fade + 6px rise)
+ *   .menu-enter       a dropdown opens from its anchor
+ *   .bar-grow         a progress bar fills to its value on first paint
+ *   .shimmer          a loading placeholder that reads as "coming", not "gray"
+ *   .card-interactive a clickable card lifts under the pointer
+ *   .press            a control gives under the finger
+ * Every animation is short and eased the same way. Reduced-motion turns them off.
+ */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes bar-grow {
+  from { width: 0; }
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+.enter { animation: fade-up 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.menu-enter { animation: menu-in 0.16s cubic-bezier(0.2, 0.7, 0.2, 1) both; transform-origin: top right; }
+.bar-grow { animation: bar-grow 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(90deg, var(--color-navy-100) 0%, #eef3fa 50%, var(--color-navy-100) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.card-interactive {
+  position: relative;
+  transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+}
+/* The lift's transform starts a stacking context, which would trap a menu
+ * opened inside the card beneath the rows that follow it. Raising the card
+ * while it is hovered or holds focus keeps its popovers above its siblings. */
+.card-interactive:hover,
+.card-interactive:focus-within {
+  z-index: 10;
+}
+.card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 1px 2px rgba(10, 31, 68, 0.06), 0 12px 28px -14px rgba(10, 31, 68, 0.28);
+  border-color: var(--color-navy-200);
+}
+
+.press { transition: transform 0.12s ease, box-shadow 0.2s ease, background-color 0.2s ease, filter 0.2s ease; }
+.press:active { transform: scale(0.98); }
+
+:focus-visible {
+  outline: 2px solid var(--color-amber-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .enter, .menu-enter, .bar-grow, .shimmer { animation: none; }
+  .card-interactive, .press { transition: none; }
+  .card-interactive:hover { transform: none; }
+}

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { signOut } from '@/lib/actions';
+import { PageTransition } from './page-transition';
 import { MobileNav, SidebarNav, type NavItem } from './sidebar-nav';
 
 /**
@@ -55,17 +56,17 @@ export function AppShell({
 
       <div className="flex min-h-dvh">
         {/* Sidebar — hidden on mobile, where the top bar carries navigation. */}
-        <aside className="hidden w-64 shrink-0 flex-col border-r border-navy-100 bg-white lg:flex">
-          <div className="flex h-16 items-center gap-2.5 border-b border-navy-100 px-5">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-navy-900 text-xs font-bold text-white">
-              B
+        <aside className="hidden w-64 shrink-0 flex-col border-r border-navy-800 bg-navy-950 lg:flex">
+          <div className="flex h-16 items-center gap-2.5 border-b border-navy-800 px-5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-accent text-xs font-bold text-navy-950">
+              {brand.charAt(0)}
             </div>
-            <span className="text-sm font-semibold tracking-tight text-navy-900">
+            <span className="text-sm font-semibold tracking-tight text-white">
               {brand}
               <span className="align-super text-[0.6em]">™</span>
             </span>
             {brandSuffix !== undefined && (
-              <span className="border-l border-navy-100 pl-2.5 text-xs text-navy-400">
+              <span className="border-l border-navy-800 pl-2.5 text-xs text-navy-200">
                 {brandSuffix}
               </span>
             )}
@@ -76,7 +77,7 @@ export function AppShell({
 
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Context bar */}
-          <header className="flex h-16 shrink-0 items-center gap-4 border-b border-navy-100 bg-white px-4 sm:px-6">
+          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-4 border-b border-navy-100 bg-white/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/70 sm:px-6">
             <div className="min-w-0 lg:hidden">
               <span className="text-sm font-semibold tracking-tight text-navy-900">{brand}</span>
             </div>
@@ -96,7 +97,7 @@ export function AppShell({
               <form action={signOut}>
                 <button
                   type="submit"
-                  className="rounded-md border border-navy-100 px-2.5 py-1.5 text-xs font-medium text-navy-600 transition hover:bg-navy-50"
+                  className="press rounded-full border border-navy-200 bg-white px-3 py-1.5 text-xs font-medium text-navy-600 shadow-[0_1px_2px_rgba(10,31,68,0.06)] transition-colors hover:border-navy-400/40 hover:bg-navy-50"
                 >
                   Sign out
                 </button>
@@ -107,7 +108,9 @@ export function AppShell({
           <MobileNav nav={nav} />
 
           <main className="flex-1 px-4 py-7 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-5xl">{children}</div>
+            <div className="mx-auto max-w-5xl">
+              <PageTransition>{children}</PageTransition>
+            </div>
           </main>
         </div>
       </div>

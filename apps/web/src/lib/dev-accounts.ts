@@ -1,6 +1,11 @@
 import 'server-only';
 
-import { BuildSuiteClient, readBuildSuiteConfig } from './buildsuite/client.ts';
+import {
+  BuildSuiteClient,
+  readBuildSuiteConfig,
+  type BuildSuiteConfig,
+} from './buildsuite/client.ts';
+import { createTtlCache } from './ttl-cache.ts';
 
 /**
  * Signing in as another contractor. **Development only.**
@@ -71,12 +76,25 @@ interface ContractorRow {
  * **listed anyway, marked unlinked**: those seven are the interesting ones to
  * test with, because they are what a real unlinked contractor sees.
  */
+/**
+ * Three wide reads (200 profiles, 500 contractors, 500 proposals) on every
+ * dashboard render were most of what made a full page load slow. The list
+ * changes when a contractor is onboarded, not between clicks, so it is held for
+ * five minutes per process. It is not tenant data — it lists the accounts, which
+ * is the switch's whole purpose — so a single key is correct here.
+ */
+const accountsCache = createTtlCache<DevAccount[]>(5 * 60_000);
+
 export async function listDevAccounts(): Promise<DevAccount[]> {
   if (!accountSwitchEnabled()) return [];
 
   const config = readBuildSuiteConfig();
   if (!config.configured) return [];
-  const client = new BuildSuiteClient(config.config);
+  return accountsCache.get('all', () => loadDevAccounts(config.config));
+}
+
+async function loadDevAccounts(cfg: BuildSuiteConfig): Promise<DevAccount[]> {
+  const client = new BuildSuiteClient(cfg);
 
   // `contractor` AND `admin`. Filtering to `contractor` alone excluded the one
   // account with signed work on it — ralph@alliance4contractors.com owns AFC and

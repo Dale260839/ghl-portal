@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'BuildSuite™ — Project Platform',
+  title: 'APS Project Hub',
   description: 'One shared project record. Three controlled experiences.',
 };
 

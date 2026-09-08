@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { getSession } from './session.ts';
 import type { Session } from './demo-accounts.ts';
@@ -28,7 +29,16 @@ import type { Project } from './data/types.ts';
  * because every caller is a page and every page's answer to "no scope" is the
  * same: you are not signed in enough to be here.
  */
-export async function requireTenantScope(): Promise<TenantScope> {
+/**
+ * Memoized for the life of one request (React `cache`, the same tool
+ * `currentAccess` uses). A contractor route resolves a scope in the dashboard
+ * layout, the project layout and the page — and `tenantScopeFor` costs a
+ * BuildSuite read each time — so one navigation was doing the same lookup three
+ * times over. Callers also now receive the *same* scope object, which is what
+ * lets the data layer key its own per-request memo on it. Nothing persists past
+ * the request (D-013).
+ */
+export const requireTenantScope: () => Promise<TenantScope> = cache(async () => {
   const session = await getSession();
   if (session === null) redirect('/');
 
@@ -40,7 +50,7 @@ export async function requireTenantScope(): Promise<TenantScope> {
     redirect('/?error=no-profile');
   }
   return scope;
-}
+});
 
 /**
  * Server-action path. Throws instead of redirecting: an action has already
@@ -66,9 +76,23 @@ export async function actionTenantScope(session: Session): Promise<TenantScope> 
  * Takes a whole `Project` rather than an id on purpose — you can only call it if
  * you already hold a project you were allowed to read.
  */
+/**
+ * A BuildSuite row does not record a GoHighLevel location, so a project read
+ * through an instance that was not given one — the homeowner's contact read,
+ * the invited-id read — arrives with a blank `ghlLocationId`. `assertScope`
+ * rightly refuses a blank location, and until 8 Sep that refusal surfaced the
+ * moment a live project's gate opened: the client home threw on its first
+ * child read. The location is only ever used to key a data-source instance;
+ * every BuildSuite read filters on the owner, never on location. So a project
+ * whose location is genuinely unknown scopes its children under this
+ * placeholder, and the owner filter still does all the tenancy work.
+ */
+export const UNKNOWN_LOCATION = 'buildsuite:location-unknown';
+
 export function scopeOfProject(project: Project): TenantScope {
+  const location = project.ghlLocationId.trim();
   return {
-    locationId: project.ghlLocationId,
+    locationId: location === '' ? UNKNOWN_LOCATION : location,
     authProfileIds: [project.ownerAuthProfileId],
   };
 }

@@ -9,7 +9,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-xl border border-navy-100 bg-white shadow-[0_1px_2px_rgba(10,31,68,0.06)] ${className}`}
+      className={`rounded-xl border border-navy-100 bg-white shadow-[0_1px_2px_rgba(10,31,68,0.06)] transition-[box-shadow,border-color] duration-200 ${className}`}
     >
       {children}
     </div>
@@ -100,7 +100,7 @@ export function ProgressBar({ value, label }: { value: number; label?: boolean }
     <div className="flex items-center gap-2.5">
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-navy-100">
         <div
-          className="h-full rounded-full bg-navy-600 transition-[width]"
+          className="bar-grow h-full rounded-full bg-navy-600 transition-[width]"
           style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
         />
       </div>
@@ -155,7 +155,8 @@ export function DataModeBanner({ kind }: { kind: 'fixture' | 'buildsuite' | 'ghl
     return (
       <div className="border-b border-navy-200 bg-navy-50 px-4 py-1.5 text-center text-xs text-navy-600">
         <strong className="font-semibold">Live BuildSuite data</strong> — real projects, clients and
-        dates. Field updates, milestones and budgets need the Hub tables, which are not created yet.
+        dates. Field updates, milestones and budgets arrive once this deployment is connected to
+        the Hub database.
       </div>
     );
   }

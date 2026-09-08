@@ -17,6 +17,8 @@ import { accountForEmail, clearSession, getSession, homeFor, setSession, type Se
 import { planReturn, planViewAs, realIdentity, viewAsEnabled } from './view-as';
 import { assertCan, ownsTask } from './permissions';
 import { actionTenantScope, requireTenantScope } from './scope';
+import { getHubVisibility } from './hub-db/visibility';
+import { isUuid } from './data/visibility-overlay.ts';
 import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db/records';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
@@ -224,7 +226,19 @@ export async function updateVisibility(formData: FormData) {
     VISIBILITY_SWITCHES.map((key) => [key, formData.get(key) === 'on']),
   ) as Record<(typeof VISIBILITY_SWITCHES)[number], boolean>;
 
-  setVisibility(projectId, switches);
+  // A live project's switches persist in the Hub — they are clauses of the §9.1
+  // gate and must outlive the request. A fixture id keeps the in-memory path,
+  // and so does a deployment with no Hub connection, where nothing can be saved.
+  const hub = getHubVisibility();
+  if (hub.available && isUuid(projectId)) {
+    const scope = await actionTenantScope(session);
+    await hub.visibility.setVisibility(scope, projectId, switches, {
+      name: session.name,
+      role: session.role,
+    });
+  } else {
+    setVisibility(projectId, switches);
+  }
 
   revalidatePath(`/dashboard/projects/${projectId}`);
   revalidatePath(`/dashboard/projects/${projectId}/visibility`);
@@ -789,7 +803,9 @@ export async function switchAccount(formData: FormData) {
 
   // Everything reads through the scope, so every surface changes at once.
   revalidatePath('/', 'layout');
-  redirect('/dashboard/engagements');
+  // Land on the Portfolio Dashboard — the home of the contractor experience
+  // since the 8 Sep redesign — rather than one section of it.
+  redirect('/dashboard');
 }
 
 /**
