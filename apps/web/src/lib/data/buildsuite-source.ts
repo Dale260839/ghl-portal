@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import type { BuildSuiteProjectRow, BuildSuiteReader } from '../buildsuite/projects.ts';
 import { assertScope, ownedByScope, type TenantScope } from '../tenancy.ts';
 import type { Contact, DailyUpdate, Issue, Milestone, Project, Task } from './types.ts';
@@ -36,6 +37,25 @@ import type { ProjectDataSource } from './source.ts';
  * beside real projects, which is the one thing that must not happen.
  * ---------------------------------------------------------------------------
  */
+/**
+ * One project-rows read per tenant per request.
+ *
+ * Every layout and page on a contractor route reads projects, and `getProject`
+ * is itself a list-then-find, so a single navigation was issuing this 200-row
+ * query two or three times. The client also mints a fresh `AbortSignal` per
+ * call, which is enough to defeat Next's automatic fetch memoization. React's
+ * `cache()` collapses the calls for the life of the request. Keyed on the reader
+ * (a per-process singleton) and the scope object, which `requireTenantScope`
+ * now hands out once per request, so the key is stable. Nothing survives the
+ * request — the next one reads BuildSuite fresh (D-013).
+ */
+const rowsForScope: (
+  reader: BuildSuiteReader,
+  safe: TenantScope,
+) => Promise<BuildSuiteProjectRow[]> = cache(async (reader, safe) =>
+  reader.listProjectRows(safe),
+);
+
 export class BuildSuiteDataSource implements ProjectDataSource {
   readonly kind = 'buildsuite' as const;
 
@@ -49,7 +69,7 @@ export class BuildSuiteDataSource implements ProjectDataSource {
 
   async listProjects(scope: TenantScope): Promise<Project[]> {
     const safe = assertScope(scope, 'projects');
-    const rows = await this.reader.listProjectRows(safe);
+    const rows = await rowsForScope(this.reader, safe);
     return rows.map((row) => this.toProject(row));
   }
 
