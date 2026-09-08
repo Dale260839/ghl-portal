@@ -1,6 +1,6 @@
 import { cache } from 'react';
 import type { BuildSuiteProjectRow, BuildSuiteReader } from '../buildsuite/projects.ts';
-import { createTtlCache } from '../ttl-cache.ts';
+import { createTtlCache, type TtlCache } from '../ttl-cache.ts';
 import { assertScope, ownedByScope, type TenantScope } from '../tenancy.ts';
 import type { Contact, DailyUpdate, Issue, Milestone, Project, Task } from './types.ts';
 import type { ProjectDataSource } from './source.ts';
@@ -54,14 +54,31 @@ import type { ProjectDataSource } from './source.ts';
  * is already reading a snapshot; thirty seconds of it costs nothing visible and
  * saves the one wide query every click was paying for. Keyed on the sorted
  * profile ids, which is exactly the tenant filter the query applies (D-013).
+ *
+ * The TTL store hangs off the *reader*, not the module. In production there is
+ * one reader, so that is the same thing; in tests every case builds its own
+ * fake reader with its own rows, and a module-level store keyed only by tenant
+ * served the first case's rows to the rest. Scoping the store to the reader
+ * isolates them without a single test knowing the cache exists.
  */
-const rowsTtl = createTtlCache<BuildSuiteProjectRow[]>(30_000);
+const rowsTtlByReader = new WeakMap<BuildSuiteReader, TtlCache<BuildSuiteProjectRow[]>>();
+
+function rowsTtlFor(reader: BuildSuiteReader): TtlCache<BuildSuiteProjectRow[]> {
+  let store = rowsTtlByReader.get(reader);
+  if (store === undefined) {
+    store = createTtlCache<BuildSuiteProjectRow[]>(30_000);
+    rowsTtlByReader.set(reader, store);
+  }
+  return store;
+}
 
 const rowsForScope: (
   reader: BuildSuiteReader,
   safe: TenantScope,
 ) => Promise<BuildSuiteProjectRow[]> = cache(async (reader, safe) =>
-  rowsTtl.get([...safe.authProfileIds].sort().join(','), () => reader.listProjectRows(safe)),
+  rowsTtlFor(reader).get([...safe.authProfileIds].sort().join(','), () =>
+    reader.listProjectRows(safe),
+  ),
 );
 
 export class BuildSuiteDataSource implements ProjectDataSource {
