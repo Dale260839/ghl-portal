@@ -54,6 +54,31 @@ function MoneyCell({
   );
 }
 
+/**
+ * The signed contract, as its own column.
+ *
+ * It hangs off the proposal, not the project — `proposals.signed_pdf_url`,
+ * written by the GoHighLevel webhook from the document's `pdfLink` (Sing,
+ * 2026-09-09). It stays null on a test fire, because their test payload carries
+ * no document fields, so an empty cell here is normal rather than a fault.
+ *
+ * `rel="noreferrer"` because the URL is public and unauthenticated: without it
+ * the storage host is told which of our pages it was opened from.
+ */
+function SignedPdfCell({ url }: { url: string | null }) {
+  if (url === null) return <span className="text-xs text-navy-300">—</span>;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="text-xs font-medium text-navy-600 underline underline-offset-2 hover:text-navy-900"
+    >
+      View
+    </a>
+  );
+}
+
 export default async function ProjectsList() {
   const scope = await requireTenantScope();
   const everyProject = await (await currentDataSource(scope)).listProjects(scope);
@@ -132,6 +157,7 @@ export default async function ProjectsList() {
               <th className="px-5 py-2.5 font-medium">Stage</th>
               <th className="w-44 px-5 py-2.5 font-medium">Progress</th>
               <th className="px-5 py-2.5 text-right font-medium">Contract</th>
+              <th className="px-5 py-2.5 font-medium">Signed PDF</th>
               <th className="px-5 py-2.5 font-medium">Health</th>
               <th className="px-5 py-2.5 font-medium">Portal</th>
             </tr>
@@ -165,6 +191,12 @@ export default async function ProjectsList() {
                 </td>
                 <td className="tabular px-5 py-3.5 text-right text-sm text-navy-900">
                   <MoneyCell project={p} proposal={proposal} />
+                  <div className="mt-1">
+                    <SignedPdfCell url={proposal?.signedPdfUrl ?? null} />
+                  </div>
+                </td>
+                <td className="px-5 py-3.5 text-sm">
+                  <SignedPdfCell url={proposal?.signedPdfUrl ?? null} />
                 </td>
                 <td className="px-5 py-3.5">
                   {hasOperationalDetail(p) ? (
