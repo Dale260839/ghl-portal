@@ -8,6 +8,7 @@ import { draftsForProposal, percentTotal, scheduleFor } from '@/lib/payment-sche
 import { saveInvoiceDraft, createInvoiceOnRail } from '@/lib/actions';
 import { Badge, Card, CardHeader, currency, shortDate } from '@/components/ui';
 import { NotLinkedToContractor } from '@/components/not-linked';
+import Link from 'next/link';
 
 /**
  * Invoice review — where an invoice actually gets its numbers.
@@ -44,7 +45,13 @@ export default async function Invoices() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-navy-900">Invoices</h1>
         <p className="mt-1 text-sm text-navy-400">
-          Draft invoices from each signed contract&apos;s payment schedule.
+          Draft invoices from each signed contract&apos;s payment schedule.{' '}
+          <Link
+            href="/dashboard/invoices/sample"
+            className="font-medium text-navy-700 underline underline-offset-2"
+          >
+            See how the review step works on sample data
+          </Link>
         </p>
       </div>
       {children}
