@@ -4,6 +4,7 @@ import { BuildSuiteDataSource } from './buildsuite-source.ts';
 import { assertScope, ownedByScope, type TenantScope } from '../tenancy.ts';
 import { CONTACTS, DAILY_UPDATES, ISSUES, MILESTONES, PROJECTS, TASKS } from './fixtures.ts';
 import { GhlDataSource } from './ghl-source.ts';
+import { hubVisibilitySource } from '../hub-db/visibility.ts';
 import type { Contact, DailyUpdate, Issue, Milestone, Project, Task } from './types.ts';
 
 /**
@@ -171,7 +172,11 @@ export function getDataSource(scope?: TenantScope): ProjectDataSource {
       const key = `buildsuite:${locationId}`;
       const existing = sources.get(key);
       if (existing !== undefined) return existing;
-      const created: ProjectDataSource = new BuildSuiteDataSource(reader, locationId);
+      const created: ProjectDataSource = new BuildSuiteDataSource(
+        reader,
+        locationId,
+        hubVisibilitySource(),
+      );
       sources.set(key, created);
       return created;
     }
@@ -179,7 +184,7 @@ export function getDataSource(scope?: TenantScope): ProjectDataSource {
     // rather than a tenant. It still needs real projects.
     const existing = sources.get(BUILDSUITE_KEY);
     if (existing !== undefined) return existing;
-    const created: ProjectDataSource = new BuildSuiteDataSource(reader, '');
+    const created: ProjectDataSource = new BuildSuiteDataSource(reader, '', hubVisibilitySource());
     sources.set(BUILDSUITE_KEY, created);
     return created;
   }

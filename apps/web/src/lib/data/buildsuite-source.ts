@@ -3,6 +3,7 @@ import type { BuildSuiteProjectRow, BuildSuiteReader } from '../buildsuite/proje
 import { createTtlCache, type TtlCache } from '../ttl-cache.ts';
 import { assertScope, ownedByScope, type TenantScope } from '../tenancy.ts';
 import type { Contact, DailyUpdate, Issue, Milestone, Project, Task } from './types.ts';
+import { applyVisibility, type VisibilityOverlaySource } from './visibility-overlay.ts';
 import type { ProjectDataSource } from './source.ts';
 
 /**
@@ -115,16 +116,29 @@ export class BuildSuiteDataSource implements ProjectDataSource {
 
   private readonly reader: BuildSuiteReader;
   private readonly locationId: string;
+  /**
+   * The Hub's stored visibility switches, laid over every project this source
+   * serves (§6.1). Optional: without it — tests, or a deployment with no Hub
+   * connection — every switch stays off, which is the safe default.
+   */
+  private readonly visibility: VisibilityOverlaySource | undefined;
 
-  constructor(reader: BuildSuiteReader, locationId: string) {
+  constructor(reader: BuildSuiteReader, locationId: string, visibility?: VisibilityOverlaySource) {
     this.reader = reader;
     this.locationId = locationId;
+    this.visibility = visibility;
+  }
+
+  private async withVisibility(projects: Project[]): Promise<Project[]> {
+    if (this.visibility === undefined || projects.length === 0) return projects;
+    const byId = await this.visibility.visibilityFor(projects.map((p) => p.buildsuiteProjectId));
+    return applyVisibility(projects, byId);
   }
 
   async listProjects(scope: TenantScope): Promise<Project[]> {
     const safe = assertScope(scope, 'projects');
     const rows = await rowsForScope(this.reader, safe);
-    return rows.map((row) => this.toProject(row));
+    return this.withVisibility(rows.map((row) => this.toProject(row)));
   }
 
   async getProject(scope: TenantScope, buildsuiteProjectId: string): Promise<Project | null> {
@@ -142,7 +156,7 @@ export class BuildSuiteDataSource implements ProjectDataSource {
    */
   async listProjectsForContact(contactId: string): Promise<Project[]> {
     const rows = await contactRowsFor(this.reader, contactId);
-    return rows.map((row) => this.toProject(row));
+    return this.withVisibility(rows.map((row) => this.toProject(row)));
   }
 
   /** The invited-client read: exactly the projects they were assigned. */
@@ -151,7 +165,7 @@ export class BuildSuiteDataSource implements ProjectDataSource {
       .sort()
       .join(',');
     const rows = await idsRowsFor(this.reader, key);
-    return rows.map((row) => this.toProject(row));
+    return this.withVisibility(rows.map((row) => this.toProject(row)));
   }
 
   /**
