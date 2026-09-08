@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, HealthBadge, ProgressBar, currency, shortDate } from '@/components/ui';
-import { hasOperationalDetail, moneyLabel, stageLabel } from '@/lib/data/types';
+import { hasOperationalDetail, moneyDisplay, stageLabel, type Project } from '@/lib/data/types';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getProposalsReader } from '@/lib/buildsuite/proposals';
 import { getHubRecords } from '@/lib/hub-db/records';
@@ -24,6 +24,35 @@ const SIGNING: Record<SignedStatus, { label: string; tone: 'good' | 'warn' | 'ne
   // with no proposal has nobody's price on it, so that is what it says.
   unknown: { label: 'No proposal', tone: 'neutral' },
 };
+
+/**
+ * One money cell, with the basis said out loud.
+ *
+ * A signed figure is the contract, and reads plainly. An unsigned one is a
+ * quote — real, but nobody agreed to it — and a band is not a figure at all.
+ * Rendering all three identically is what made a $10,000–$50,000 band sit in a
+ * column headed Contract on a job whose signed proposal said $24,500.
+ */
+function MoneyCell({
+  project,
+  proposal,
+}: {
+  project: Project;
+  proposal: { amount: number | null; signed: boolean } | null;
+}) {
+  const money = moneyDisplay(project, currency, proposal);
+  return (
+    <>
+      <span className={money.basis === 'none' ? 'text-navy-400' : undefined}>{money.label}</span>
+      {money.basis === 'quoted' && (
+        <span className="mt-0.5 block text-xs font-normal text-navy-400">quoted, not signed</span>
+      )}
+      {money.basis === 'range' && (
+        <span className="mt-0.5 block text-xs font-normal text-navy-400">estimated range</span>
+      )}
+    </>
+  );
+}
 
 export default async function ProjectsList() {
   const scope = await requireTenantScope();
@@ -108,7 +137,7 @@ export default async function ProjectsList() {
             </tr>
           </thead>
           <tbody className="divide-y divide-navy-100">
-            {rows.map(({ project: p, status }) => (
+            {rows.map(({ project: p, status, proposal }) => (
               <tr key={p.buildsuiteProjectId} className="transition hover:bg-navy-50/60">
                 <td className="px-5 py-3.5">
                   <div className="flex flex-wrap items-center gap-2">
@@ -135,7 +164,7 @@ export default async function ProjectsList() {
                   )}
                 </td>
                 <td className="tabular px-5 py-3.5 text-right text-sm text-navy-900">
-                  {moneyLabel(p, currency)}
+                  <MoneyCell project={p} proposal={proposal} />
                 </td>
                 <td className="px-5 py-3.5">
                   {hasOperationalDetail(p) ? (
@@ -158,7 +187,7 @@ export default async function ProjectsList() {
 
         {/* Mobile cards */}
         <ul className="divide-y divide-navy-100 md:hidden">
-          {rows.map(({ project: p, status }) => (
+          {rows.map(({ project: p, status, proposal }) => (
             <li key={p.buildsuiteProjectId}>
               <Link
                 href={`/dashboard/projects/${p.buildsuiteProjectId}`}
@@ -186,7 +215,7 @@ export default async function ProjectsList() {
                   </div>
                 )}
                 <div className="tabular mt-2 text-xs text-navy-400">
-                  {moneyLabel(p, currency)}
+                  <MoneyCell project={p} proposal={proposal} />
                   {p.estimatedCompletionDate !== '' &&
                     ` · due ${shortDate(p.estimatedCompletionDate)}`}
                 </div>

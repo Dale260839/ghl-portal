@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { RowMenu } from '@/components/row-menu';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
+import { getProposalsReader } from '@/lib/buildsuite/proposals';
 import { CHANGE_ORDERS } from '@/lib/data/portal-fixtures';
 import {
   hasFinancials,
@@ -74,11 +75,32 @@ export default async function PortfolioDashboard() {
     db.listDailyUpdates(scope),
   ]);
 
+  // Proposals, for the money. BuildSuite's project rows carry
+  // `currentProjectTotal: 0`, so this tile used to read "—" even when there was
+  // real signed work — under-reporting rather than lying, but still wrong.
+  const proposalsReader = getProposalsReader();
+  const proposals = proposalsReader.available
+    ? await proposalsReader.listForProjects(scope, projects.map((p) => p.buildsuiteProjectId))
+    : [];
+
   const active = projects.filter(isActiveProject);
   const activeIds = new Set(active.map((p) => p.buildsuiteProjectId));
 
-  const money = active.some(hasFinancials);
-  const contractValue = active.reduce((sum, p) => sum + p.currentProjectTotal, 0);
+  // "Revenue Under Contract" means SIGNED. An unsigned quote in this total
+  // would tell a contractor they have won work they have not won.
+  const signedByProject = new Map<string, number>();
+  for (const proposal of proposals) {
+    if (!proposal.signed || proposal.amount === null) continue;
+    if (!activeIds.has(proposal.projectId)) continue;
+    // One figure per project — a job with several signed proposals is one
+    // contract, not several, and summing them would double-count it.
+    signedByProject.set(proposal.projectId, proposal.amount);
+  }
+  const signedValue = [...signedByProject.values()].reduce((sum, n) => sum + n, 0);
+
+  const ownTotals = active.reduce((sum, p) => sum + p.currentProjectTotal, 0);
+  const contractValue = signedValue > 0 ? signedValue : ownTotals;
+  const money = signedValue > 0 || active.some(hasFinancials);
   const outstanding = active.reduce((sum, p) => sum + p.remainingBalance, 0);
 
   const atRisk = active.filter(
@@ -144,7 +166,11 @@ export default async function PortfolioDashboard() {
     { label: 'Active Projects', value: String(active.length), sub: 'currently in progress', icon: IconProjects, bad: false },
     { label: 'At Risk / Delayed', value: String(atRisk.length), sub: atRisk.length > 0 ? 'Requires attention' : 'all on track', icon: IconIssues, bad: atRisk.length > 0 },
     { label: 'Open Change Orders', value: String(openChangeOrders.length), sub: coPending > 0 ? `${currency(coPending)} pending` : 'none pending', icon: IconChangeOrders, bad: false },
-    { label: 'Revenue Under Contract', value: money ? currency(contractValue) : '—', sub: money ? `${currency(outstanding)} remaining` : 'not held in BuildSuite', icon: IconBudget, bad: false },
+    { label: 'Revenue Under Contract', value: money ? currency(contractValue) : '—', sub: signedValue > 0
+        ? `${signedByProject.size} signed ${signedByProject.size === 1 ? 'contract' : 'contracts'}`
+        : money
+          ? `${currency(outstanding)} remaining`
+          : 'not held in BuildSuite', icon: IconBudget, bad: false },
   ];
 
   return (

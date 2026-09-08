@@ -7,6 +7,7 @@ import { currentDataSource } from '@/lib/data/current-source';
 import { Badge, Card, CardHeader, InternalNote, InternalOnly, ProgressBar, currency, shortDate } from '@/components/ui';
 import { ProjectEditor } from '@/components/project-editor';
 import { getHubRecords } from '@/lib/hub-db/records';
+import { getProposalsReader, pickCurrentProposal } from '@/lib/buildsuite/proposals';
 
 export default async function ProjectOverview({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -14,6 +15,14 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
   const db = await currentDataSource(scope);
   const project = await db.getProject(scope, id);
   if (project === null) notFound();
+
+  // The proposal, for the money. BuildSuite's project row carries a band; the
+  // proposal carries the figure the invoices are actually built from, and this
+  // screen was showing the band as though it were the contract.
+  const proposalsReader = getProposalsReader();
+  const proposal = proposalsReader.available
+    ? pickCurrentProposal(await proposalsReader.listForProjects(scope, [id]))
+    : null;
 
   const [milestones, updates, tasks] = await Promise.all([
     db.listMilestones(scope, id),
@@ -151,14 +160,37 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
             <CardHeader title="Financials" />
             {!hasFinancials(project) ? (
               <div className="px-5 py-5 text-sm text-navy-400">
-                BuildSuite records a budget band, not a contract ledger.
-                <div className="mt-2 text-base font-medium text-navy-900">
-                  {project.budgetBand ?? 'No budget recorded'}
-                </div>
+                {proposal !== null && proposal.amount !== null ? (
+                  <>
+                    {proposal.signed
+                      ? 'From the signed proposal — the figure the invoices are built from.'
+                      : 'From a proposal nobody has signed yet. Real, but not agreed.'}
+                    <div className="mt-2 text-base font-medium text-navy-900">
+                      {currency(proposal.amount)}
+                      {!proposal.signed && (
+                        <span className="ml-2 text-xs font-normal text-navy-400">
+                          quoted, not signed
+                        </span>
+                      )}
+                    </div>
+                    {project.budgetBand !== null && (
+                      <p className="mt-2 text-xs">
+                        BuildSuite's band for this job was {project.budgetBand}.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    BuildSuite records a budget band, not a contract ledger.
+                    <div className="mt-2 text-base font-medium text-navy-900">
+                      {project.budgetBand ?? 'No budget recorded'}
+                    </div>
+                  </>
+                )}
                 <p className="mt-3 text-xs leading-relaxed">
-                  Contract value, change orders, invoicing and margin arrive with the Hub tables.
-                  Nothing here is estimated from the band — an invented figure on this screen is
-                  worse than an absent one.
+                  Change orders, invoicing and margin arrive with the Hub tables. Nothing here is
+                  estimated from the band — an invented figure on this screen is worse than an
+                  absent one.
                 </p>
               </div>
             ) : (

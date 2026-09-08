@@ -439,10 +439,63 @@ export function hasFinancials(project: Project): boolean {
   return hasOperationalDetail(project);
 }
 
-/** What to show in a money column: a real amount, BuildSuite's band, or nothing. */
+/**
+ * What a money column shows, and how confident it is entitled to sound.
+ *
+ * ---------------------------------------------------------------------------
+ * THREE STATES, AND THEY MUST NOT LOOK ALIKE
+ *
+ *   contract   a figure from a SIGNED proposal — the number the invoices are
+ *              built from, so it is the one the column is really for
+ *   quoted     a figure from a proposal nobody has signed. Real, but not
+ *              agreed. Shown, because a blank helps no one, and LABELLED,
+ *              because an unsigned quote sitting unmarked in a column headed
+ *              "Contract" reads as a price somebody committed to
+ *   range      BuildSuite's budget band. Not a figure at all
+ *
+ * `moneyLabel` used to take only a project, so it could not see the proposal —
+ * and every live BuildSuite row has `currentProjectTotal: 0`, so it fell
+ * through to the band every time. A project whose signed proposal said $24,500
+ * displayed "$10,000 - $50,000".
+ * ---------------------------------------------------------------------------
+ */
+export type MoneyBasis = 'contract' | 'quoted' | 'range' | 'none';
+
+export interface MoneyDisplay {
+  label: string;
+  basis: MoneyBasis;
+}
+
+export function moneyDisplay(
+  project: Project,
+  format: (n: number) => string,
+  proposal?: { amount: number | null; signed: boolean } | null,
+): MoneyDisplay {
+  // A stated proposal figure outranks everything. It is what the invoice is
+  // composed from, so the money column and the invoice must not disagree.
+  if (proposal != null && proposal.amount !== null) {
+    return {
+      label: format(proposal.amount),
+      basis: proposal.signed ? 'contract' : 'quoted',
+    };
+  }
+
+  // Fixture and GHL records carry their own total. Live BuildSuite rows do not.
+  if (hasFinancials(project)) {
+    return { label: format(project.currentProjectTotal), basis: 'contract' };
+  }
+
+  const band = project.budgetBand ?? '';
+  if (band.trim() !== '') return { label: band, basis: 'range' };
+  return { label: '—', basis: 'none' };
+}
+
+/**
+ * @deprecated Use `moneyDisplay`, which can see the proposal and says what the
+ * figure is. Kept for callers that have no proposal to hand.
+ */
 export function moneyLabel(project: Project, format: (n: number) => string): string {
-  if (hasFinancials(project)) return format(project.currentProjectTotal);
-  return project.budgetBand ?? '—';
+  return moneyDisplay(project, format).label;
 }
 
 /**
