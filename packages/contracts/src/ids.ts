@@ -12,12 +12,12 @@
  * format and does not today.** The two candidates it does have are:
  *
  *   `projects.id`           a UUID
- *   `projects.project_code` `BSA-NNN`
+ *   `projects.project_code` `BSA-044` or `BSA-ASJF-006` — see below
  *
  * Chris confirmed the key is `project_code`. Measured against the live database
  * on 2026-09-03, and his recollection of the coverage was exact:
  *
- *   102 projects · 49 carry a project_code · uniformly BSA-NNN · 0 duplicates
+ *   103 projects · 50 carry a project_code · 0 duplicates (2026-09-08)
  *
  * So `BSA-NNN` is the production format. `BSP-YYYY-NNNNNN` is kept as a
  * recognised LEGACY format rather than deleted: it is what every fixture and
@@ -34,8 +34,19 @@
  * ---------------------------------------------------------------------------
  */
 
-/** `BSA-NNN` — e.g. `BSA-002`. The production key (C-3, 2026-09-01). */
-export const PROJECT_CODE_PATTERN = /^BSA-(\d{3})$/;
+/**
+ * WIDENED 2026-09-08. This was `/^BSA-(\d{3})$/` — three digits, inferred from
+ * the 50 codes that exist today. Sing confirmed on 2026-09-03, against deployed
+ * BuildSuite code, that there are TWO shapes and allocation is a Postgres
+ * function at insert time:
+ *
+ *   BSA-044        feed and client projects, one Alliance-wide series
+ *   BSA-ASJF-006   contractor-created, four letters the contractor picks
+ *
+ * The old pattern rejected every contractor-created code, and would have
+ * rejected the feed series itself at BSA-1000.
+ */
+export const PROJECT_CODE_PATTERN = /^BSA-(?:\d+|[A-Z]{2,6}-\d+)$/;
 
 /**
  * `BSP-YYYY-NNNNNN` — e.g. `BSP-2026-000184` (§5 as originally written).
@@ -87,18 +98,35 @@ export function isProjectIdOrFixture(value: unknown): value is BuildSuiteProject
 export function assertProjectId(value: unknown, context = 'value'): BuildSuiteProjectId {
   if (!isProjectIdOrFixture(value)) {
     throw new TypeError(
-      `${context} is not a BuildSuite project key (expected BSA-NNN, got ${JSON.stringify(value)})`,
+      `${context} is not a BuildSuite project key (expected BSA-044 or BSA-ASJF-006, got ${JSON.stringify(value)})`,
     );
   }
   return value;
 }
 
-/** Mint a production key. `BSA-002` from `2`. */
-export function formatProjectCode(sequence: number): BuildSuiteProjectId {
-  if (!Number.isInteger(sequence) || sequence < 0 || sequence > 999) {
-    throw new RangeError(`sequence must be an integer in 0..999, got ${sequence}`);
+/**
+ * Format a key for display or a fixture. **Not an allocator.**
+ *
+ * BuildSuite mints these in a Postgres function at insert time (Sing,
+ * 2026-09-03). Nothing here should ever be the source of a real code — the
+ * sequence would collide the moment two writers ran.
+ *
+ * `formatProjectCode(2)` → `BSA-002`; `formatProjectCode(6, 'ASJF')` →
+ * `BSA-ASJF-006`. Zero-padded to three for readability, but longer numbers are
+ * accepted by the pattern, so the series is not capped at 999.
+ */
+export function formatProjectCode(sequence: number, contractor?: string): BuildSuiteProjectId {
+  if (!Number.isInteger(sequence) || sequence < 0) {
+    throw new RangeError(`sequence must be a non-negative integer, got ${sequence}`);
   }
-  return `BSA-${String(sequence).padStart(3, '0')}` as BuildSuiteProjectId;
+  const digits = String(sequence).padStart(3, '0');
+  if (contractor === undefined) return `BSA-${digits}` as BuildSuiteProjectId;
+
+  const prefix = contractor.trim().toUpperCase();
+  if (!/^[A-Z]{2,6}$/.test(prefix)) {
+    throw new RangeError(`contractor prefix must be 2-6 letters, got ${JSON.stringify(contractor)}`);
+  }
+  return `BSA-${prefix}-${digits}` as BuildSuiteProjectId;
 }
 
 /**

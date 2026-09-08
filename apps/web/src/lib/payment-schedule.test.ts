@@ -7,6 +7,9 @@ import {
   parsePaymentSchedule,
   paymentScheduleDrafts,
   percentTotal,
+  parseSectionsSchedule,
+  scheduleFor,
+  draftsForProposal,
 } from './payment-schedule.ts';
 
 /**
@@ -194,4 +197,103 @@ test('percentTotal reports the sum without enforcing it', () => {
   assert.equal(percentTotal(parsePaymentSchedule(PERCENT_ONLY)), 100);
   assert.equal(percentTotal(parsePaymentSchedule(TITLED_WITH_MONEY)), 110);
   assert.equal(percentTotal([]), null);
+});
+
+// ── The structured source, merged in from the parallel branch (2026-09-08) ───
+
+
+/** The two JSON shapes that occur in live `sections`, verbatim. */
+const RICH = {
+  payment_schedule: [
+    {
+      milestone: 'Contract Signing & Scheduling',
+      percentage: 30,
+      amount: 1773.75,
+      trigger: 'Upon signing and scheduling',
+      due_description: 'Due on signature',
+    },
+    { milestone: 'Rough-In Completion', percentage: 40, amount: 2365, due_description: 'At rough-in' },
+  ],
+};
+
+const BASIC = {
+  payment_schedule: [
+    { milestone: 'Deposit', percentage: 50, amount: 1000 },
+    { milestone: 'Completion', percentage: 50, amount: 1000 },
+  ],
+};
+
+test('the structured source normalizes into the same ScheduleLine shape', () => {
+  const lines = parseSectionsSchedule(RICH);
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0]!.order, 1);
+  assert.equal(lines[0]!.title, 'Contract Signing & Scheduling');
+  assert.equal(lines[0]!.percent, 30);
+  assert.equal(lines[0]!.amount, 1773.75);
+});
+
+test('trigger is preferred over due_description as the invoice terms', () => {
+  assert.equal(parseSectionsSchedule(RICH)[0]!.description, 'Upon signing and scheduling');
+  assert.equal(parseSectionsSchedule(RICH)[1]!.description, 'At rough-in');
+  assert.equal(parseSectionsSchedule(BASIC)[0]!.description, '');
+});
+
+test('schedule order is preserved — line 1 is the first invoice', () => {
+  // Chris's rule: the first line is the deposit and each later line triggers
+  // its own invoice, so the array order is load-bearing.
+  assert.deepEqual(parseSectionsSchedule(RICH).map((l) => l.order), [1, 2]);
+  assert.equal(parseSectionsSchedule(RICH)[0]!.title, 'Contract Signing & Scheduling');
+});
+
+test('sections arriving as a JSON string are parsed too', () => {
+  assert.equal(parseSectionsSchedule(JSON.stringify(BASIC)).length, 2);
+});
+
+test('null, undefined, malformed JSON and non-objects are all tolerated', () => {
+  for (const input of [null, undefined, 42, 'not json', '[]', {}, { payment_schedule: 'nope' }]) {
+    assert.deepEqual(parseSectionsSchedule(input), [], `threw or returned on ${String(input)}`);
+  }
+});
+
+test('currency-formatted string amounts are read as numbers', () => {
+  const lines = parseSectionsSchedule({
+    payment_schedule: [{ milestone: 'Deposit', percentage: '30', amount: '$1,773.75' }],
+  });
+  assert.equal(lines[0]!.amount, 1773.75);
+  assert.equal(lines[0]!.percent, 30);
+});
+
+test('a line with neither figure nor name is dropped, not rendered blank', () => {
+  const lines = parseSectionsSchedule({ payment_schedule: [{ note: 'TBD' }] });
+  assert.deepEqual(lines, []);
+});
+
+// ── Which source wins ────────────────────────────────────────────────────────
+
+test('structured wins over markdown when a proposal has both', () => {
+  // The JSON STATES its figures; the markdown version infers them from prose.
+  // Preferring the inferred one would be choosing the weaker evidence.
+  const lines = scheduleFor({ sections: BASIC, content: PERCENT_ONLY });
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0]!.title, 'Deposit', 'it fell back to the markdown parser');
+  assert.equal(lines[0]!.amount, 1000);
+});
+
+test('markdown is used when there is no structured schedule', () => {
+  const lines = scheduleFor({ sections: null, content: PERCENT_ONLY });
+  assert.equal(lines.length, 3);
+  assert.equal(lines[0]!.percent, 50);
+});
+
+test('a proposal with neither source yields nothing, not an error', () => {
+  assert.deepEqual(scheduleFor({ sections: null, content: null }), []);
+  assert.deepEqual(scheduleFor({}), []);
+});
+
+test('drafts from the structured source state their amounts rather than compute', () => {
+  const drafts = draftsForProposal({ sections: BASIC }, null);
+  assert.equal(drafts.length, 2);
+  assert.equal(drafts[0]!.amount, 1000);
+  assert.equal(drafts[0]!.amountSource, 'stated');
+  assert.equal(drafts[0]!.needsContractorInput, false, 'a complete JSON line needs nothing');
 });

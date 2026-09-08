@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, createVerify, timingSafeEqual } from 'node:crypto';
 
 /**
  * Verifying that a webhook really came from GoHighLevel.
@@ -54,7 +54,8 @@ export type WebhookRefusal =
   | 'stale'
   | 'replayed'
   | 'bad_signature'
-  | 'malformed_body';
+  | 'malformed_body'
+  | 'bad_public_key';
 
 export type WebhookResult =
   | { ok: true; event: WebhookEvent }
@@ -81,6 +82,7 @@ export const REFUSAL_REASON: Record<WebhookRefusal, string> = {
   replayed: 'this event id has already been processed',
   bad_signature: 'signature does not match the body',
   malformed_body: 'body is not a JSON object',
+  bad_public_key: 'GHL_WEBHOOK_PUBLIC_KEY is not a usable public key',
 };
 
 function signaturesMatch(a: Buffer, b: Buffer): boolean {
@@ -103,6 +105,162 @@ export function expectedSignature(secret: string, timestamp: string, rawBody: st
 export interface SeenStore {
   has(id: string): boolean;
   add(id: string): void;
+}
+
+// ── GoHighLevel's own signature ─────────────────────────────────────────────
+/**
+ * The second accepted scheme, and the reason it exists.
+ *
+ * Everything above verifies an HMAC over a shared secret. GHL's *native*
+ * webhooks do not work that way: they are signed with GHL's own private key and
+ * verified with a public key they publish. So a shared secret can only ever be
+ * checked if something in the middle re-signs with it — an n8n relay or a small
+ * Marketplace app.
+ *
+ * Accepting GHL's signature directly removes that middle. That matters beyond
+ * tidiness: the relay would have been n8n, whose account is currently failing
+ * 100% of runs on its execution quota, so routing pilot webhooks through it
+ * means inheriting a broken dependency on day one, and a webhook that silently
+ * stops firing is exactly the failure nobody notices.
+ *
+ * Both schemes are kept. HMAC stays correct for anything we control end to end;
+ * this is for GHL talking to us directly. The scheme is a config choice, not a
+ * code change (`readWebhookScheme`).
+ */
+
+/** RSA-SHA256 over the raw body. GHL sends the signature base64-encoded. */
+export interface GhlWebhookConfig {
+  /** GHL's published webhook public key, PEM encoded. */
+  publicKey: string;
+  toleranceSeconds?: number;
+}
+
+/**
+ * Verify GHL's signature over the body.
+ *
+ * Returns `null` when the key itself cannot be used, which is a different
+ * problem from a bad signature: one is our misconfiguration and the other is a
+ * hostile or corrupted request, and they need different alerts.
+ */
+export function verifyRsaSignature(
+  rawBody: string,
+  signatureBase64: string,
+  publicKeyPem: string,
+): boolean | null {
+  try {
+    const verifier = createVerify('RSA-SHA256');
+    verifier.update(rawBody, 'utf8');
+    verifier.end();
+    return verifier.verify(publicKeyPem, signatureBase64.trim(), 'base64');
+  } catch (error) {
+    // An unusable key throws here; so does a signature that is not valid
+    // base64. Distinguish by testing the key on its own.
+    try {
+      const probe = createVerify('RSA-SHA256');
+      probe.update('probe', 'utf8');
+      probe.end();
+      probe.verify(publicKeyPem, Buffer.alloc(0));
+      return false; // key is fine, so the signature was the problem
+    } catch {
+      void error;
+      return null; // the key is the problem
+    }
+  }
+}
+
+/**
+ * Read a freshness timestamp out of an already-verified body.
+ *
+ * GHL's native delivery does not carry the `timestamp` header the HMAC path
+ * relies on, so the replay window has to come from the payload instead. This is
+ * only ever called AFTER the signature passes, so the value is attacker-visible
+ * but not attacker-chosen: changing it would invalidate the signature.
+ *
+ * Returns `null` when there is nothing to check, and the caller treats that as
+ * "no freshness evidence" rather than as fresh.
+ */
+export function bodyTimestampSeconds(body: Record<string, unknown>): number | null {
+  for (const key of ['timestamp', 'webhookTimestamp', 'createdAt', 'dateAdded']) {
+    const value = body[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      // Milliseconds if it is far too large to be seconds.
+      return value > 1e11 ? Math.floor(value / 1000) : Math.floor(value);
+    }
+    if (typeof value === 'string' && value.trim() !== '') {
+      const asNumber = Number(value);
+      if (Number.isFinite(asNumber) && value.trim() === String(asNumber)) {
+        return asNumber > 1e11 ? Math.floor(asNumber / 1000) : Math.floor(asNumber);
+      }
+      const parsed = Date.parse(value);
+      if (Number.isFinite(parsed)) return Math.floor(parsed / 1000);
+    }
+  }
+  return null;
+}
+
+/**
+ * Verify a webhook GoHighLevel signed itself.
+ *
+ * Same order of operations as the HMAC path and for the same reason: the
+ * signature is checked over the raw bytes BEFORE anything is parsed, so our
+ * JSON parser never runs over an unauthenticated payload. Freshness moves after
+ * the parse only because the timestamp lives inside the signed body.
+ */
+export function verifyGhlWebhook(
+  request: WebhookRequest,
+  config: GhlWebhookConfig,
+  now: Date,
+  seen?: SeenStore,
+): WebhookResult {
+  if (config.publicKey.trim() === '') {
+    return { ok: false, reason: 'not_configured' };
+  }
+  if (request.signature === null || request.signature.trim() === '') {
+    return { ok: false, reason: 'missing_signature' };
+  }
+
+  const verified = verifyRsaSignature(request.rawBody, request.signature, config.publicKey);
+  if (verified === null) return { ok: false, reason: 'bad_public_key' };
+  if (!verified) return { ok: false, reason: 'bad_signature' };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(request.rawBody);
+  } catch {
+    return { ok: false, reason: 'malformed_body' };
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, reason: 'malformed_body' };
+  }
+
+  const body = parsed as Record<string, unknown>;
+  const id = firstString(body, ['webhookId', 'id', 'eventId']);
+  const type = firstString(body, ['type', 'event', 'eventType']);
+  if (id === null || type === null) {
+    return { ok: false, reason: 'malformed_body' };
+  }
+
+  // Freshness, when the payload gives us something to judge it by. A body with
+  // no timestamp is not refused: GHL decides that payload's shape, not us, and
+  // refusing would drop real events. The replay id below is then the only
+  // protection, which is why the durable store matters more on this path.
+  const sentAt = bodyTimestampSeconds(body);
+  if (sentAt !== null) {
+    const tolerance = config.toleranceSeconds ?? DEFAULT_TOLERANCE_SECONDS;
+    if (Math.abs(Math.floor(now.getTime() / 1000) - sentAt) > tolerance) {
+      return { ok: false, reason: 'stale' };
+    }
+  }
+
+  if (seen !== undefined) {
+    if (seen.has(id)) return { ok: false, reason: 'replayed' };
+    seen.add(id);
+  }
+
+  return {
+    ok: true,
+    event: { id, type, locationId: firstString(body, ['locationId', 'location_id']), raw: body },
+  };
 }
 
 export function verifyWebhook(
@@ -222,4 +380,44 @@ export function readWebhookConfig(
   const secret = env.GHL_WEBHOOK_SECRET ?? '';
   if (secret.trim() === '') return { configured: false };
   return { configured: true, config: { secret } };
+}
+
+/**
+ * Which scheme this deployment accepts.
+ *
+ * GHL's public key wins when both are set. If GHL is signing deliveries itself
+ * there is no relay to produce an HMAC, so the shared secret would be dead
+ * config, and silently preferring it would refuse every real delivery.
+ *
+ * Neither configured is still a refusal, unchanged: an unverifiable webhook is
+ * not a webhook, and a development bypass is one environment variable away from
+ * being a production bypass.
+ */
+export type WebhookScheme =
+  | { scheme: 'ghl'; config: GhlWebhookConfig }
+  | { scheme: 'hmac'; config: WebhookConfig }
+  | { scheme: 'none' };
+
+export function readWebhookScheme(env: NodeJS.ProcessEnv = process.env): WebhookScheme {
+  // Env vars cannot hold newlines cleanly, so an escaped PEM is normalised here
+  // rather than making every deployment remember to do it.
+  const publicKey = (env.GHL_WEBHOOK_PUBLIC_KEY ?? '').replace(/\\n/g, '\n').trim();
+  if (publicKey !== '') return { scheme: 'ghl', config: { publicKey } };
+
+  const secret = (env.GHL_WEBHOOK_SECRET ?? '').trim();
+  if (secret !== '') return { scheme: 'hmac', config: { secret } };
+
+  return { scheme: 'none' };
+}
+
+/** Verify by whichever scheme is configured. One call site, either mode. */
+export function verifyInboundWebhook(
+  request: WebhookRequest,
+  scheme: WebhookScheme,
+  now: Date,
+  seen?: SeenStore,
+): WebhookResult {
+  if (scheme.scheme === 'none') return { ok: false, reason: 'not_configured' };
+  if (scheme.scheme === 'ghl') return verifyGhlWebhook(request, scheme.config, now, seen);
+  return verifyWebhook(request, scheme.config, now, seen);
 }

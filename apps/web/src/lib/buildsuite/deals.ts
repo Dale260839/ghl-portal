@@ -129,8 +129,28 @@ export interface Deal {
  * the handoff fires after. Either is enough to say the work was won, and
  * spreading that judgement across screens is how two of them start disagreeing.
  *
- * NEEDS CONFIRMATION from Sing that `signature_signed_at` is the intended
- * column. It is empty on all 182 rows, so no sample can prove it.
+ * CONFIRMED WRONG BY SING, 2026-09-03 — and left in place deliberately until
+ * one question is answered. His answer, from the deployed BuildSuite code:
+ *
+ *   - The award signal is **`projects.status = 'awarded'`**, together with
+ *     `proposals.status = 'ACCEPTED'`. It is on the project after all, not on
+ *     the deal, which is the opposite of what the comment above assumed.
+ *   - `signature_signed_at` is NOT won on its own. On a feed project it means
+ *     *contracted*, a step that happens AFTER the award. On a contractor-created
+ *     project the signature will trigger the award, once that path is built.
+ *   - `client_selected`, `contractor_accepted` and `project_outcome` are dead
+ *     columns. Nothing writes them. Do not read them.
+ *
+ * So this function currently answers "contracted?", not "won?", and every
+ * caller that treats it as "won" is reading the wrong thing.
+ *
+ * WHY IT IS NOT FIXED IN THIS COMMIT: switching the signal to
+ * `projects.status === 'awarded'` needs one thing we do not have, and guessing
+ * it would be worse than the current bug. `listActiveProjects` filters
+ * `status: 'eq.active'`. If `'awarded'` REPLACES `'active'` in that enum, then
+ * the moment a project is awarded the Hub stops listing it, and the pilot
+ * breaks in the least obvious way possible. Asked of Sing 2026-09-03; the
+ * signal moves as soon as he confirms whether the two states are exclusive.
  */
 export function isSignedWork(deal: Pick<Deal, 'signed' | 'sentToCrm'>): boolean {
   return deal.signed || deal.sentToCrm;

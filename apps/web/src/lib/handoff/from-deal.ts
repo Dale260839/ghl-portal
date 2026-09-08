@@ -37,6 +37,50 @@ import type { Deal } from '../buildsuite/deals.ts';
  * ---------------------------------------------------------------------------
  */
 
+/**
+ * The two real shapes of `projects.project_code`, confirmed by Sing 2026-09-03
+ * against deployed BuildSuite code. Allocation is a Postgres function at insert
+ * time, never application code, so these are the only shapes that exist.
+ *
+ *   BSA-044        feed and client projects, one Alliance-wide series
+ *   BSA-ASJF-006   contractor-created, four letters the contractor picks at
+ *                  first login, then their own running count
+ *
+ * A code is permanent. Winning a feed project does not rename it; the winner's
+ * own number goes to `award_code` instead. **Identity keys on `project_code`,
+ * always** â€” that is Sing's instruction and the reason this file no longer
+ * falls back to `projects.id`.
+ */
+export const PROJECT_CODE_PATTERNS = {
+  feed: /^BSA-\d+$/,
+  contractor: /^BSA-[A-Z]{2,6}-\d+$/,
+} as const;
+
+export type ProjectCodeState = 'pending' | 'feed' | 'contractor' | 'malformed';
+
+/**
+ * Classify a `project_code`, distinguishing **pending from missing**.
+ *
+ * Roughly half of BuildSuite's project codes are null and that is NOT a data
+ * fault: a contractor-created project stays null until that contractor picks
+ * their four letters, and every one of their existing projects is numbered
+ * oldest-first the moment they do. So a null is a state that resolves itself,
+ * and the Hub renders it as pending rather than erroring on it.
+ */
+export function classifyProjectCode(code: string | null): ProjectCodeState {
+  if (code === null || code.trim() === '') return 'pending';
+  const value = code.trim();
+  if (PROJECT_CODE_PATTERNS.feed.test(value)) return 'feed';
+  if (PROJECT_CODE_PATTERNS.contractor.test(value)) return 'contractor';
+  return 'malformed';
+}
+
+/** True once a code is a real, usable identity. */
+export function hasUsableProjectCode(code: string | null): boolean {
+  const state = classifyProjectCode(code);
+  return state === 'feed' || state === 'contractor';
+}
+
 /** What the Hub can see, and what BuildSuite must add. */
 export interface HandoffGap {
   field: keyof HandoffPayload | 'client.email' | 'client.phone';

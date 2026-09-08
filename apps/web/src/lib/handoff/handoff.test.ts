@@ -121,7 +121,14 @@ test('a UUID is never substituted for a missing code', () => {
 });
 
 test('a malformed code is refused rather than passed through', () => {
-  const attempt = buildHandoffFromDeal(SIGNED, project({ projectCode: 'BSA-2' }));
+  // `BSA-2` used to be the example here, when the pattern was assumed to be
+  // three digits. Sing confirmed on 2026-09-03, against deployed BuildSuite
+  // code, that the feed series is `BSA-<n>` with no width — so `BSA-2` is a
+  // VALID code and asserting otherwise would have rejected real projects.
+  //
+  // `BSA-ABC` matches neither shape: the contractor form needs a number after
+  // the letters (`BSA-ASJF-006`).
+  const attempt = buildHandoffFromDeal(SIGNED, project({ projectCode: 'BSA-ABC' }));
   assert.equal(attempt.ok, false);
 
   const key = attempt.gaps.find((g) => g.field === 'buildsuite_project_id');

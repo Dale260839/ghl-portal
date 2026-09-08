@@ -1,7 +1,18 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { getBuildSuiteReader } from './buildsuite/projects.ts';
+import type { ClientLoginReader } from './auth/client-lookup.ts';
+import { clientIpFrom } from './auth/rate-limit.ts';
+import { resolveSessionSecret } from './auth/session-crypto.ts';
+import {
+  requestSignInLink,
+  signInLimiter,
+  signInRequestMessage,
+} from './auth/sign-in-request.ts';
+import { resolveEmailSender } from './email/sender.ts';
 import { accountForEmail, clearSession, getSession, homeFor, setSession, type Session } from './session';
 import { planReturn, planViewAs, realIdentity, viewAsEnabled } from './view-as';
 import { assertCan, ownsTask } from './permissions';
@@ -778,4 +789,47 @@ export async function switchAccount(formData: FormData) {
   // Everything reads through the scope, so every surface changes at once.
   revalidatePath('/', 'layout');
   redirect('/dashboard/engagements');
+}
+
+/**
+ * Client sign-in request (§9.2, C-2) — the front door.
+ *
+ * Email plus project code LOCATE a record and mint nothing; the emailed
+ * single-use token is the credential. So this action deliberately returns the
+ * same message whether or not anything matched. See `sign-in-request.ts` for
+ * the full reasoning; the guarantee lives there, and this is only the wiring.
+ */
+export async function requestSignIn(
+  _prev: { message?: string } | undefined,
+  formData: FormData,
+): Promise<{ message: string }> {
+  const email = String(formData.get('email') ?? '');
+  const projectCode = String(formData.get('projectCode') ?? '');
+
+  const requestHeaders = await headers();
+  const forwardedHost = requestHeaders.get('x-forwarded-host') ?? requestHeaders.get('host') ?? '';
+  const forwardedProto = requestHeaders.get('x-forwarded-proto') ?? 'https';
+  const origin =
+    process.env.PUBLIC_ORIGIN?.trim() ||
+    (forwardedHost === '' ? '' : `${forwardedProto}://${forwardedHost}`);
+
+  // The live reader. Unavailable BuildSuite credentials must not become an
+  // unauthenticated sign-in, so a missing reader locates nothing rather than
+  // falling back to fixtures.
+  const buildsuite = getBuildSuiteReader();
+  const reader: ClientLoginReader = buildsuite.available
+    ? buildsuite
+    : { findProjectForClientLogin: async () => null };
+
+  const outcome = await requestSignInLink(email, projectCode, {
+    sender: resolveEmailSender(),
+    secret: resolveSessionSecret(),
+    origin,
+    limiter: signInLimiter,
+    reader,
+    ip: clientIpFrom(requestHeaders),
+  });
+
+  return { message: signInRequestMessage(outcome) };
+
 }

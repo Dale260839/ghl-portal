@@ -140,6 +140,15 @@ test('every mutating server action checks permission before it writes', () => {
   assert.ok(actions);
 
   // Session control owns no project data, so it is exempt by name.
+  //
+  // `requestSignIn` joins them and is the clearest case of the category: it runs
+  // BEFORE anyone is signed in, so there is no session for `assertCan` to check,
+  // and it writes nothing at all — it locates a record and sends an email. The
+  // invariant here is "no write without a permission check", and an action that
+  // performs no write cannot breach it. Its own protections are different in
+  // kind and live with it: an attempt limit, and a response that is identical
+  // whether or not an account matched (`sign-in-request.ts`).
+
   const sessionOnly = new Set([
     'signIn',
     'signOut',
@@ -154,6 +163,7 @@ test('every mutating server action checks permission before it writes', () => {
     // project data, so the matrix has nothing to say about it. Its own gates
     // are pinned below rather than taken on trust.
     'switchAccount',
+    'requestSignIn',
   ]);
 
   const bodies = [...actions.text.matchAll(/^export async function (\w+)[\s\S]*?\n\}/gm)];

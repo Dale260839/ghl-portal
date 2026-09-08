@@ -316,7 +316,9 @@ class SupabaseReader implements BuildSuiteReader {
     // plausible address never reaches the query — which fails closed and
     // removes the question of PostgREST filter injection rather than answering
     // it. A `,` or `)` in a filter value would otherwise change its meaning.
-    if (!/^BSA-\d{3}$/.test(code)) return null;
+    // Both shapes Sing confirmed. Three-digits-only rejected every
+    // contractor-created project, whose homeowner could then never sign in.
+    if (!/^BSA-(?:\d+|[A-Z]{2,6}-\d+)$/.test(code)) return null;
     if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(email)) return null;
 
     const rows = await this.client.select<{ id: string; ghl_contact_id: string | null }>({

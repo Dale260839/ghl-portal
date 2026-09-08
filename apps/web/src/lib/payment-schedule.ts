@@ -11,9 +11,15 @@
  *   33 of 46 proposals have a PAYMENT SCHEDULE section at all
  *    4 of those 33 contain a dollar amount anywhere in it
  *
- * There is no payment-schedule table. The schedule lives inside
- * `proposals.content`, which is **markdown prose**, not structured data —
- * `proposals.sections` is null on every row in the database.
+ * There is no payment-schedule table. The schedule lives in TWO places, and
+ * neither covers the database alone (measured 2026-09-08, all 46 proposals):
+ *
+ *   `proposals.content`                  39 of 46, markdown, all 4 signed
+ *   `proposals.sections.payment_schedule` 8 of 46, structured JSON
+ *
+ * An earlier version of this comment said `sections` was "null on every row".
+ * That was six rows sampled and generalised. Both readers now live here and
+ * `scheduleFor` picks between them — see the bottom of the file.
  *
  * Three line shapes occur, and all three are handled here:
  *
@@ -282,4 +288,131 @@ export function percentTotal(lines: ScheduleLine[]): number | null {
   const stated = lines.filter((l) => l.percent !== null);
   if (stated.length === 0) return null;
   return Math.round(stated.reduce((sum, l) => sum + l.percent!, 0) * 100) / 100;
+}
+
+// ── The other place a schedule lives (merged 2026-09-08) ─────────────────────
+
+/**
+ * `proposals.sections.payment_schedule` — the STRUCTURED source.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THERE ARE TWO SOURCES
+ *
+ * This module was written against `proposals.content`, markdown prose, and the
+ * 2026-09-03 EOD stated that `sections` was "null on every row". That was
+ * wrong: it was six rows sampled and generalised to forty-six. Measured across
+ * all of them on 2026-09-08:
+ *
+ *   sections.payment_schedule   8 of 46   structured JSON
+ *   content                    39 of 46   markdown, includes all 4 signed
+ *
+ * So neither source covers the database on its own. A parallel branch had
+ * built a second parser for the JSON; two parsers reading two columns is how
+ * they drift, so this folds that one in and there is only this.
+ *
+ * **Structured wins where it exists.** A JSON row states its milestone,
+ * percentage and amount as fields; the markdown equivalent is inferred from
+ * prose. Preferring the parsed-from-prose version when a stated one is
+ * available would be choosing the weaker evidence.
+ * ---------------------------------------------------------------------------
+ */
+
+function toNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value.replace(/[$,]/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function toText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * One JSON line, normalized into the SAME `ScheduleLine` the markdown parser
+ * produces — so everything downstream is source-agnostic.
+ *
+ * A line with no milestone name yields a null title rather than being dropped:
+ * the amount and percent are still real money terms, and this module's rule is
+ * that a missing field is reported for the contractor to supply, never guessed
+ * and never silently discarded.
+ */
+function lineFromJson(raw: unknown, order: number): ScheduleLine | null {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const row = raw as Record<string, unknown>;
+
+  const milestone = toText(row.milestone) || toText(row.name) || toText(row.title);
+  const percent = toNumber(row.percentage) ?? toNumber(row.percent);
+  const amount = toNumber(row.amount);
+
+  // Nothing to invoice against at all — not a line, same rule as the markdown
+  // parser applies to a bullet carrying neither figure.
+  if (percent === null && amount === null && milestone === '') return null;
+
+  // `trigger` is the fuller sentence; `due_description` the short one.
+  const terms = toText(row.trigger) || toText(row.due_description) || toText(row.description);
+
+  return {
+    order,
+    title: milestone === '' ? null : milestone,
+    percent: percent !== null && percent > 0 && percent <= 100 ? percent : null,
+    amount,
+    description: terms,
+    raw: JSON.stringify(row),
+  };
+}
+
+/**
+ * Parse `sections` into schedule lines.
+ *
+ * Tolerant on purpose: `sections` arrives as an object, occasionally as a JSON
+ * string, and often not at all. A proposal with no schedule is a normal state,
+ * not an error.
+ */
+export function parseSectionsSchedule(sections: unknown): ScheduleLine[] {
+  let value = sections;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return [];
+
+  const raw = (value as { payment_schedule?: unknown }).payment_schedule;
+  if (!Array.isArray(raw)) return [];
+
+  const lines: ScheduleLine[] = [];
+  for (const entry of raw) {
+    const line = lineFromJson(entry, lines.length + 1);
+    if (line !== null) lines.push(line);
+  }
+  return lines;
+}
+
+/**
+ * The schedule for a proposal, from whichever source has one.
+ *
+ * **This is what callers should use.** `parsePaymentSchedule` and
+ * `parseSectionsSchedule` are the two readers; this is the decision about which
+ * to believe, and it lives in exactly one place so no screen has to make it.
+ */
+export function scheduleFor(proposal: {
+  sections?: unknown;
+  content?: string | null;
+}): ScheduleLine[] {
+  const structured = parseSectionsSchedule(proposal.sections);
+  if (structured.length > 0) return structured;
+  return parsePaymentSchedule(proposal.content);
+}
+
+/** Every line as a draft, from whichever source — the invoice timeline. */
+export function draftsForProposal(
+  proposal: { sections?: unknown; content?: string | null },
+  contractTotal: number | null,
+): InvoiceDraft[] {
+  return scheduleFor(proposal).map((line) => draftInvoiceFor(line, contractTotal));
 }
