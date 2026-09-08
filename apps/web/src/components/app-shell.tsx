@@ -55,17 +55,17 @@ export function AppShell({
 
       <div className="flex min-h-dvh">
         {/* Sidebar — hidden on mobile, where the top bar carries navigation. */}
-        <aside className="hidden w-64 shrink-0 flex-col border-r border-navy-100 bg-white lg:flex">
-          <div className="flex h-16 items-center gap-2.5 border-b border-navy-100 px-5">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-navy-900 text-xs font-bold text-white">
+        <aside className="hidden w-64 shrink-0 flex-col border-r border-navy-800 bg-navy-950 lg:flex">
+          <div className="flex h-16 items-center gap-2.5 border-b border-navy-800 px-5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-accent text-xs font-bold text-navy-950">
               {brand.charAt(0)}
             </div>
-            <span className="text-sm font-semibold tracking-tight text-navy-900">
+            <span className="text-sm font-semibold tracking-tight text-white">
               {brand}
               <span className="align-super text-[0.6em]">™</span>
             </span>
             {brandSuffix !== undefined && (
-              <span className="border-l border-navy-100 pl-2.5 text-xs text-navy-400">
+              <span className="border-l border-navy-800 pl-2.5 text-xs text-navy-200">
                 {brandSuffix}
               </span>
             )}

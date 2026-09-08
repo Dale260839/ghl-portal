@@ -53,16 +53,16 @@ export function SidebarNav({ nav }: { nav: NavItem[] }) {
             aria-current={active ? 'page' : undefined}
             className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
               active
-                ? 'bg-navy-900 text-white'
-                : 'text-navy-600 hover:bg-navy-50 hover:text-navy-900'
+                ? 'bg-white/10 text-white'
+                : 'text-navy-200 hover:bg-white/5 hover:text-white'
             }`}
           >
-            <span className={active ? 'text-white' : 'text-navy-400'}>{item.icon}</span>
+            <span className={active ? 'text-amber-accent' : 'text-navy-400'}>{item.icon}</span>
             <span className="flex-1 truncate">{item.label}</span>
             {item.badge !== undefined && item.badge > 0 && (
               <span
                 className={`tabular inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold ${
-                  active ? 'bg-white/20 text-white' : 'bg-navy-900 text-white'
+                  active ? 'bg-white/20 text-white' : 'bg-amber-accent text-white'
                 }`}
               >
                 {item.badge}

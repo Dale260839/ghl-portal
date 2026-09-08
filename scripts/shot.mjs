@@ -39,11 +39,9 @@ const client = sign(
 
 const PID = 'BSP-2026-000184';
 const shots = [
-  ['staff', `/dashboard/projects/${PID}/change-orders`, 'ws-change-orders'],
-  ['staff', `/dashboard/projects/${PID}/schedule`, 'ws-schedule'],
-  ['staff', `/dashboard/projects/${PID}/messages`, 'ws-messages'],
-  ['staff', `/dashboard/projects/${PID}/payments`, 'ws-payments'],
-  ['client', `/portal`, 'portal-bell'],
+  ['staff', `/dashboard`, 'dash'],
+  ['staff', `/dashboard/projects/${PID}`, 'ws-overview'],
+  ['client', `/portal`, 'portal2'],
 ];
 
 const cookieFor = (which) => ({
