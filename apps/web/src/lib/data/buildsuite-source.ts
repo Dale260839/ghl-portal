@@ -81,6 +81,35 @@ const rowsForScope: (
   ),
 );
 
+/**
+ * The homeowner's reads, memoized the same way.
+ *
+ * A client navigation read the contact's projects in the portal layout and then
+ * again in the page through a different function, and neither was covered by
+ * the cache above — so every client click paid one to three uncached
+ * round-trips, which is the slowness reported on 8 Sep. These share one read
+ * per request and hold it for thirty seconds per reader. The keys are the
+ * read's own keys (the GoHighLevel contact id, or the ticked project ids), which
+ * is exactly what constrains those reads (§9.1); nothing here widens them.
+ */
+const contactRowsFor: (
+  reader: BuildSuiteReader,
+  contactId: string,
+) => Promise<BuildSuiteProjectRow[]> = cache(async (reader, contactId) =>
+  rowsTtlFor(reader).get(`contact:${contactId}`, () =>
+    reader.listProjectRowsForContact(contactId),
+  ),
+);
+
+const idsRowsFor: (
+  reader: BuildSuiteReader,
+  idsKey: string,
+) => Promise<BuildSuiteProjectRow[]> = cache(async (reader, idsKey) =>
+  rowsTtlFor(reader).get(`ids:${idsKey}`, () =>
+    reader.listProjectRowsByIds(idsKey === '' ? [] : idsKey.split(',')),
+  ),
+);
+
 export class BuildSuiteDataSource implements ProjectDataSource {
   readonly kind = 'buildsuite' as const;
 
@@ -112,13 +141,16 @@ export class BuildSuiteDataSource implements ProjectDataSource {
    * contractor, and the §9.1 gate is what constrains this read.
    */
   async listProjectsForContact(contactId: string): Promise<Project[]> {
-    const rows = await this.reader.listProjectRowsForContact(contactId);
+    const rows = await contactRowsFor(this.reader, contactId);
     return rows.map((row) => this.toProject(row));
   }
 
   /** The invited-client read: exactly the projects they were assigned. */
   async listProjectsByIds(projectIds: string[]): Promise<Project[]> {
-    const rows = await this.reader.listProjectRowsByIds(projectIds);
+    const key = [...new Set(projectIds.map((id) => id.trim()).filter((id) => id !== ''))]
+      .sort()
+      .join(',');
+    const rows = await idsRowsFor(this.reader, key);
     return rows.map((row) => this.toProject(row));
   }
 
@@ -128,7 +160,7 @@ export class BuildSuiteDataSource implements ProjectDataSource {
    * than an empty shell when the contact owns nothing we can see.
    */
   async getContact(contactId: string): Promise<Contact | null> {
-    const rows = await this.reader.listProjectRowsForContact(contactId);
+    const rows = await contactRowsFor(this.reader, contactId);
     if (rows.length === 0) return null;
 
     const named = rows.find((r) => r.client_name !== null && r.client_name.trim() !== '');
