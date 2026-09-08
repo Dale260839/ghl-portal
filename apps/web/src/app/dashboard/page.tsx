@@ -9,17 +9,56 @@ import {
   isActiveProject,
   stageLabel,
 } from '@/lib/data/types';
-import { Card, HealthBadge, ProgressBar, currency, shortDate } from '@/components/ui';
+import { Card, currency, shortDate } from '@/components/ui';
+import {
+  IconBudget,
+  IconChangeOrders,
+  IconIssues,
+  IconProjects,
+  IconUpdates,
+} from '@/components/nav-icons';
 
 /**
- * Portfolio Dashboard — the contractor's landing screen, built to match the
- * Project Hub design: four company-metric tiles, an active-projects overview
- * with health at a glance, what needs attention, and a recent-activity feed.
- *
- * Every figure is real — read from the projects and updates the tenant owns.
- * Where BuildSuite records a band rather than an amount, the money tiles say so
- * instead of totalling zeros.
+ * Portfolio Dashboard — the contractor's landing screen, built to the Project
+ * Hub design: four company-metric tiles with a corner glyph, an active-projects
+ * overview as health cards with progress, a titled Needs-Attention column, and
+ * a recent-activity feed. Every figure is real; the money tiles say so when
+ * BuildSuite holds a band rather than an amount.
  */
+
+type Tone = 'good' | 'warn' | 'bad';
+
+function StatusPill({ label, tone }: { label: string; tone: Tone }) {
+  const cls =
+    tone === 'good'
+      ? 'bg-emerald-50 text-emerald-700'
+      : tone === 'bad'
+        ? 'bg-red-50 text-red-700'
+        : 'bg-amber-soft text-amber-700';
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+const CalendarGlyph = (
+  <svg
+    width="13"
+    height="13"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M8 2v4M16 2v4M3 10h18" />
+    <rect width="18" height="18" x="3" y="4" rx="2" />
+  </svg>
+);
+
 export default async function PortfolioDashboard() {
   const scope = await requireTenantScope();
   const db = await currentDataSource(scope);
@@ -44,8 +83,6 @@ export default async function PortfolioDashboard() {
   const clientWaiting = active.filter((p) => p.clientActionRequired);
   const pendingReview = updates.filter((u) => u.managerApprovalStatus === 'Pending');
 
-  // Open change orders across active projects — drafts and ones out with the
-  // client. Pending dollars is the net still awaiting a client decision.
   const openChangeOrders = CHANGE_ORDERS.filter(
     (c) => activeIds.has(c.projectId) && (c.status === 'Draft' || c.status === 'Awaiting Client'),
   );
@@ -53,46 +90,51 @@ export default async function PortfolioDashboard() {
     .filter((c) => c.status === 'Awaiting Client')
     .reduce((sum, c) => sum + c.addedCost + c.tax - c.creditAmount, 0);
 
-  // A recent-activity feed from the real updates, newest first.
-  const recent = [...updates]
-    .sort((a, b) => b.updateDate.localeCompare(a.updateDate))
-    .slice(0, 5)
-    .map((u) => ({
+  // Status a homeowner action outranks a health flag — "Waiting on Client" is
+  // what the mockup shows on the row that needs their sign-off.
+  const statusFor = (p: (typeof active)[number]): { label: string; tone: Tone } => {
+    if (p.clientActionRequired) return { label: 'Waiting on Client', tone: 'warn' };
+    if (p.healthStatus === 'Delayed' || p.healthStatus === 'At Risk')
+      return { label: p.healthStatus, tone: 'bad' };
+    if (p.healthStatus === 'Attention Needed') return { label: p.healthStatus, tone: 'warn' };
+    if (p.healthStatus === 'On Hold') return { label: p.healthStatus, tone: 'warn' };
+    return { label: 'On Track', tone: 'good' };
+  };
+
+  // Recent activity: real updates and approved change orders, newest first.
+  const nameOf = (pid: string) =>
+    projects.find((p) => p.buildsuiteProjectId === pid)?.projectName ?? pid;
+  const activity = [
+    ...updates.map((u) => ({
       id: u.id,
+      date: u.updateDate,
+      icon: IconUpdates,
       who: u.submittedBy,
       what:
         u.managerApprovalStatus === 'Approved & Published'
           ? 'published a client update'
           : 'logged a field update',
-      where: projects.find((p) => p.buildsuiteProjectId === u.projectId)?.projectName ?? u.projectId,
-      when: u.updateDate,
-    }));
+      where: nameOf(u.projectId),
+    })),
+    ...CHANGE_ORDERS.filter((c) => activeIds.has(c.projectId) && c.status === 'Approved').map(
+      (c) => ({
+        id: c.id,
+        date: c.approvalDate !== '' ? c.approvalDate : c.createdDate,
+        icon: IconChangeOrders,
+        who: c.approvedBy !== '' ? c.approvedBy : c.requestedBy,
+        what: `approved ${c.changeOrderNumber}`,
+        where: nameOf(c.projectId),
+      }),
+    ),
+  ]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 5);
 
   const tiles = [
-    {
-      label: 'Active Projects',
-      value: String(active.length),
-      sub: 'currently in progress',
-      tone: 'plain' as const,
-    },
-    {
-      label: 'At Risk / Delayed',
-      value: String(atRisk.length),
-      sub: atRisk.length > 0 ? 'Requires attention' : 'all on track',
-      tone: atRisk.length > 0 ? ('bad' as const) : ('plain' as const),
-    },
-    {
-      label: 'Open Change Orders',
-      value: String(openChangeOrders.length),
-      sub: coPending > 0 ? `${currency(coPending)} pending` : 'none pending',
-      tone: 'plain' as const,
-    },
-    {
-      label: 'Revenue Under Contract',
-      value: money ? currency(contractValue) : '—',
-      sub: money ? `${currency(outstanding)} remaining` : 'not held in BuildSuite',
-      tone: 'plain' as const,
-    },
+    { label: 'Active Projects', value: String(active.length), sub: 'currently in progress', icon: IconProjects, bad: false },
+    { label: 'At Risk / Delayed', value: String(atRisk.length), sub: atRisk.length > 0 ? 'Requires attention' : 'all on track', icon: IconIssues, bad: atRisk.length > 0 },
+    { label: 'Open Change Orders', value: String(openChangeOrders.length), sub: coPending > 0 ? `${currency(coPending)} pending` : 'none pending', icon: IconChangeOrders, bad: false },
+    { label: 'Revenue Under Contract', value: money ? currency(contractValue) : '—', sub: money ? `${currency(outstanding)} remaining` : 'not held in BuildSuite', icon: IconBudget, bad: false },
   ];
 
   return (
@@ -122,16 +164,15 @@ export default async function PortfolioDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {tiles.map((t) => (
           <Card key={t.label} className="px-5 py-4">
-            <div className="text-xs font-medium tracking-wide text-navy-400 uppercase">
-              {t.label}
+            <div className="flex items-start justify-between">
+              <div className="text-sm font-medium text-navy-600">{t.label}</div>
+              <span className={t.bad ? 'text-red-500' : 'text-navy-300'}>{t.icon}</span>
             </div>
-            <div className="tabular mt-1.5 text-3xl font-semibold text-navy-900">{t.value}</div>
-            <div
-              className={`mt-0.5 text-xs ${t.tone === 'bad' ? 'font-medium text-red-600' : 'text-navy-400'}`}
-            >
+            <div className="tabular mt-2 text-3xl font-semibold text-navy-900">{t.value}</div>
+            <div className={`mt-0.5 text-xs ${t.bad ? 'font-medium text-red-600' : 'text-navy-400'}`}>
               {t.sub}
             </div>
           </Card>
@@ -139,143 +180,182 @@ export default async function PortfolioDashboard() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
-        <Card>
-          <div className="flex items-center justify-between px-5 py-4">
+        <div>
+          <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-base font-semibold text-navy-900">Active Projects Overview</h2>
+              <h2 className="text-lg font-semibold text-navy-900">Active Projects Overview</h2>
               <p className="mt-0.5 text-xs text-navy-400">
                 Track health and progress across all ongoing jobs.
               </p>
             </div>
             <Link
               href="/dashboard/projects"
-              className="text-xs font-medium text-navy-600 hover:underline"
+              className="inline-flex items-center gap-1 text-sm font-medium text-navy-600 hover:underline"
             >
               View All →
             </Link>
           </div>
-          <ul className="divide-y divide-navy-100 border-t border-navy-100">
+
+          <div className="mt-4 space-y-3">
             {active.length === 0 && (
-              <li className="px-5 py-10 text-center text-sm text-navy-400">
+              <Card className="px-5 py-10 text-center text-sm text-navy-400">
                 No active projects right now.
-              </li>
+              </Card>
             )}
-            {active.slice(0, 6).map((p) => (
-              <li key={p.buildsuiteProjectId}>
-                <Link
-                  href={`/dashboard/projects/${p.buildsuiteProjectId}`}
-                  className="grid grid-cols-1 gap-3 px-5 py-4 transition hover:bg-navy-50/60 sm:grid-cols-[1.4fr_1.2fr_auto] sm:items-center"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold text-navy-900">
-                        {p.projectName}
-                      </span>
-                      <span className="shrink-0 text-[11px] text-navy-400">
-                        {p.buildsuiteProjectId}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 truncate text-xs text-navy-400">
-                      {p.clientName}
-                      {p.projectManager !== '' ? ` · PM: ${p.projectManager}` : ''}
-                    </div>
-                  </div>
-
-                  <div className="min-w-0">
-                    {hasOperationalDetail(p) ? (
-                      <div className="flex items-center gap-3">
-                        <span className="text-[11px] tracking-wide text-navy-400 uppercase">
-                          Progress
+            {active.slice(0, 6).map((p) => {
+              const st = statusFor(p);
+              return (
+                <Card key={p.buildsuiteProjectId} className="px-5 py-4">
+                  <div className="grid grid-cols-1 items-center gap-4 sm:grid-cols-[1.8fr_1fr_auto_auto]">
+                    <div className="min-w-0">
+                      <div className="flex items-start gap-2">
+                        <Link
+                          href={`/dashboard/projects/${p.buildsuiteProjectId}`}
+                          className="text-sm font-semibold text-navy-900 hover:underline"
+                        >
+                          {p.projectName}
+                        </Link>
+                        <span className="mt-0.5 shrink-0 text-[11px] text-navy-400">
+                          {p.buildsuiteProjectId}
                         </span>
-                        <div className="min-w-0 flex-1">
-                          <ProgressBar value={p.progressPercentage} />
-                        </div>
                       </div>
-                    ) : (
-                      <span className="text-xs text-navy-400">{stageLabel(p)}</span>
-                    )}
-                  </div>
+                      <div className="mt-0.5 truncate text-xs text-navy-400">
+                        {p.clientName}
+                        {p.projectManager !== '' ? ` · PM: ${p.projectManager}` : ''}
+                      </div>
+                    </div>
 
-                  <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
-                    {hasOperationalDetail(p) && <HealthBadge status={p.healthStatus} />}
-                    <span className="truncate text-xs text-navy-400">{p.nextMilestone}</span>
+                    <div className="min-w-0">
+                      {hasOperationalDetail(p) ? (
+                        <>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="tracking-wide text-navy-400 uppercase">Progress</span>
+                            <span className="tabular font-medium text-navy-700">
+                              {p.progressPercentage}%
+                            </span>
+                          </div>
+                          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-navy-100">
+                            <div
+                              className="h-full rounded-full bg-amber-accent"
+                              style={{ width: `${Math.min(100, Math.max(0, p.progressPercentage))}%` }}
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-xs text-navy-400">{stageLabel(p)}</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end sm:gap-1.5">
+                      <StatusPill label={st.label} tone={st.tone} />
+                      <span className="inline-flex items-center gap-1.5 text-xs text-navy-400">
+                        <span className="text-navy-300">{CalendarGlyph}</span>
+                        {p.nextMilestone}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      aria-label="Project actions"
+                      className="hidden h-8 w-8 items-center justify-center justify-self-end rounded-md text-navy-400 transition hover:bg-navy-50 hover:text-navy-700 sm:flex"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <circle cx="12" cy="5" r="1.6" />
+                        <circle cx="12" cy="12" r="1.6" />
+                        <circle cx="12" cy="19" r="1.6" />
+                      </svg>
+                    </button>
                   </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Card>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
 
         <div className="space-y-5">
-          <Card>
-            <div className="px-5 py-4">
-              <h2 className="text-base font-semibold text-navy-900">Needs Attention</h2>
-              <p className="mt-0.5 text-xs text-navy-400">Items requiring immediate action.</p>
-            </div>
-            <div className="space-y-3 px-5 pb-5">
+          <div>
+            <h2 className="text-lg font-semibold text-navy-900">Needs Attention</h2>
+            <p className="mt-0.5 text-xs text-navy-400">Items requiring immediate action.</p>
+            <div className="mt-4 space-y-3">
               {atRisk.length === 0 && clientWaiting.length === 0 && pendingReview.length === 0 && (
-                <p className="py-6 text-center text-sm text-navy-400">Nothing needs you right now.</p>
+                <Card className="px-5 py-6 text-center text-sm text-navy-400">
+                  Nothing needs you right now.
+                </Card>
               )}
               {atRisk.slice(0, 2).map((p) => (
                 <Link
                   key={p.buildsuiteProjectId}
                   href={`/dashboard/projects/${p.buildsuiteProjectId}`}
-                  className="block rounded-lg border border-red-100 bg-red-50/60 px-4 py-3 transition hover:bg-red-50"
+                  className="flex gap-3 rounded-lg border border-red-100 bg-red-50/50 px-4 py-3 transition hover:bg-red-50"
                 >
-                  <div className="text-sm font-semibold text-red-700">{p.healthStatus}</div>
-                  <div className="mt-0.5 text-xs text-navy-600">
-                    {p.projectName}
-                    {p.delayReason !== '' ? ` — ${p.delayReason}` : ''}
+                  <span className="mt-0.5 shrink-0 text-red-500">{IconIssues}</span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-red-700">{p.healthStatus}</div>
+                    <div className="mt-0.5 text-xs text-navy-600">
+                      {p.projectName}
+                      {p.delayReason !== '' ? ` — ${p.delayReason}` : ''}
+                    </div>
+                    <div className="mt-1 text-xs font-medium text-red-700">Resolve issue →</div>
                   </div>
-                  <div className="mt-1 text-xs font-medium text-red-700">Resolve issue →</div>
                 </Link>
               ))}
               {clientWaiting.slice(0, 2).map((p) => (
                 <Link
                   key={p.buildsuiteProjectId}
                   href={`/dashboard/projects/${p.buildsuiteProjectId}`}
-                  className="block rounded-lg border border-amber-accent/25 bg-amber-soft px-4 py-3 transition hover:brightness-[0.99]"
+                  className="flex gap-3 rounded-lg border border-amber-accent/25 bg-amber-soft px-4 py-3 transition hover:brightness-[0.99]"
                 >
-                  <div className="text-sm font-semibold text-amber-700">Waiting on client</div>
-                  <div className="mt-0.5 text-xs text-navy-600">{p.projectName}</div>
-                  <div className="mt-1 text-xs font-medium text-amber-700">Send reminder →</div>
+                  <span className="mt-0.5 shrink-0 text-amber-accent">{IconUpdates}</span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-amber-700">Client Approval Overdue</div>
+                    <div className="mt-0.5 text-xs text-navy-600">{p.projectName}</div>
+                    <div className="mt-1 text-xs font-medium text-amber-700">Send reminder →</div>
+                  </div>
                 </Link>
               ))}
               {pendingReview.length > 0 && (
                 <Link
                   href="/dashboard/updates"
-                  className="block rounded-lg border border-navy-100 bg-navy-50/60 px-4 py-3 transition hover:bg-navy-50"
+                  className="flex gap-3 rounded-lg border border-navy-100 bg-navy-50/60 px-4 py-3 transition hover:bg-navy-50"
                 >
-                  <div className="text-sm font-semibold text-navy-900">
-                    {pendingReview.length} update{pendingReview.length === 1 ? '' : 's'} to review
+                  <span className="mt-0.5 shrink-0 text-navy-400">{IconUpdates}</span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-navy-900">
+                      {pendingReview.length} update{pendingReview.length === 1 ? '' : 's'} to review
+                    </div>
+                    <div className="mt-0.5 text-xs text-navy-600">Field submissions awaiting sign-off</div>
+                    <div className="mt-1 text-xs font-medium text-navy-700">Open review queue →</div>
                   </div>
-                  <div className="mt-0.5 text-xs text-navy-600">Field submissions awaiting sign-off</div>
-                  <div className="mt-1 text-xs font-medium text-navy-700">Open review queue →</div>
                 </Link>
               )}
             </div>
-          </Card>
+          </div>
 
-          <Card>
-            <div className="px-5 py-4">
-              <h2 className="text-base font-semibold text-navy-900">Recent Activity</h2>
-            </div>
-            <ul className="divide-y divide-navy-100 border-t border-navy-100">
-              {recent.length === 0 && (
-                <li className="px-5 py-8 text-center text-sm text-navy-400">No activity yet.</li>
-              )}
-              {recent.map((r) => (
-                <li key={r.id} className="px-5 py-3.5">
-                  <div className="text-sm text-navy-800">
-                    <span className="font-medium text-navy-900">{r.who}</span> {r.what}
-                  </div>
-                  <div className="mt-0.5 text-xs text-navy-400">
-                    {r.where} · {shortDate(r.when)}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Card>
+          <div>
+            <h2 className="text-lg font-semibold text-navy-900">Recent Activity</h2>
+            <Card className="mt-4">
+              <ul className="divide-y divide-navy-100">
+                {activity.length === 0 && (
+                  <li className="px-5 py-8 text-center text-sm text-navy-400">No activity yet.</li>
+                )}
+                {activity.map((a) => (
+                  <li key={a.id} className="flex items-start gap-3 px-5 py-3.5">
+                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-navy-50 text-navy-500">
+                      {a.icon}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-sm text-navy-800">
+                        <span className="font-medium text-navy-900">{a.who}</span> {a.what}
+                      </div>
+                      <div className="mt-0.5 text-xs text-navy-400">
+                        {a.where} · {shortDate(a.date)}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </div>
         </div>
       </div>
     </div>

@@ -48,7 +48,7 @@ export function SidebarNav({ nav }: { nav: NavItem[] }) {
         const active = isActive(pathname, item.href, SECTION_ROOTS);
         return (
           <Link
-            key={item.href}
+            key={`${item.href}::${item.label}`}
             href={item.href}
             aria-current={active ? 'page' : undefined}
             className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
@@ -85,7 +85,7 @@ export function MobileNav({ nav }: { nav: NavItem[] }) {
         const active = isActive(pathname, item.href, SECTION_ROOTS);
         return (
           <Link
-            key={item.href}
+            key={`${item.href}::${item.label}`}
             href={item.href}
             aria-current={active ? 'page' : undefined}
             className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition ${
