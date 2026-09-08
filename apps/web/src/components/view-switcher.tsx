@@ -78,7 +78,7 @@ export function ViewSwitcher({ current, viewing }: { current: Role; viewing: boo
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-30 mt-1.5 w-72 overflow-hidden rounded-lg border border-navy-100 bg-white shadow-lg"
+          className="menu-enter absolute right-0 z-30 mt-1.5 w-72 overflow-hidden rounded-lg border border-navy-100 bg-white shadow-[0_1px_2px_rgba(10,31,68,0.06),0_16px_36px_-16px_rgba(10,31,68,0.35)]"
         >
           <div className="border-b border-navy-100 bg-navy-50 px-3 py-2">
             <div className="text-[11px] font-semibold tracking-wide text-navy-600 uppercase">

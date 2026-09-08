@@ -95,7 +95,7 @@ export function AccountSwitcher({ accounts, current }: { accounts: DevAccount[];
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-1.5 w-80 overflow-hidden rounded-xl border border-navy-200 bg-white shadow-lg">
+        <div className="menu-enter absolute right-0 z-50 mt-1.5 w-80 overflow-hidden rounded-xl border border-navy-200 bg-white shadow-[0_1px_2px_rgba(10,31,68,0.06),0_16px_36px_-16px_rgba(10,31,68,0.35)]">
           <div className="border-b border-navy-100 bg-amber-soft px-3 py-2">
             <p className="text-xs font-semibold text-amber-800">Development only</p>
             <p className="mt-0.5 text-xs leading-relaxed text-amber-700">

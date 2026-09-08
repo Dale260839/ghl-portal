@@ -1,7 +1,13 @@
 'use client';
 
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
+
+/** Tints the tab while its screen is loading, so a click is never silent. */
+function TabLabel({ label }: { label: string }) {
+  const { pending } = useLinkStatus();
+  return <span className={pending ? 'text-amber-accent transition-colors' : undefined}>{label}</span>;
+}
 
 /**
  * The tab strip across a project's control screens.
@@ -46,13 +52,13 @@ export function ProjectTabs({ id }: { id: string }) {
             key={tab.seg}
             href={href}
             aria-current={active ? 'page' : undefined}
-            className={`shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition ${
+            className={`relative shrink-0 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors duration-150 after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:origin-left after:rounded-full after:transition-transform after:duration-200 after:ease-out ${
               active
-                ? 'border-navy-900 text-navy-900'
-                : 'border-transparent text-navy-500 hover:border-navy-200 hover:text-navy-900'
+                ? 'text-navy-900 after:scale-x-100 after:bg-navy-900'
+                : 'text-navy-500 hover:text-navy-900 after:scale-x-0 after:bg-navy-200 hover:after:scale-x-100'
             }`}
           >
-            {tab.label}
+            <TabLabel label={tab.label} />
           </Link>
         );
       })}

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { signOut } from '@/lib/actions';
+import { PageTransition } from './page-transition';
 import { MobileNav, SidebarNav, type NavItem } from './sidebar-nav';
 
 /**
@@ -76,7 +77,7 @@ export function AppShell({
 
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Context bar */}
-          <header className="flex h-16 shrink-0 items-center gap-4 border-b border-navy-100 bg-white px-4 sm:px-6">
+          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-4 border-b border-navy-100 bg-white/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/70 sm:px-6">
             <div className="min-w-0 lg:hidden">
               <span className="text-sm font-semibold tracking-tight text-navy-900">{brand}</span>
             </div>
@@ -107,7 +108,9 @@ export function AppShell({
           <MobileNav nav={nav} />
 
           <main className="flex-1 px-4 py-7 sm:px-6 lg:px-8">
-            <div className="mx-auto max-w-5xl">{children}</div>
+            <div className="mx-auto max-w-5xl">
+              <PageTransition>{children}</PageTransition>
+            </div>
           </main>
         </div>
       </div>

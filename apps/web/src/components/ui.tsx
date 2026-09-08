@@ -9,7 +9,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-xl border border-navy-100 bg-white shadow-[0_1px_2px_rgba(10,31,68,0.06)] ${className}`}
+      className={`rounded-xl border border-navy-100 bg-white shadow-[0_1px_2px_rgba(10,31,68,0.06)] transition-[box-shadow,border-color] duration-200 ${className}`}
     >
       {children}
     </div>
@@ -100,7 +100,7 @@ export function ProgressBar({ value, label }: { value: number; label?: boolean }
     <div className="flex items-center gap-2.5">
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-navy-100">
         <div
-          className="h-full rounded-full bg-navy-600 transition-[width]"
+          className="bar-grow h-full rounded-full bg-navy-600 transition-[width]"
           style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
         />
       </div>

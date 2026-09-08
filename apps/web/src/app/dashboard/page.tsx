@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { RowMenu } from '@/components/row-menu';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { CHANGE_ORDERS } from '@/lib/data/portal-fixtures';
@@ -160,13 +161,13 @@ export default async function PortfolioDashboard() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className="rounded-lg border border-navy-200 px-3.5 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50"
+            className="press rounded-lg border border-navy-200 bg-white px-3.5 py-2 text-sm font-medium text-navy-700 shadow-[0_1px_2px_rgba(10,31,68,0.06)] hover:border-navy-200 hover:bg-navy-50"
           >
             Download Report
           </button>
           <button
             type="button"
-            className="rounded-lg bg-amber-accent px-3.5 py-2 text-sm font-semibold text-white transition hover:brightness-95"
+            className="press rounded-lg bg-amber-accent px-3.5 py-2 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(240,135,15,0.35),0_8px_20px_-10px_rgba(240,135,15,0.6)] hover:brightness-[1.04]"
           >
             Create Project
           </button>
@@ -175,10 +176,10 @@ export default async function PortfolioDashboard() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {tiles.map((t) => (
-          <Card key={t.label} className="px-5 py-4">
+          <Card key={t.label} className="card-interactive px-5 py-4">
             <div className="flex items-start justify-between">
               <div className="text-sm font-medium text-navy-600">{t.label}</div>
-              <span className={t.bad ? 'text-red-500' : 'text-navy-300'}>{t.icon}</span>
+              <span className={t.bad ? 'text-red-500' : 'text-navy-400'}>{t.icon}</span>
             </div>
             <div className="tabular mt-2 text-3xl font-semibold text-navy-900">{t.value}</div>
             <div className={`mt-0.5 text-xs ${t.bad ? 'font-medium text-red-600' : 'text-navy-400'}`}>
@@ -214,7 +215,7 @@ export default async function PortfolioDashboard() {
             {active.slice(0, 6).map((p) => {
               const st = statusFor(p);
               return (
-                <Card key={p.buildsuiteProjectId} className="px-5 py-4">
+                <Card key={p.buildsuiteProjectId} className="card-interactive px-5 py-4">
                   <div className="grid grid-cols-1 items-center gap-4 sm:grid-cols-[1.8fr_1fr_auto_auto]">
                     <div className="min-w-0">
                       <div className="flex items-start gap-2">
@@ -258,22 +259,12 @@ export default async function PortfolioDashboard() {
                     <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end sm:gap-1.5">
                       <StatusPill label={st.label} tone={st.tone} />
                       <span className="inline-flex items-center gap-1.5 text-xs text-navy-400">
-                        <span className="text-navy-300">{CalendarGlyph}</span>
+                        <span className="text-navy-400">{CalendarGlyph}</span>
                         {p.nextMilestone}
                       </span>
                     </div>
 
-                    <button
-                      type="button"
-                      aria-label="Project actions"
-                      className="hidden h-8 w-8 items-center justify-center justify-self-end rounded-md text-navy-400 transition hover:bg-navy-50 hover:text-navy-700 sm:flex"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <circle cx="12" cy="5" r="1.6" />
-                        <circle cx="12" cy="12" r="1.6" />
-                        <circle cx="12" cy="19" r="1.6" />
-                      </svg>
-                    </button>
+                    <RowMenu projectId={p.buildsuiteProjectId} />
                   </div>
                 </Card>
               );

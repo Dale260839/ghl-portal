@@ -67,8 +67,8 @@ export function ControlButton({
       type="button"
       className={
         tone === 'primary'
-          ? 'rounded-lg bg-navy-900 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-navy-800'
-          : 'rounded-lg border border-navy-200 px-3.5 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50'
+          ? 'press rounded-lg bg-navy-900 px-3.5 py-2 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(10,31,68,0.2),0_8px_20px_-10px_rgba(10,31,68,0.5)] hover:bg-navy-800'
+          : 'press rounded-lg border border-navy-200 bg-white px-3.5 py-2 text-sm font-medium text-navy-700 hover:border-navy-200 hover:bg-navy-50'
       }
     >
       {children}
