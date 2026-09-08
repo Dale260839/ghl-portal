@@ -106,7 +106,7 @@ export function MobileNav({ nav }: { nav: NavItem[] }) {
   const pathname = usePathname();
 
   return (
-    <nav className="flex gap-1 overflow-x-auto border-b border-navy-100 bg-white px-3 py-2 lg:hidden">
+    <nav className="flex gap-1 overflow-x-auto border-b border-navy-100 bg-white px-3 py-2 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
       {nav.map((item) => {
         const active = isActive(pathname, item.href, SECTION_ROOTS);
         return (

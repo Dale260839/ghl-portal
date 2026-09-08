@@ -43,7 +43,7 @@ export function ProjectTabs({ id }: { id: string }) {
   const base = `/dashboard/projects/${id}`;
 
   return (
-    <nav className="-mb-px flex gap-1 overflow-x-auto border-b border-navy-100">
+    <nav className="-mb-px flex gap-1 overflow-x-auto border-b border-navy-100 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {TABS.map((tab) => {
         const href = tab.seg === '' ? base : `${base}/${tab.seg}`;
         const active = tab.seg === '' ? pathname === base : pathname === href;
