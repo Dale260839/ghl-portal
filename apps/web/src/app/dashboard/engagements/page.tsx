@@ -130,11 +130,21 @@ export default async function Engagements() {
           title="The book of work"
           action={<span className="text-xs text-navy-400">signed first</span>}
         />
+        {/* Column labels, so the two right-hand cells read as columns rather
+            than as two things stacked beside the price. Hidden on narrow
+            screens, where the row wraps and a header would sit above nothing. */}
+        {engagements.length > 0 && (
+          <div className="hidden border-b border-navy-100 px-5 py-2 text-xs font-medium text-navy-400 sm:flex sm:items-center sm:justify-between sm:gap-3">
+            <span className="min-w-0 flex-1">Project</span>
+            <span className="w-28 shrink-0 text-right">Contract</span>
+            <span className="w-32 shrink-0 text-right">Value</span>
+          </div>
+        )}
         <ul className="divide-y divide-navy-100">
           {engagements.map((e) => (
             <li key={e.projectId} className="px-5 py-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     {e.project === null ? (
                       <span className="truncate text-sm font-medium text-navy-500 italic">
@@ -157,7 +167,24 @@ export default async function Engagements() {
                     {e.proposalCount > 1 && <span>{e.proposalCount} proposals</span>}
                   </div>
                 </div>
-                <div className="shrink-0 text-right">
+                {/* Its own column, so a row reads across: what the job is,
+                    what it is worth, and the contract that says so. */}
+                <div className="w-28 shrink-0 text-right text-xs">
+                  {e.proposal.signedPdfUrl === null ? (
+                    <span className="text-navy-300">—</span>
+                  ) : (
+                    <a
+                      href={e.proposal.signedPdfUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium text-navy-600 underline underline-offset-2 hover:text-navy-900"
+                    >
+                      Signed contract
+                    </a>
+                  )}
+                </div>
+
+                <div className="w-32 shrink-0 text-right">
                   {/* An exact figure and a range are different claims, so they
                       do not look the same. A band shown in the same weight as a
                       contract value reads as a price somebody agreed to. */}
@@ -170,21 +197,6 @@ export default async function Engagements() {
                   </div>
                   {e.proposal.amount === null && e.proposal.priceText !== '' && (
                     <div className="text-xs text-navy-400">estimated range</div>
-                  )}
-                  {e.proposal.signedPdfUrl !== null && (
-                    <a
-                      href={e.proposal.signedPdfUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      // The link is public and unauthenticated (Sing,
-                      // 2026-09-09) — anyone holding the URL opens the
-                      // contract. Say so, because a contractor who does not
-                      // know that will paste it into a group chat.
-                      title="Opens the signed contract. This link is public — do not share it outside the parties on the contract."
-                      className="mt-0.5 inline-block text-xs font-medium text-navy-600 underline underline-offset-2 hover:text-navy-900"
-                    >
-                      Signed contract
-                    </a>
                   )}
                 </div>
               </div>
