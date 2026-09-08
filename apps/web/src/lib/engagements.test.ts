@@ -32,6 +32,7 @@ function proposal(over: Partial<BuildSuiteProposalRow> = {}): Proposal {
     project_id: 'proj-1',
     contractor_id: '5dd312bd-0b95-45af-be7b-c19a14eff103',
     status: 'submitted',
+    signed_pdf_url: null,
     price: '8000.0',
     subtotal: null,
     total: null,

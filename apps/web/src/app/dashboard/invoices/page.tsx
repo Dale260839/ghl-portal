@@ -4,7 +4,7 @@ import { getProposalsReader } from '@/lib/buildsuite/proposals';
 import { resolveContractor } from '@/lib/buildsuite/contractor-identity';
 import { getHubInvoiceDrafts } from '@/lib/hub-db/invoice-drafts';
 import { joinProposalsToProjects } from '@/lib/signed-work';
-import { paymentScheduleDrafts, percentTotal, parsePaymentSchedule } from '@/lib/payment-schedule';
+import { draftsForProposal, percentTotal, scheduleFor } from '@/lib/payment-schedule';
 import { saveInvoiceDraft, createInvoiceOnRail } from '@/lib/actions';
 import { Badge, Card, CardHeader, currency, shortDate } from '@/components/ui';
 import { NotLinkedToContractor } from '@/components/not-linked';
@@ -133,7 +133,10 @@ export default async function Invoices() {
   const sections = await Promise.all(
     signed.map(async (row) => {
       const proposal = row.proposal!;
-      const content = await reader.readContent(
+      // BOTH schedule sources. Reading `content` alone showed zero lines for
+      // any proposal whose schedule is structured JSON — which is 8 of 48,
+      // including the signed record the pilot runs on.
+      const schedule = await reader.readSchedule(
         scope,
         row.project.buildsuiteProjectId,
         proposal.id,
@@ -142,8 +145,8 @@ export default async function Invoices() {
       return {
         row,
         proposal,
-        lines: parsePaymentSchedule(content),
-        drafts: paymentScheduleDrafts(content, proposal.amount),
+        lines: scheduleFor(schedule),
+        drafts: draftsForProposal(schedule, proposal.amount),
         stored,
       };
     }),
@@ -159,7 +162,24 @@ export default async function Invoices() {
           <Card key={proposal.id}>
             <CardHeader
               title={row.project.projectName}
-              action={<Badge tone="good">Signed</Badge>}
+              action={
+                <div className="flex items-center gap-3">
+                  {/* The contract this invoice bills against. A contractor
+                      about to send a figure should be one click from the
+                      document that agreed it. */}
+                  {proposal.signedPdfUrl !== null && (
+                    <a
+                      href={proposal.signedPdfUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-medium text-navy-600 underline underline-offset-2 hover:text-navy-900"
+                    >
+                      Signed contract
+                    </a>
+                  )}
+                  <Badge tone="good">Signed</Badge>
+                </div>
+              }
             />
 
             <div className="border-b border-navy-100 px-5 py-3 text-xs text-navy-500">
@@ -169,7 +189,8 @@ export default async function Invoices() {
               {' · '}
               {proposal.amount === null ? (
                 <span className="text-amber-700">
-                  no contract total recorded ({proposal.priceText || 'no price'}) — amounts
+                  no contract total recorded ({proposal.priceText || 'no price'}) — that is a
+                  range, not a figure, so amounts
                   cannot be calculated from a percent
                 </span>
               ) : (

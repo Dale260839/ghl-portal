@@ -185,18 +185,36 @@ test('the resolver never matches on a name or a company', async () => {
 // ── Columns and normalization ───────────────────────────────────────────────
 
 test('the column list excludes documents and internal text', () => {
-  for (const banned of [
-    'content',
-    'sections',
-    'pdf_url',
-    'docx_url',
-    'signed_pdf_url',
-    'ai_feedback',
-    'notes',
-    'share_feedback',
-  ]) {
+  // `signed_pdf_url` was on this list until 2026-09-09 and has deliberately
+  // been removed from it — see the test below. The rest stay excluded:
+  // `content` and `sections` are large and are fetched by a targeted read when
+  // a schedule is actually needed; the others are the contractor's own working
+  // notes, which no screen shows and a client must never see.
+  for (const banned of ['content', 'sections', 'pdf_url', 'docx_url', 'ai_feedback', 'notes', 'share_feedback']) {
     assert.equal((PROPOSAL_COLUMNS as readonly string[]).includes(banned), false, `selects ${banned}`);
   }
+});
+
+test('the signed contract link IS selected, by decision', () => {
+  // A DECISION CHANGE, not a relaxation. D-010 minimisation excluded document
+  // columns because "the Hub has no screen that needs them". As of 2026-09-09
+  // there is one: the contractor opens the signed contract from the engagement
+  // and invoice screens.
+  //
+  // Three reasons this one is different from `pdf_url` and `docx_url`, which
+  // stay excluded:
+  //
+  //   · it is a URL, not the document — small, and no client data travels
+  //   · it is the SIGNED contract, the only version anyone asked to see
+  //   · it is needed for every signed row at once, so a per-row targeted read
+  //     would be an N+1 against a production database
+  //
+  // There is no such column on `projects`. The ask was to add one there; the
+  // join already exists, and a copy would be a second thing to keep in sync.
+  assert.ok(
+    (PROPOSAL_COLUMNS as readonly string[]).includes('signed_pdf_url'),
+    'the signed contract cannot be shown if it is not selected',
+  );
 });
 
 function row(over: Partial<BuildSuiteProposalRow> = {}): BuildSuiteProposalRow {
@@ -206,6 +224,7 @@ function row(over: Partial<BuildSuiteProposalRow> = {}): BuildSuiteProposalRow {
     contractor_id: 'c1',
     status: 'submitted',
     price: '8000.0',
+    signed_pdf_url: null,
     subtotal: null,
     total: null,
     valid_until: null,
@@ -243,4 +262,62 @@ test('an updated_at that is missing falls back to created_at', () => {
   // Otherwise "most recently updated wins" would rank a row with no
   // updated_at below everything, including older ones.
   assert.equal(normalizeProposal(row()).updatedAt, '2026-02-01T10:00:00Z');
+});
+
+// ── Exact pricing, not a range (2026-09-09) ─────────────────────────────────
+
+test('a price that is one exact number becomes the amount', () => {
+  // 33 of 48 proposals store the figure this way. Before today only the 10
+  // with a numeric `total` had an amount at all.
+  for (const [price, expected] of [
+    ['24500.00', 24500],
+    ['8000.0', 8000],
+    ['112', 112],
+    ['$1,773.75', 1773.75],
+    [' 39600.0 ', 39600],
+  ] as const) {
+    const p = normalizeProposal(row({ price, subtotal: null, total: null }));
+    assert.equal(p.amount, expected, `"${price}" did not read as ${expected}`);
+    assert.equal(p.amountSource, 'price');
+  }
+});
+
+test('§ a BAND never becomes a number — it would quote the bottom of the range', () => {
+  // The failure that matters. "$2,000 - $5,000" read as 2000 quotes a homeowner
+  // the low end of a job that might cost the high end.
+  for (const band of ['$2,000 - $5,000', '2000-5000', '$10k - $20k', 'around 12k', 'TBD', '']) {
+    const p = normalizeProposal(row({ price: band, subtotal: null, total: null }));
+    assert.equal(p.amount, null, `"${band}" was parsed into ${p.amount}`);
+    assert.equal(p.amountSource, 'none');
+  }
+});
+
+test('the numeric columns outrank the text one', () => {
+  // `total` is typed; `price` is text that happens to parse. If they disagree,
+  // the typed column is the contract.
+  const both = normalizeProposal(row({ price: '999.00', subtotal: 500, total: 24500 }));
+  assert.equal(both.amount, 24500);
+  assert.equal(both.amountSource, 'total');
+
+  const noTotal = normalizeProposal(row({ price: '999.00', subtotal: 500, total: null }));
+  assert.equal(noTotal.amount, 500);
+  assert.equal(noTotal.amountSource, 'subtotal');
+});
+
+test('the price text is kept verbatim alongside the parsed amount', () => {
+  // The screen shows the exact figure; the original stays available so a
+  // contractor can see what BuildSuite actually recorded.
+  const p = normalizeProposal(row({ price: '$2,000 - $5,000', subtotal: null, total: null }));
+  assert.equal(p.priceText, '$2,000 - $5,000');
+  assert.equal(p.amount, null);
+});
+
+test('the signed contract link is surfaced when there is one', () => {
+  assert.equal(normalizeProposal(row()).signedPdfUrl, null);
+  assert.equal(
+    normalizeProposal(row({ signed_pdf_url: 'https://example.com/signed.pdf' })).signedPdfUrl,
+    'https://example.com/signed.pdf',
+  );
+  // Blank is null, not an empty string a screen would render as a live link.
+  assert.equal(normalizeProposal(row({ signed_pdf_url: '   ' })).signedPdfUrl, null);
 });

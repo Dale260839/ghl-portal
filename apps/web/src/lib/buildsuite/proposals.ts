@@ -38,6 +38,9 @@ export const PROPOSAL_COLUMNS = [
   'contractor_id',
   'status',
   'price',
+  // The signed contract itself. Sing confirmed 2026-09-09 that this is where
+  // it lives; there is no such column on `projects`.
+  'signed_pdf_url',
   'subtotal',
   'total',
   'valid_until',
@@ -70,6 +73,7 @@ export interface BuildSuiteProposalRow {
   contractor_id: string | null;
   status: string | null;
   price: string | number | null;
+  signed_pdf_url: string | null;
   subtotal: number | null;
   total: number | null;
   valid_until: string | null;
@@ -86,6 +90,63 @@ export interface BuildSuiteProposalRow {
   deleted_at: string | null;
 }
 
+/**
+ * A `price` string that is EXACTLY one number, and nothing else.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS IS SAFE, WHEN "PARSE THE FREE TEXT" USUALLY IS NOT
+ *
+ * `price` holds two shapes and only two — measured across all 48 rows on
+ * 2026-09-09:
+ *
+ *   33  a single number, e.g. "24500.00" or "8000.0"
+ *   15  a band,          e.g. "$2,000 - $5,000"
+ *
+ * The whole string must match. A band contains a hyphen and cannot, so it
+ * falls through to null rather than being read as its first figure — which
+ * would quote a homeowner $2,000 for a job that might cost $5,000.
+ *
+ * This is NOT the same as parsing "around 12k" into 12000. That would be
+ * inferring a number from prose; this is reading a number that is already a
+ * number and happens to be stored as text.
+ * ---------------------------------------------------------------------------
+ */
+const EXACT_PRICE = /^\$?\s*[\d,]+(?:\.\d{1,2})?$/;
+
+function exactPrice(value: string | number | null): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+
+  const text = value.trim();
+  if (text === '' || !EXACT_PRICE.test(text)) return null;
+
+  const parsed = Number(text.replace(/[$,\s]/g, ''));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * The contract amount, and where it came from.
+ *
+ * Numeric columns first, because they are typed. `price` last, because it is
+ * text — and only when the whole of it is a number. Adding the `price` path
+ * took exact pricing from 10 of 48 proposals to 33.
+ */
+function resolveAmount(row: {
+  total: number | null;
+  subtotal: number | null;
+  price: string | number | null;
+}): { amount: number | null; amountSource: Proposal['amountSource'] } {
+  if (typeof row.total === 'number' && Number.isFinite(row.total)) {
+    return { amount: row.total, amountSource: 'total' };
+  }
+  if (typeof row.subtotal === 'number' && Number.isFinite(row.subtotal)) {
+    return { amount: row.subtotal, amountSource: 'subtotal' };
+  }
+  const fromPrice = exactPrice(row.price);
+  if (fromPrice !== null) return { amount: fromPrice, amountSource: 'price' };
+  return { amount: null, amountSource: 'none' };
+}
+
 export interface Proposal {
   id: string;
   projectId: string;
@@ -96,6 +157,15 @@ export interface Proposal {
   priceText: string;
   /** The real number when BuildSuite has one, else null. Never guessed. */
   amount: number | null;
+  /** Where `amount` came from, so a screen can say so rather than imply it. */
+  amountSource: 'total' | 'subtotal' | 'price' | 'none';
+  /**
+   * A link to the signed contract PDF, when one exists.
+   *
+   * Lives on the proposal, NOT on `projects` — the ask to add a column there
+   * would create a second copy to keep in sync, and the join already exists.
+   */
+  signedPdfUrl: string | null;
   timeline: string;
   createdAt: string;
   updatedAt: string;
@@ -127,12 +197,7 @@ export function normalizeProposal(row: BuildSuiteProposalRow): Proposal {
   // never parsed for money: only the numeric columns are, because turning
   // "around 12k" into 12000 is the kind of helpfulness that puts a wrong figure
   // on a contract.
-  const amount =
-    typeof row.total === 'number' && Number.isFinite(row.total)
-      ? row.total
-      : typeof row.subtotal === 'number' && Number.isFinite(row.subtotal)
-        ? row.subtotal
-        : null;
+  const { amount, amountSource } = resolveAmount(row);
 
   return {
     id: row.id,
@@ -141,6 +206,8 @@ export function normalizeProposal(row: BuildSuiteProposalRow): Proposal {
     status,
     priceText: nonEmpty(row.price),
     amount,
+    amountSource,
+    signedPdfUrl: nonEmpty(row.signed_pdf_url) || null,
     timeline: nonEmpty(row.timeline),
     createdAt: nonEmpty(row.created_at),
     updatedAt: nonEmpty(row.updated_at) || nonEmpty(row.created_at),
@@ -199,6 +266,11 @@ export interface BuildSuiteProposalsReader {
    * Kept off `PROPOSAL_COLUMNS` because it is ~4.6KB per row.
    */
   readContent(scope: TenantScope, projectId: string, proposalId: string): Promise<string | null>;
+  readSchedule(
+    scope: TenantScope,
+    projectId: string,
+    proposalId: string,
+  ): Promise<{ content: string | null; sections: unknown }>;
   /**
    * This contractor's live engagements.
    *
@@ -256,6 +328,36 @@ export class SupabaseProposalsReader implements BuildSuiteProposalsReader {
    * carries the project id as well as the proposal id so a known proposal id
    * alone cannot pull another tenant's document.
    */
+  /**
+   * The two columns a payment schedule can live in, for one proposal.
+   *
+   * Was `readContent`, which returned markdown only — and the schedule lives
+   * in `sections` on 8 of 48 proposals, INCLUDING the signed test record the
+   * pilot runs on. A screen reading only `content` shows that record zero
+   * invoice lines and looks like a parser bug.
+   *
+   * Both are read in one request. They stay out of the standard column list
+   * because `content` is ~4.6KB of markdown per row.
+   */
+  async readSchedule(
+    scope: TenantScope,
+    projectId: string,
+    proposalId: string,
+  ): Promise<{ content: string | null; sections: unknown }> {
+    assertScope(scope, 'proposal schedule');
+    if (projectId.trim() === '' || proposalId.trim() === '') {
+      return { content: null, sections: null };
+    }
+
+    const rows = await this.client.select<{ content: string | null; sections: unknown }>({
+      from: 'proposals',
+      columns: ['content', 'sections'],
+      filters: { id: `eq.${proposalId}`, project_id: `eq.${projectId}` },
+      limit: 1,
+    });
+    return { content: rows[0]?.content ?? null, sections: rows[0]?.sections ?? null };
+  }
+
   async readContent(
     scope: TenantScope,
     projectId: string,

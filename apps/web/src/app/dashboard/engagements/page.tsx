@@ -157,12 +157,30 @@ export default async function Engagements() {
                     {e.proposalCount > 1 && <span>{e.proposalCount} proposals</span>}
                   </div>
                 </div>
-                <div className="tabular shrink-0 text-sm font-medium text-navy-900">
-                  {e.proposal.amount === null
-                    ? e.proposal.priceText === ''
-                      ? '—'
-                      : e.proposal.priceText
-                    : currency(e.proposal.amount)}
+                <div className="shrink-0 text-right">
+                  {/* An exact figure and a range are different claims, so they
+                      do not look the same. A band shown in the same weight as a
+                      contract value reads as a price somebody agreed to. */}
+                  <div className="tabular text-sm font-medium text-navy-900">
+                    {e.proposal.amount === null
+                      ? e.proposal.priceText === ''
+                        ? '—'
+                        : e.proposal.priceText
+                      : currency(e.proposal.amount)}
+                  </div>
+                  {e.proposal.amount === null && e.proposal.priceText !== '' && (
+                    <div className="text-xs text-navy-400">estimated range</div>
+                  )}
+                  {e.proposal.signedPdfUrl !== null && (
+                    <a
+                      href={e.proposal.signedPdfUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-0.5 inline-block text-xs font-medium text-navy-600 underline underline-offset-2 hover:text-navy-900"
+                    >
+                      Signed contract
+                    </a>
+                  )}
                 </div>
               </div>
             </li>
