@@ -9,6 +9,9 @@ import { ViewSwitcher, ViewingAsBanner } from '@/components/view-switcher';
 import { isViewingAs, viewAsEnabled } from '@/lib/view-as';
 import { DataModeBanner } from '@/components/ui';
 import { changeOrdersFor } from '@/lib/portal-data';
+import { resolveContractorName } from '@/lib/buildsuite/contractor-identity';
+import { requireTenantScope, scopeOfProject } from '@/lib/scope';
+import { brandCode } from '@/lib/brand';
 import { currentDataSource, currentSourceKind } from '@/lib/data/current-source';
 import {
   IconBudget,
@@ -65,6 +68,11 @@ export default async function PortalLayout({ children }: { children: React.React
   // the number in the bell is exactly what they'll find when they open it.
   let waitingChangeOrders = 0;
 
+  // The shell is branded with the *contractor's* code — "<Contractor> Project
+  // Hub" — never BuildSuite. A homeowner's contractor is the owner of the
+  // project they are looking at; a previewing contractor is themselves.
+  let contractorName: string | null = null;
+
   if (session.role === 'client') {
     // Same resolution the dashboard uses, so the context bar cannot name a
     // project the page below it does not show.
@@ -76,7 +84,10 @@ export default async function PortalLayout({ children }: { children: React.React
       waitingChangeOrders = changeOrdersFor(first).filter(
         (c) => c.status === 'Awaiting Client',
       ).length;
+      contractorName = await resolveContractorName(scopeOfProject(first));
     }
+  } else {
+    contractorName = await resolveContractorName(await requireTenantScope());
   }
 
   /**
@@ -114,7 +125,7 @@ export default async function PortalLayout({ children }: { children: React.React
 
   return (
     <AppShell
-      brand="APS"
+      brand={brandCode(contractorName ?? 'Alliance Pro Services')}
       brandSuffix="Project Hub"
       contextTitle={contextTitle}
       contextSubtitle={contextSubtitle}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useFormStatus } from 'react-dom';
 
 import { returnToMyAccount, viewAs } from '@/lib/actions';
 import { VIEW_AS_OPTIONS } from '@/lib/view-as';
@@ -93,35 +94,48 @@ export function ViewSwitcher({ current, viewing }: { current: Role; viewing: boo
             return (
               <form key={option.role} action={viewAs}>
                 <input type="hidden" name="role" value={option.role} />
-                <button
-                  type="submit"
-                  role="menuitem"
-                  disabled={active}
-                  className={`flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition ${
-                    active ? 'bg-navy-50' : 'hover:bg-navy-50'
-                  }`}
-                >
-                  <span
-                    className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
-                      active ? 'bg-amber-accent' : 'bg-navy-200'
-                    }`}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium text-navy-900">{option.label}</span>
-                    <span className="mt-0.5 block text-[11px] leading-snug text-navy-400">
-                      {option.hint}
-                    </span>
-                  </span>
-                  {active && (
-                    <span className="mt-0.5 text-[10px] font-semibold text-navy-400">CURRENT</span>
-                  )}
-                </button>
+                <SwitchItem active={active} label={option.label} hint={option.hint} />
               </form>
             );
           })}
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * One menu row. Lives inside its own `<form>` so `useFormStatus` sees that
+ * form's pending state: the moment a switch is clicked the row says
+ * "Switching…" and the menu locks, instead of sitting inert for the second or
+ * two the redirect and the next screen's render take. That gap read as a
+ * broken button in the 8 Sep walkthrough.
+ */
+function SwitchItem({ active, label, hint }: { active: boolean; label: string; hint: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      role="menuitem"
+      disabled={active || pending}
+      aria-busy={pending || undefined}
+      className={`flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition ${
+        active ? 'bg-navy-50' : 'hover:bg-navy-50'
+      } ${pending ? 'opacity-70' : ''}`}
+    >
+      <span
+        className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${
+          active ? 'bg-amber-accent' : pending ? 'animate-pulse bg-amber-accent' : 'bg-navy-200'
+        }`}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium text-navy-900">{label}</span>
+        <span className="mt-0.5 block text-[11px] leading-snug text-navy-400">
+          {pending ? 'Switching…' : hint}
+        </span>
+      </span>
+      {active && <span className="mt-0.5 text-[10px] font-semibold text-navy-400">CURRENT</span>}
+    </button>
   );
 }
 

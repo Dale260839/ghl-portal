@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useFormStatus } from 'react-dom';
 
 import { switchAccount } from '@/lib/actions';
 import type { DevAccount } from '@/lib/dev-accounts';
@@ -22,6 +23,24 @@ import type { DevAccount } from '@/lib/dev-accounts';
  * It renders only when `ENABLE_ACCOUNT_SWITCH=true`, and the label is
  * deliberately unflattering so nobody demos with it open.
  */
+/**
+ * The second line of an account row. Inside the row's own `<form>`, so
+ * `useFormStatus` sees that submission: the instant an account is clicked the
+ * line reads "Switching…" rather than leaving the menu inert for the seconds
+ * the sign-in, redirect and next render take.
+ */
+function AccountRowStatus({ email }: { email: string }) {
+  const { pending } = useFormStatus();
+  if (pending) {
+    return (
+      <span className="block animate-pulse text-xs font-medium text-amber-700" aria-live="polite">
+        Switching…
+      </span>
+    );
+  }
+  return <span className="block truncate text-xs text-navy-400">{email}</span>;
+}
+
 export function AccountSwitcher({ accounts, current }: { accounts: DevAccount[]; current?: string }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
@@ -108,7 +127,7 @@ export function AccountSwitcher({ accounts, current }: { accounts: DevAccount[];
                       <span className="block truncate text-xs font-medium text-navy-900">
                         {account.businessName || account.email}
                       </span>
-                      <span className="block truncate text-xs text-navy-400">{account.email}</span>
+                      <AccountRowStatus email={account.email} />
                       {/* The only question anyone asks of this menu is which
                           account has something to look at. Three of sixty-four
                           do, so the answer is worth putting on the row. */}

@@ -789,7 +789,9 @@ export async function switchAccount(formData: FormData) {
 
   // Everything reads through the scope, so every surface changes at once.
   revalidatePath('/', 'layout');
-  redirect('/dashboard/engagements');
+  // Land on the Portfolio Dashboard — the home of the contractor experience
+  // since the 8 Sep redesign — rather than one section of it.
+  redirect('/dashboard');
 }
 
 /**

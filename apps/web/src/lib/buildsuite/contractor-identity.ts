@@ -83,6 +83,8 @@ export class ContractorResolver {
    * test that builds its own gets its own empty store.
    */
   private readonly identityCache = createTtlCache<IdentityResult>(10 * 60_000);
+  /** Business name per contractor id, same lifetime and the same reasoning. */
+  private readonly nameCache = createTtlCache<string | null>(10 * 60_000);
 
   constructor(client: BuildSuiteClient) {
     this.client = client;
@@ -92,6 +94,31 @@ export class ContractorResolver {
     const safe = assertScope(scope, 'contractor identity');
     const key = [...safe.authProfileIds].sort().join(',');
     return this.identityCache.get(key, () => this.lookup(safe));
+  }
+
+  /**
+   * The contractor's business name, for the shell's brand code and context bar
+   * (Chris, 8 Sep: "the code and then Project Hub"). Read through the identity
+   * above, so it can only ever be this tenant's own `contractors` row. Null when
+   * the session is not linked to a contractor; callers fall back, never guess.
+   */
+  async businessName(scope: TenantScope): Promise<string | null> {
+    const identity = await this.resolve(scope);
+    if (!identity.resolved) return null;
+    const id = identity.identity.contractorId;
+
+    return this.nameCache.get(id, async () => {
+      const rows = await this.client.select<{ business_name: string | null; full_name: string | null }>({
+        from: 'contractors',
+        columns: ['business_name', 'full_name'],
+        filters: { id: `eq.${id}` },
+        limit: 1,
+      });
+      const row = rows[0];
+      if (row === undefined) return null;
+      const name = (row.business_name ?? row.full_name ?? '').trim();
+      return name === '' ? null : name;
+    });
   }
 
   private async lookup(safe: TenantScope): Promise<IdentityResult> {
@@ -169,6 +196,13 @@ export async function resolveContractor(scope: TenantScope): Promise<IdentityRes
   const resolver = getContractorResolver();
   if (resolver === null) return { resolved: false, reason: 'unavailable' };
   return resolver.resolve(scope);
+}
+
+/** The signed-in contractor's business name, or null when unlinked or unavailable. */
+export async function resolveContractorName(scope: TenantScope): Promise<string | null> {
+  const resolver = getContractorResolver();
+  if (resolver === null) return null;
+  return resolver.businessName(scope);
 }
 
 /** Test seam. A fresh resolver carries a fresh identity cache. */
