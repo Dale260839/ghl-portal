@@ -60,8 +60,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <AppShell
-      brand="BuildSuite"
-      brandSuffix="Dashboard"
+      brand="APS"
+      brandSuffix="Project Hub"
       contextTitle="Alliance Pro Services"
       contextSubtitle={`${session.name} · Project Manager`}
       nav={nav}

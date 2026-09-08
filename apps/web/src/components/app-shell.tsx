@@ -58,7 +58,7 @@ export function AppShell({
         <aside className="hidden w-64 shrink-0 flex-col border-r border-navy-100 bg-white lg:flex">
           <div className="flex h-16 items-center gap-2.5 border-b border-navy-100 px-5">
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-navy-900 text-xs font-bold text-white">
-              B
+              {brand.charAt(0)}
             </div>
             <span className="text-sm font-semibold tracking-tight text-navy-900">
               {brand}

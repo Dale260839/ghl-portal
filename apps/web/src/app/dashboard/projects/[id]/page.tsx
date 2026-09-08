@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { requireTenantScope } from '@/lib/scope';
 import { hasFinancials, hasOperationalDetail, stageLabel } from '@/lib/data/types';
 import { currentDataSource } from '@/lib/data/current-source';
-import { Badge, Card, CardHeader, HealthBadge, InternalNote, InternalOnly, ProgressBar, currency, shortDate } from '@/components/ui';
+import { Badge, Card, CardHeader, InternalNote, InternalOnly, ProgressBar, currency, shortDate } from '@/components/ui';
 import { ProjectEditor } from '@/components/project-editor';
 import { getHubRecords } from '@/lib/hub-db/records';
 
@@ -38,21 +38,6 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link href="/dashboard/projects" className="text-xs font-medium text-navy-400 hover:underline">
-          ← Projects
-        </Link>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold tracking-tight text-navy-900">
-            {project.projectName}
-          </h1>
-          {hasOperationalDetail(project) && <HealthBadge status={project.healthStatus} />}
-        </div>
-        <p className="mt-1 text-sm text-navy-400">
-          {project.projectAddress} · {project.buildsuiteProjectId}
-        </p>
-      </div>
-
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
         <div className="space-y-5">
           <Card className="px-5 py-5">
