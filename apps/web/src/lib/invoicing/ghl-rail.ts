@@ -28,6 +28,25 @@ import { readyToSend } from './invoice.ts';
  * ---------------------------------------------------------------------------
  */
 
+/**
+ * Who is billing, as it should print at the top of the invoice.
+ *
+ * Declared here rather than imported from BuildSuite so the rail stays a rail:
+ * it takes the details it is given and never goes looking for a contractor.
+ * Everything but the name is optional and is OMITTED from the payload when
+ * absent, because GoHighLevel renders an empty string as an empty line.
+ */
+export interface InvoiceBusinessDetails {
+  readonly name: string;
+  readonly logoUrl?: string | null;
+  readonly phone?: string | null;
+  readonly website?: string | null;
+  readonly address?: string | null;
+}
+
+/** How many days after issue an invoice falls due, when nothing else says. */
+export const DEFAULT_DUE_IN_DAYS = 5;
+
 export interface GhlRailConfig {
   readonly token: string;
   readonly locationId: string;
@@ -35,8 +54,15 @@ export interface GhlRailConfig {
   readonly apiVersion?: string;
   /** Injectable for tests; defaults to global fetch. */
   readonly fetchImpl?: typeof fetch;
-  /** The contractor's business name, shown on the invoice. */
-  readonly businessName?: string;
+  /**
+   * The contractor's own details, shown on the invoice.
+   *
+   * There is deliberately no default. A company name is never hardcoded here:
+   * without a profile the business block is omitted and GoHighLevel falls back
+   * to the location's own settings, which is the honest answer rather than
+   * putting somebody else's name on a contractor's invoice.
+   */
+  readonly business?: InvoiceBusinessDetails;
   /** Days until due, from the issue date. */
   readonly dueInDays?: number;
 }
@@ -54,13 +80,58 @@ interface GhlInvoiceItem {
   taxInclusive: boolean;
 }
 
+/** The business block as GoHighLevel's create-invoice API names its fields. */
+export interface GhlBusinessDetails {
+  name: string;
+  address?: string;
+  phoneNo?: string;
+  website?: string;
+  logoUrl?: string;
+}
+
+/**
+ * The business block, with every blank field left out.
+ *
+ * Exported so the review screen can preview exactly what will be sent rather
+ * than a second rendering of the same idea.
+ */
+export function businessDetailsFor(
+  business: InvoiceBusinessDetails | undefined,
+): GhlBusinessDetails | undefined {
+  const name = (business?.name ?? '').trim();
+  if (business === undefined || name === '') return undefined;
+
+  const put = (value: string | null | undefined): string | undefined => {
+    const text = (value ?? '').trim();
+    return text === '' ? undefined : text;
+  };
+
+  const address = put(business.address);
+  const phoneNo = put(business.phone);
+  const website = put(business.website);
+  const logoUrl = put(business.logoUrl);
+
+  return {
+    name,
+    ...(address !== undefined ? { address } : {}),
+    ...(phoneNo !== undefined ? { phoneNo } : {}),
+    ...(website !== undefined ? { website } : {}),
+    ...(logoUrl !== undefined ? { logoUrl } : {}),
+  };
+}
+
 export interface GhlInvoicePayload {
   altId: string;
   altType: 'location';
   name: string;
   title: 'INVOICE';
   currency: 'USD';
-  businessDetails: { name: string };
+  /**
+   * GHL's own keys, exactly: `name`, `address`, `phoneNo`, `website`,
+   * `logoUrl`. Omitted entirely when we hold no business name, so the location
+   * settings fill it in rather than a half-empty letterhead.
+   */
+  businessDetails?: GhlBusinessDetails;
   discount: { type: 'percentage'; value: number };
   contactDetails: { id: string; name: string; email: string; phoneNo?: string };
   items: GhlInvoiceItem[];
@@ -86,10 +157,17 @@ function dateOnly(d: Date): string {
 export function buildGhlInvoicePayload(
   invoice: DraftInvoice,
   recipient: InvoiceRecipient,
-  opts: { locationId: string; businessName: string; issue: Date; dueInDays: number },
+  opts: {
+    locationId: string;
+    /** The contractor's own details. Omitted from the payload when absent. */
+    business?: InvoiceBusinessDetails;
+    issue: Date;
+    dueInDays: number;
+  },
 ): GhlInvoicePayload {
   const due = new Date(opts.issue);
   due.setDate(due.getDate() + opts.dueInDays);
+  const businessDetails = businessDetailsFor(opts.business);
 
   return {
     altId: opts.locationId,
@@ -99,7 +177,7 @@ export function buildGhlInvoicePayload(
     name: invoice.reference,
     title: 'INVOICE',
     currency: 'USD',
-    businessDetails: { name: opts.businessName },
+    ...(businessDetails !== undefined ? { businessDetails } : {}),
     discount: { type: 'percentage', value: 0 },
     contactDetails: {
       id: recipient.ghlContactId,
@@ -142,8 +220,8 @@ export function createGhlInvoiceRail(config: GhlRailConfig): InvoiceRail {
   const base = (config.apiBase ?? DEFAULT_BASE).replace(/\/+$/, '');
   const version = config.apiVersion ?? DEFAULT_VERSION;
   const doFetch = config.fetchImpl ?? fetch;
-  const businessName = config.businessName ?? 'Alliance For Contractors';
-  const dueInDays = config.dueInDays ?? 5;
+  const business = config.business;
+  const dueInDays = config.dueInDays ?? DEFAULT_DUE_IN_DAYS;
 
   return {
     name: 'ghl',
@@ -160,7 +238,7 @@ export function createGhlInvoiceRail(config: GhlRailConfig): InvoiceRail {
 
       const payload = buildGhlInvoicePayload(invoice, recipient, {
         locationId: config.locationId,
-        businessName,
+        business,
         issue: new Date(),
         dueInDays,
       });
