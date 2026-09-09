@@ -8,6 +8,7 @@ import { AppShell, type NavItem } from '@/components/app-shell';
 import { ViewSwitcher, ViewingAsBanner } from '@/components/view-switcher';
 import { isViewingAs, viewAsEnabled } from '@/lib/view-as';
 import { DataModeBanner } from '@/components/ui';
+import { getHubClient } from '@/lib/hub-db/client';
 import { changeOrdersFor } from '@/lib/portal-data';
 import { resolveContractorName } from '@/lib/buildsuite/contractor-identity';
 import { requireTenantScope, scopeOfProject } from '@/lib/scope';
@@ -166,10 +167,21 @@ export default async function PortalLayout({ children }: { children: React.React
       banner={
         <>
           {viewing && <ViewingAsBanner persona={session.name} role={session.role} />}
-          <DataModeBanner kind={await currentSourceKind()} />
+          <DataModeBanner kind={await currentSourceKind()} hubConnected={getHubClient().available} />
           {session.role === 'contractor' && (
-            <div className="bg-navy-900 px-4 py-1.5 text-center text-xs text-navy-100">
-              Contractor preview — showing exactly what the client is served, through the same gate.
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 bg-navy-900 px-4 py-1.5 text-center text-xs text-navy-100">
+              <span>
+                Contractor preview — showing exactly what the client is served, through the same
+                gate.
+              </span>
+              {/* The sidebar here is the homeowner's, so without this the only
+                  way out of a preview was Sign out. */}
+              <Link
+                href="/dashboard"
+                className="rounded-full border border-navy-600 px-2.5 py-0.5 font-medium text-white transition hover:bg-navy-800"
+              >
+                ← Back to dashboard
+              </Link>
             </div>
           )}
         </>
