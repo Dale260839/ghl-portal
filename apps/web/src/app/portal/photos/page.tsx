@@ -11,7 +11,7 @@ export default async function PortalPhotos({
     return <PortalEmpty title="No project" body="Nothing is shared with this account yet." />;
   }
 
-  const photos = photosFor(project);
+  const photos = await photosFor(project);
 
   return (
     <div className="space-y-6">
@@ -36,9 +36,9 @@ export default async function PortalPhotos({
                 Photo
               </div>
               <div className="px-4 py-3">
-                <div className="text-sm font-medium text-navy-900">{p.caption}</div>
+                <div className="text-sm font-medium text-navy-900">{p.label}</div>
                 <div className="mt-0.5 text-xs text-navy-400">
-                  {shortDate(p.takenDate)} · {p.sourceLabel}
+                  {shortDate(p.createdAt ?? '')} · {p.category}
                 </div>
               </div>
             </Card>

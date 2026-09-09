@@ -428,6 +428,10 @@ export function clientSelection(selection: SelectionRecord) {
     approvalDeadline: selection.approvalDeadline,
     status: selection.status,
     clientDecision: selection.clientDecision,
+    // The homeowner's OWN words and their own approval date. Withholding these
+    // would hide a client's decision from the client who made it.
+    clientComments: selection.clientComments,
+    approvedDate: selection.approvedDate,
   };
 }
 

@@ -11,7 +11,7 @@ export default async function PortalDocuments({
     return <PortalEmpty title="No project" body="Nothing is shared with this account yet." />;
   }
 
-  const documents = documentsFor(project);
+  const documents = await documentsFor(project);
 
   return (
     <div className="space-y-6">
@@ -48,9 +48,9 @@ export default async function PortalDocuments({
             <tbody className="divide-y divide-navy-100">
               {documents.map((d) => (
                 <tr key={d.id} className="transition hover:bg-navy-50/60">
-                  <td className="px-5 py-3.5 text-sm font-medium text-navy-900">{d.name}</td>
+                  <td className="px-5 py-3.5 text-sm font-medium text-navy-900">{d.label}</td>
                   <td className="px-5 py-3.5 text-sm text-navy-600">{d.category}</td>
-                  <td className="px-5 py-3.5 text-sm text-navy-400">{shortDate(d.uploadedDate)}</td>
+                  <td className="px-5 py-3.5 text-sm text-navy-400">{shortDate(d.createdAt ?? '')}</td>
                   <td className="px-5 py-3.5 text-right">
                     <button type="button" className="text-sm font-medium text-navy-600 hover:underline">
                       Download
@@ -64,9 +64,9 @@ export default async function PortalDocuments({
           <ul className="divide-y divide-navy-100 sm:hidden">
             {documents.map((d) => (
               <li key={d.id} className="px-5 py-3.5">
-                <div className="text-sm font-medium text-navy-900">{d.name}</div>
+                <div className="text-sm font-medium text-navy-900">{d.label}</div>
                 <div className="mt-0.5 text-xs text-navy-400">
-                  {d.category} · {shortDate(d.uploadedDate)}
+                  {d.category} · {shortDate(d.createdAt ?? '')}
                 </div>
               </li>
             ))}

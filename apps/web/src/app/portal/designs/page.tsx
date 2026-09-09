@@ -30,7 +30,7 @@ export default async function PortalDesigns({
     return <PortalEmpty title="No project" body="Nothing is shared with this account yet." />;
   }
 
-  const selections = selectionsFor(project);
+  const selections = await selectionsFor(project);
   const waiting = selections.filter((s) => s.status === 'Awaiting Client');
 
   return (
@@ -72,7 +72,7 @@ export default async function PortalDesigns({
       ) : (
         <div className="space-y-4">
           {selections.map((s) => {
-            const net = s.upgradeAmount - s.creditAmount;
+            const net = (s.upgradeAmount ?? 0) - (s.creditAmount ?? 0);
             return (
               <Card key={s.id} className="px-5 py-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -95,7 +95,7 @@ export default async function PortalDesigns({
                   </div>
                   <div>
                     <dt className="text-xs tracking-wide text-navy-400 uppercase">Allowance</dt>
-                    <dd className="tabular mt-0.5 text-navy-900">{currency(s.allowance)}</dd>
+                    <dd className="tabular mt-0.5 text-navy-900">{currency((s.allowance ?? 0))}</dd>
                   </div>
                   <div>
                     <dt className="text-xs tracking-wide text-navy-400 uppercase">
@@ -114,9 +114,9 @@ export default async function PortalDesigns({
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-navy-400">
                   <span>Lead time {s.leadTime}</span>
                   {s.approvalDeadline !== '' && s.status === 'Awaiting Client' && (
-                    <span>Decision needed by {shortDate(s.approvalDeadline)}</span>
+                    <span>Decision needed by {shortDate(s.approvalDeadline ?? '')}</span>
                   )}
-                  {s.approvedDate !== '' && <span>Approved {shortDate(s.approvedDate)}</span>}
+                  {s.approvedDate !== '' && <span>Approved {shortDate(s.approvedDate ?? '')}</span>}
                 </div>
 
                 {s.clientComments !== '' && (

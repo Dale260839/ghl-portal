@@ -27,7 +27,7 @@ export default async function PortalUpdates({
     project.buildsuiteProjectId,
   );
   const updates = toClientUpdates(all, project);
-  const photos = photosFor(project);
+  const photos = (await photosFor(project));
 
   return (
     <div className="space-y-6">
@@ -76,7 +76,7 @@ export default async function PortalUpdates({
                           {/* Real photos arrive with the hub_photos table. */}
                           Photo
                         </div>
-                        <div className="px-3 py-2 text-xs text-navy-600">{p.caption}</div>
+                        <div className="px-3 py-2 text-xs text-navy-600">{p.label}</div>
                       </div>
                     ))}
                   </div>

@@ -81,7 +81,7 @@ export default async function PortalLayout({ children }: { children: React.React
     if (first !== undefined) {
       contextTitle = first.projectName;
       contextSubtitle = first.projectAddress;
-      waitingChangeOrders = changeOrdersFor(first).filter(
+      waitingChangeOrders = (await changeOrdersFor(first)).filter(
         (c) => c.status === 'Awaiting Client',
       ).length;
       contractorName = await resolveContractorName(scopeOfProject(first));

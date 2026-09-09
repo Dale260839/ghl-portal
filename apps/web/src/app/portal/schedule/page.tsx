@@ -11,6 +11,15 @@ function dayParts(iso: string): { weekday: string; day: string; month: string } 
   };
 }
 
+/** "8:00 AM – 12:00 PM", or just the start when there is no end. */
+function timeWindow(startsAt: string | null, endsAt: string | null): string {
+  if (startsAt === null) return 'Date to be confirmed';
+  const opts: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' };
+  const start = new Date(startsAt).toLocaleTimeString('en-US', opts);
+  if (endsAt === null) return start;
+  return `${start} – ${new Date(endsAt).toLocaleTimeString('en-US', opts)}`;
+}
+
 export default async function PortalSchedule({
   searchParams,
 }: {
@@ -21,7 +30,7 @@ export default async function PortalSchedule({
     return <PortalEmpty title="No project" body="Nothing is shared with this account yet." />;
   }
 
-  const items = scheduleFor(project);
+  const items = await scheduleFor(project);
 
   return (
     <div className="space-y-6">
@@ -56,7 +65,7 @@ export default async function PortalSchedule({
       ) : (
         <div className="space-y-4">
           {items.map((item) => {
-            const { weekday, day, month } = dayParts(item.scheduledDate);
+            const { weekday, day, month } = dayParts(item.startsAt ?? '');
             return (
               <Card key={item.id} className="p-5">
                 <div className="flex flex-wrap items-start gap-5">
@@ -71,24 +80,26 @@ export default async function PortalSchedule({
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2.5">
                       <span className="text-base font-medium text-navy-900">{item.title}</span>
-                      <Badge tone={item.status === 'Confirmed' ? 'good' : item.status === 'Tentative' ? 'warn' : 'neutral'}>
+                      <Badge
+                        tone={
+                          item.status === 'Complete'
+                            ? 'good'
+                            : item.status === 'In Progress'
+                              ? 'warn'
+                              : 'neutral'
+                        }
+                      >
                         {item.status}
                       </Badge>
                     </div>
                     <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-sm text-navy-400">
-                      <span>{item.timeWindow}</span>
-                      <span>{item.crew}</span>
-                      <span>{item.location}</span>
+                      <span>{timeWindow(item.startsAt, item.endsAt)}</span>
+                      {item.trade !== '' && <span>{item.trade}</span>}
                     </div>
-                    {item.clientNote !== '' && (
-                      <div className="mt-3 rounded-md bg-amber-soft px-3 py-2 text-sm text-amber-800">
-                        {item.clientNote}
-                      </div>
-                    )}
                   </div>
 
-                  <div className="flex shrink-0 flex-col gap-2">
-                    {item.accessConfirmed ? (
+                  <div className="hidden shrink-0 flex-col gap-2">
+                    {false ? (
                       <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3.5 py-2 text-sm font-medium text-emerald-700">
                         Access confirmed
                       </span>

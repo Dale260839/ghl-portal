@@ -29,7 +29,7 @@ export default async function PortalChangeOrders({
     return <PortalEmpty title="No project" body="Nothing is shared with this account yet." />;
   }
 
-  const orders = changeOrdersFor(project);
+  const orders = await changeOrdersFor(project);
   const waiting = orders.filter((c) => c.status === 'Awaiting Client');
   const approvedTotal = orders
     .filter((c) => c.status === 'Approved')
@@ -83,7 +83,7 @@ export default async function PortalChangeOrders({
                         {c.changeOrderNumber} · {c.title}
                       </div>
                       <div className="mt-0.5 text-xs text-navy-400">
-                        Requested by {c.requestedBy} on {shortDate(c.createdDate)}
+                        Requested by {c.requestedBy} on {shortDate(c.createdAt ?? '')}
                       </div>
                     </div>
                     <Badge tone={TONE[c.status] ?? 'neutral'}>{c.status}</Badge>
@@ -112,7 +112,7 @@ export default async function PortalChangeOrders({
                       </dd>
                       {c.revisedCompletionDate !== '' && (
                         <dd className="text-xs text-navy-400">
-                          new finish {shortDate(c.revisedCompletionDate)}
+                          new finish {shortDate(c.revisedCompletionDate ?? '')}
                         </dd>
                       )}
                     </div>
@@ -130,7 +130,7 @@ export default async function PortalChangeOrders({
 
                   {c.status === 'Approved' && c.approvalDate !== '' && (
                     <p className="mt-3 text-xs text-navy-400">
-                      Approved by {c.approvedBy} on {shortDate(c.approvalDate)}
+                      Approved by {c.approvedBy} on {shortDate(c.approvalDate ?? '')}
                     </p>
                   )}
 
@@ -150,7 +150,7 @@ export default async function PortalChangeOrders({
                       </button>
                       {c.approvalDeadline !== '' && (
                         <span className="text-xs text-navy-400">
-                          by {shortDate(c.approvalDeadline)}
+                          by {shortDate(c.approvalDeadline ?? '')}
                         </span>
                       )}
                     </div>

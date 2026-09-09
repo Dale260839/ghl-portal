@@ -24,6 +24,10 @@ import {
   SELECTIONS,
 } from './data/portal-fixtures.ts';
 import { ISSUES, PROJECTS } from './data/fixtures.ts';
+import { getHubSchedule } from './hub-db/schedule.ts';
+import { getHubMedia } from './hub-db/media.ts';
+import { clientSelection, getHubSelections } from './hub-db/selections.ts';
+import { scopeOfProject } from './tenant-scope.ts';
 import type {
   BudgetLine,
   ClientPaymentLine,
@@ -54,6 +58,27 @@ import type {
  * live this file changes and no screen does.
  */
 
+/** What a homeowner sees of a file. No uploader name — §9.4 employee records. */
+export interface ClientFile {
+  id: string;
+  label: string;
+  category: string;
+  storagePath: string | null;
+  externalUrl: string | null;
+  createdAt: string;
+}
+
+/** What a homeowner sees of an appointment. The crew notes are not on it. */
+export interface ClientScheduleItem {
+  id: string;
+  title: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  trade: string;
+  status: string;
+  notes: string;
+}
+
 function portalOpen(project: Project): boolean {
   return project.clientPortalEnabled;
 }
@@ -62,28 +87,96 @@ export function projectFor(buildsuiteProjectId: string): Project | null {
   return PROJECTS.find((p) => p.buildsuiteProjectId === buildsuiteProjectId) ?? null;
 }
 
-export function scheduleFor(project: Project): ScheduleItem[] {
+/**
+ * The schedule a homeowner sees.
+ *
+ * ---------------------------------------------------------------------------
+ * READS THE HUB, NOT FIXTURES (2026-09-10)
+ *
+ * The contractor's Schedule screen writes `hub_schedule_items`. This read stayed
+ * on `SCHEDULE_ITEMS` from a fixture file, so releasing an appointment did
+ * nothing a homeowner could see — the switch was decorative on this side.
+ *
+ * Both halves of §9.1 still apply, in the same order:
+ *
+ *   1. `portalOpen(project)` — the per-project master switch
+ *   2. `client_visible` on the row — filtered in the query, not after it
+ *
+ * The tenant filter comes from the PROJECT, not from a session: a homeowner
+ * holds no tenant scope, and `scopeOfProject` is the only legitimate way to get
+ * one for a project they were already authorized to read.
+ * ---------------------------------------------------------------------------
+ */
+export async function scheduleFor(project: Project): Promise<ClientScheduleItem[]> {
   if (!portalOpen(project)) return [];
-  // §6.1 — the schedule switch gates this whole screen, not just the dates on it.
-  if (!project.showScheduleToClient) return [];
-  return SCHEDULE_ITEMS.filter(
-    (s) => s.projectId === project.buildsuiteProjectId && s.clientVisible,
-  ).sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
-}
 
-export function documentsFor(project: Project): ProjectDocument[] {
-  if (!portalOpen(project)) return [];
-  return DOCUMENTS.filter(
-    (d) => d.projectId === project.buildsuiteProjectId && d.clientVisible,
-  ).sort((a, b) => b.uploadedDate.localeCompare(a.uploadedDate));
-}
+  const hub = getHubSchedule();
+  if (!hub.available) return [];
 
-export function photosFor(project: Project): ProjectPhoto[] {
-  if (!portalOpen(project)) return [];
-  return PHOTOS.filter((p) => p.projectId === project.buildsuiteProjectId && p.clientVisible).sort(
-    (a, b) => b.takenDate.localeCompare(a.takenDate),
+  const items = await hub.schedule.listForProject(
+    scopeOfProject(project),
+    project.buildsuiteProjectId,
   );
+
+  return items
+    .filter((item) => item.clientVisible)
+    .map((item) => ({
+      id: item.id,
+      title: item.title,
+      startsAt: item.startsAt,
+      endsAt: item.endsAt,
+      trade: item.trade,
+      status: item.status,
+      // The contractor's own notes are NOT published. A homeowner sees when
+      // work is happening and what it is, not the crew instructions.
+      notes: '',
+    }));
 }
+
+/**
+ * The documents a homeowner sees. Reads `hub_documents`, not fixtures.
+ *
+ * A file is shown only when the portal is open AND the row is released. The
+ * `storagePath` is passed through so the screen can link to the download route,
+ * which mints a short-lived signed URL — the bucket is private, so nothing here
+ * is reachable by URL alone.
+ */
+export async function documentsFor(project: Project): Promise<ClientFile[]> {
+  return filesFor(project, 'document');
+}
+
+/** The photos a homeowner sees. Same rules as documents. */
+export async function photosFor(project: Project): Promise<ClientFile[]> {
+  return filesFor(project, 'photo');
+}
+
+async function filesFor(project: Project, kind: 'document' | 'photo'): Promise<ClientFile[]> {
+  if (!portalOpen(project)) return [];
+
+  const hub = getHubMedia();
+  if (!hub.available) return [];
+
+  const items = await hub.media.listForProject(
+    scopeOfProject(project),
+    kind,
+    project.buildsuiteProjectId,
+  );
+
+  return items
+    .filter((item) => item.clientVisible)
+    .map((item) => ({
+      id: item.id,
+      label: item.label,
+      category: item.category,
+      storagePath: item.storagePath,
+      externalUrl: item.externalUrl,
+      createdAt: item.createdAt,
+      // `uploadedBy` is a member of the contractor's team. §9.4 keeps employee
+      // records off a client screen, so the name does not travel.
+    }));
+}
+
+
 
 export function messagesFor(project: Project): Message[] {
   if (!portalOpen(project)) return [];
@@ -142,19 +235,47 @@ function toClientSelection(s: MaterialSelection): ClientSelection {
   return safe;
 }
 
-export function selectionsFor(project: Project): ClientSelection[] {
+/**
+ * The selections a homeowner sees.
+ *
+ * Projected through `clientSelection`, which builds the client shape BY
+ * LITERAL — so `actualCost`, what the contractor actually pays, is not dropped
+ * here, it is never present. See §9.3 and `hub-db/selections.ts`.
+ */
+export async function selectionsFor(project: Project) {
   if (!portalOpen(project)) return [];
-  return SELECTIONS.filter(
-    (s) => s.projectId === project.buildsuiteProjectId && s.clientVisible,
-  ).map(toClientSelection);
+
+  const hub = getHubSelections();
+  if (!hub.available) return [];
+
+  const rows = await hub.selections.listSelections(
+    scopeOfProject(project),
+    project.buildsuiteProjectId,
+  );
+  return rows.filter((r) => r.clientVisible).map(clientSelection);
 }
 
-export function changeOrdersFor(project: Project): ChangeOrder[] {
+
+/**
+ * The change orders a homeowner sees — the ones sent to them for a decision.
+ *
+ * Every figure here is §9.3 allow-list: a client being asked to approve a
+ * change has to see what it costs. There is no internal number on a change
+ * order at all, which is why this needs no projection.
+ */
+export async function changeOrdersFor(project: Project) {
   if (!portalOpen(project)) return [];
-  return CHANGE_ORDERS.filter(
-    (c) => c.projectId === project.buildsuiteProjectId && c.clientVisible,
-  ).sort((a, b) => b.createdDate.localeCompare(a.createdDate));
+
+  const hub = getHubSelections();
+  if (!hub.available) return [];
+
+  const rows = await hub.selections.listChangeOrders(
+    scopeOfProject(project),
+    project.buildsuiteProjectId,
+  );
+  return rows.filter((r) => r.clientVisible);
 }
+
 
 /**
  * A punch item as the client may see it (§9.3).
