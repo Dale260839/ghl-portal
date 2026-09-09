@@ -49,6 +49,29 @@ export interface ContractorIdentity {
   via: 'auth_profile' | 'ghl_contact' | 'email';
 }
 
+/**
+ * The contractor's own details, as they should appear on an invoice.
+ *
+ * Chris, 10 Sep: an invoice the contractor opens to send should look like a
+ * proper invoice — their logo, their contact details, the client filled in from
+ * the proposal. This is the first half of that: who is billing.
+ *
+ * Every field is nullable and stays null when the `contractors` row is blank.
+ * A screen renders what is here and nothing else, so a contractor without a
+ * website does not get an empty line where a website should be.
+ */
+export interface ContractorProfile {
+  /** `business_name`, falling back to `full_name`. Null when both are blank. */
+  businessName: string | null;
+  /** Only a real http(s) URL. A stored file name or a path is not one. */
+  logoUrl: string | null;
+  phone: string | null;
+  website: string | null;
+  /** Street, city, state and postal code joined, with blank parts dropped. */
+  address: string | null;
+  email: string | null;
+}
+
 export type IdentityResult =
   | { resolved: true; identity: ContractorIdentity }
   | {
@@ -68,6 +91,71 @@ interface AuthProfileRow {
   email: string | null;
 }
 
+/**
+ * Never `*`, same rule as every other BuildSuite read: the key grants more than
+ * it should, so the select is the narrowest thing that answers the question.
+ */
+const PROFILE_COLUMNS = [
+  'business_name',
+  'full_name',
+  'business_logo_url',
+  'business_logo',
+  'phone',
+  'website',
+  'street_address',
+  'city',
+  'state',
+  'postal_code',
+  'email',
+] as const;
+
+interface ContractorProfileRow {
+  business_name: string | null;
+  full_name: string | null;
+  business_logo_url: string | null;
+  business_logo: string | null;
+  phone: string | null;
+  website: string | null;
+  street_address: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  email: string | null;
+}
+
+/** Trimmed, or null. An empty string on an invoice is a blank line nobody meant. */
+function trimmed(value: string | null | undefined): string | null {
+  const text = (value ?? '').trim();
+  return text === '' ? null : text;
+}
+
+/**
+ * A logo only counts if it is something a browser and GoHighLevel can both
+ * fetch. Both logo columns hold a mix of URLs and stored file names on the live
+ * data, and a file name rendered as an image is a broken image on an invoice.
+ */
+function httpUrl(value: string | null | undefined): string | null {
+  const text = trimmed(value);
+  if (text === null) return null;
+  return /^https?:\/\/\S+$/i.test(text) ? text : null;
+}
+
+function toProfile(row: ContractorProfileRow): ContractorProfile {
+  const address = [row.street_address, row.city, row.state, row.postal_code]
+    .map((part) => trimmed(part))
+    .filter((part): part is string => part !== null)
+    .join(', ');
+
+  return {
+    businessName: trimmed(row.business_name) ?? trimmed(row.full_name),
+    logoUrl: httpUrl(row.business_logo_url) ?? httpUrl(row.business_logo),
+    phone: trimmed(row.phone),
+    website: trimmed(row.website),
+    address: address === '' ? null : address,
+    email: trimmed(row.email),
+  };
+}
+
 export class ContractorResolver {
   private readonly client: BuildSuiteClient;
 
@@ -85,6 +173,11 @@ export class ContractorResolver {
   private readonly identityCache = createTtlCache<IdentityResult>(10 * 60_000);
   /** Business name per contractor id, same lifetime and the same reasoning. */
   private readonly nameCache = createTtlCache<string | null>(10 * 60_000);
+  /**
+   * The full invoice profile per contractor id. Held separately from the name
+   * because most screens want only the name and this select is wider.
+   */
+  private readonly profileCache = createTtlCache<ContractorProfile | null>(10 * 60_000);
 
   constructor(client: BuildSuiteClient) {
     this.client = client;
@@ -118,6 +211,32 @@ export class ContractorResolver {
       if (row === undefined) return null;
       const name = (row.business_name ?? row.full_name ?? '').trim();
       return name === '' ? null : name;
+    });
+  }
+
+  /**
+   * The contractor's details for the top of an invoice.
+   *
+   * Read through the same identity as `businessName`, so it can only ever be
+   * this tenant's own `contractors` row, and read-only like everything else
+   * that touches BuildSuite. Null when the session is not linked, which the
+   * caller renders as "we do not know", never as a blank letterhead.
+   */
+  async profile(scope: TenantScope): Promise<ContractorProfile | null> {
+    const identity = await this.resolve(scope);
+    if (!identity.resolved) return null;
+    const id = identity.identity.contractorId;
+
+    return this.profileCache.get(id, async () => {
+      const rows = await this.client.select<ContractorProfileRow>({
+        from: 'contractors',
+        columns: PROFILE_COLUMNS,
+        filters: { id: `eq.${id}` },
+        limit: 1,
+      });
+      const row = rows[0];
+      if (row === undefined) return null;
+      return toProfile(row);
     });
   }
 
@@ -203,6 +322,18 @@ export async function resolveContractorName(scope: TenantScope): Promise<string 
   const resolver = getContractorResolver();
   if (resolver === null) return null;
   return resolver.businessName(scope);
+}
+
+/**
+ * The signed-in contractor's details for an invoice, or null when unlinked or
+ * unavailable. Callers render what is present and invent nothing.
+ */
+export async function resolveContractorProfile(
+  scope: TenantScope,
+): Promise<ContractorProfile | null> {
+  const resolver = getContractorResolver();
+  if (resolver === null) return null;
+  return resolver.profile(scope);
 }
 
 /** Test seam. A fresh resolver carries a fresh identity cache. */

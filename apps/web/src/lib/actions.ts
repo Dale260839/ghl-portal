@@ -31,6 +31,7 @@ import { getHubStorage } from './hub-db/storage.ts';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
 import { resolveInvoiceRail, draftFromStored } from './invoicing/rail.ts';
+import { resolveContractorProfile } from './buildsuite/contractor-identity.ts';
 import { getProposalsReader } from './buildsuite/proposals';
 import { paymentScheduleDrafts } from './payment-schedule';
 import { GRANTABLE_RESOURCES } from './permissions';
@@ -918,7 +919,23 @@ export async function createInvoiceOnRail(formData: FormData) {
   const project = await db.getProject(scope, draft.projectId);
   if (project === null) throw new Error('that project is not readable');
 
-  const rail = resolveInvoiceRail();
+  // The contractor's own logo and contact details, so the invoice GHL receives
+  // is theirs rather than a bare line item (Chris, 10 Sep). Null when the
+  // session is not linked to a contractor record; the rail then sends no
+  // business block at all rather than somebody else's name.
+  const profile = await resolveContractorProfile(scope);
+  const rail = resolveInvoiceRail(
+    process.env,
+    profile === null || profile.businessName === null
+      ? undefined
+      : {
+          name: profile.businessName,
+          logoUrl: profile.logoUrl,
+          phone: profile.phone,
+          website: profile.website,
+          address: profile.address,
+        },
+  );
   const invoice = draftFromStored(draft, project);
   const result = await rail.createDraft(invoice, {
     ghlContactId: project.primaryContactId,

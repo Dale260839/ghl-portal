@@ -130,6 +130,27 @@ export class HubInvoiceDrafts {
   }
 
   /**
+   * Every stored draft for one project, across all of its proposals.
+   *
+   * The project's money tab needs this: a project can carry more than one
+   * proposal, and the contractor looking at Payments wants every invoice raised
+   * against the job, not one contract's worth. Ordered by proposal then line so
+   * a project with two contracts does not interleave their instalments.
+   */
+  async listForProject(scope: TenantScope, projectId: string): Promise<StoredInvoiceDraft[]> {
+    const contractorId = assertContractor(scope, 'invoice drafts');
+    if (projectId.trim() === '') return [];
+
+    const rows = await this.client.select<DraftRow>({
+      from: 'hub_invoice_drafts',
+      filters: { contractor_id: `eq.${contractorId}`, project_id: `eq.${projectId}` },
+      order: 'proposal_id.asc,line_order.asc',
+      limit: 200,
+    });
+    return rows.map(toDraft);
+  }
+
+  /**
    * Create the drafts for a proposal's schedule, once.
    *
    * Upserts on `(proposal_id, line_order)` so re-opening the review screen does

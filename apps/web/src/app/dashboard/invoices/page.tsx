@@ -2,7 +2,9 @@ import { SubmitButton } from '@/components/submit-button';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getProposalsReader } from '@/lib/buildsuite/proposals';
-import { resolveContractor } from '@/lib/buildsuite/contractor-identity';
+import { resolveContractor, resolveContractorProfile } from '@/lib/buildsuite/contractor-identity';
+import { DEFAULT_DUE_IN_DAYS } from '@/lib/invoicing/ghl-rail';
+import { InvoicePreview } from '@/components/invoice-preview';
 import { getHubInvoiceDrafts } from '@/lib/hub-db/invoice-drafts';
 import { joinProposalsToProjects } from '@/lib/signed-work';
 import { draftsForProposal, percentTotal, scheduleFor } from '@/lib/payment-schedule';
@@ -76,6 +78,20 @@ export default async function Invoices() {
   if (!identity.resolved || scope.contractorId === undefined) {
     return shell(<NotLinkedToContractor what="Invoices" />);
   }
+
+  // The contractor's own letterhead, read once for the whole screen. Null when
+  // their record carries nothing, in which case the preview says so rather than
+  // showing a blank header that looks like a rendering fault.
+  const business = await resolveContractorProfile(scope);
+
+  // The dates the rail will stamp, computed here so the preview and the invoice
+  // agree. `createDraft` issues on the day it runs, which for a contractor
+  // reviewing and then clicking is today.
+  const issue = new Date();
+  const due = new Date(issue);
+  due.setDate(due.getDate() + DEFAULT_DUE_IN_DAYS);
+  const issueDate = issue.toISOString().slice(0, 10);
+  const dueDate = due.toISOString().slice(0, 10);
 
   const projects = await (await currentDataSource(scope)).listProjects(scope);
   const proposals = await reader.listForProjects(
@@ -290,6 +306,28 @@ export default async function Invoices() {
                           className="rounded-lg border border-navy-200 px-3 py-2 text-sm sm:col-span-3"
                         />
                       </form>
+
+                      {/* The document itself, as the rail will build it. The
+                          reference is composed exactly as `draftFromStored`
+                          composes it, so what a contractor reads here is what
+                          GoHighLevel receives. The homeowner's email is not on
+                          the project record, so it is simply not shown — the
+                          invoice attaches to their GHL contact, which holds it. */}
+                      <InvoicePreview
+                        business={business}
+                        reference={
+                          row.project.projectCode === null
+                            ? `Invoice ${draft.line.order}`
+                            : `${row.project.projectCode} · Invoice ${draft.line.order}`
+                        }
+                        clientName={row.project.clientName}
+                        clientEmail={null}
+                        title={title ?? ''}
+                        terms={saved?.description ?? draft.line.description}
+                        amount={amount}
+                        issueDate={issueDate}
+                        dueDate={dueDate}
+                      />
 
                       {/* Creating the invoice in GoHighLevel. A separate form
                           from Save on purpose: saving is the contractor's own
