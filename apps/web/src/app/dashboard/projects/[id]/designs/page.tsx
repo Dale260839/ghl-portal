@@ -1,3 +1,4 @@
+import { NotLinkedToContractor } from '@/components/not-linked';
 import { getHubSelections } from '@/lib/hub-db/selections';
 import { SelectionsManager } from '@/components/selections-manager';
 import { notFound } from 'next/navigation';
@@ -33,6 +34,14 @@ export default async function ProjectDesignsControl({
   const db = await currentDataSource(scope);
   const project = await db.getProject(scope, id);
   if (project === null) notFound();
+
+  // Nine of the sixty-eight accounts on this location do not resolve to a
+  // contractor record, and everything the Hub stores is filed under one. Say
+  // so rather than throwing: `assertContractor` is right to refuse, but a
+  // TenancyError on screen tells the person nothing they can act on.
+  if (scope.contractorId === undefined) {
+    return <NotLinkedToContractor what="Selections" />;
+  }
 
   const hub = getHubSelections();
   const rows = hub.available ? await hub.selections.listSelections(scope, id) : [];

@@ -454,3 +454,36 @@ test('every signed-contract link carries rel="noreferrer"', () => {
     }
   }
 });
+
+test('a screen that reads the Hub handles an account with no contractor', () => {
+  // `assertContractor` throws when a session does not resolve to a contractor
+  // record, which is correct — everything the Hub stores is filed under one.
+  // But a TenancyError on screen tells the person nothing they can act on, and
+  // NINE of the sixty-eight accounts on this location do not resolve.
+  //
+  // Found on 2026-09-10 by opening Schedule as chris@allianceforcontractors.com
+  // and getting a 500. Every Hub-backed project screen must say so instead.
+  const offenders: string[] = [];
+
+  for (const file of FILES) {
+    const path = rel(file.path);
+    if (!path.startsWith('app/dashboard/projects/')) continue;
+    // Only the repositories whose READ methods call `assertContractor`. This
+    // was `getHub[A-Z]\w*` and flagged two screens that are fine: `records`
+    // reads overlays through `assertScope`, which an unlinked account passes.
+    // A guardrail that fires on working code gets exemptions added to it until
+    // it means nothing.
+    if (!/getHub(Schedule|Media|Selections|Operational)\(\)/.test(file.text)) continue;
+    // The GUARD, not the import. Matching `NotLinkedToContractor` anywhere
+    // passed on a file that only imported it — verified by deleting the guard
+    // and watching this test stay green.
+    if (/scope\.contractorId === undefined/.test(file.text)) continue;
+    offenders.push(path);
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    'a Hub-backed screen throws TenancyError instead of explaining the account is unlinked',
+  );
+});

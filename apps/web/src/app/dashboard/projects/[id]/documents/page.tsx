@@ -1,3 +1,4 @@
+import { NotLinkedToContractor } from '@/components/not-linked';
 import { getHubMedia } from '@/lib/hub-db/media';
 import { MediaManager } from '@/components/media-manager';
 import { notFound } from 'next/navigation';
@@ -23,6 +24,14 @@ export default async function ProjectDocumentsControl({
   const db = await currentDataSource(scope);
   const project = await db.getProject(scope, id);
   if (project === null) notFound();
+
+  // Nine of the sixty-eight accounts on this location do not resolve to a
+  // contractor record, and everything the Hub stores is filed under one. Say
+  // so rather than throwing: `assertContractor` is right to refuse, but a
+  // TenancyError on screen tells the person nothing they can act on.
+  if (scope.contractorId === undefined) {
+    return <NotLinkedToContractor what="Documents" />;
+  }
 
   const hub = getHubMedia();
   const items = hub.available ? await hub.media.listForProject(scope, 'document', id) : [];
