@@ -1,7 +1,9 @@
 # Homeowner login: the project code is the password
 
 **Decision:** Chris, 2026-09-10.
-**Status:** built and merged on the Hub side. **One thing is needed from BuildSuite** — §3.
+**Status:** **live end to end.** The BuildSuite automation was already running
+before the Hub side was built; the Hub side is built and merged. Nothing is
+outstanding — §3 is now a description, not a request.
 **Supersedes:** the emailed sign-in link (C-2 / D3 §6), retired the same day.
 
 ---
@@ -12,7 +14,7 @@
   contractor + homeowner sign in BuildSuite
               │
               ▼
-  BuildSuite automation emails the homeowner their project code    ← §3, NOT BUILT
+  BuildSuite automation emails the homeowner their project code    ← already live, §3
               │
               ▼
   homeowner opens  /signin
@@ -77,19 +79,47 @@ Two consequences worth knowing before they surprise someone:
 
 ---
 
-## 3 · What BuildSuite needs to send  ← the only outstanding piece
+## 3 · The BuildSuite side — already running
 
-When a proposal reaches `signature_status = 'SIGNED'`, email
-`projects.client_email` with `projects.project_code`.
+Confirmed by John, 2026-09-10: **the automation exists and fires after the
+signature.** It emails the homeowner their project code. It was in place before
+any of the Hub work below, which is why nothing here waits on it.
 
-Nothing else is required — no callback, no webhook, no shared secret, no new
-endpoint. The Hub verifies against BuildSuite at sign-in, so it needs no
-notification that a signature happened; it only needs the homeowner to know
-their code.
+Nothing further is required from BuildSuite for the login to work — no callback,
+no webhook, no shared secret, no new endpoint. The Hub verifies against
+BuildSuite at sign-in, so it never needs to be *told* that a signature happened.
+It only needs the homeowner to know their code, which is what the automation
+does.
 
-The message needs three things:
+### The one thing to eyeball, once
 
-1. the project code, shown as the code and not folded into a sentence;
+The Hub compares what the homeowner types against `projects.project_code`, for
+the project whose `projects.client_email` is the address they typed. So the
+automation's email has to carry **that exact code**, sent to **that exact
+address**. If it sends a different identifier — a proposal id, a GHL-side
+reference, a formatted variant — the code will be right in the message and wrong
+at the door.
+
+This could not be verified from here: the automation sends BuildSuite-side, not
+through the GHL sub-account this repo holds a token for, and there is no email
+log exposed on the BuildSuite key. **Open one sent email and check the code in
+it matches `project_code` character for character.** One look settles it.
+
+Two live examples to check against:
+
+| `project_code` | `client_email` |
+|---|---|
+| `BSA-052` | zandergarcia552@gmail.com |
+| `BSA-APS-001` | zandergarcia552@gmail.com |
+
+Note the second shape. A homeowner with two signed jobs gets two codes, and
+either one signs them in — see §2.
+
+### What the email should contain
+
+Three things, if it does not already:
+
+1. the project code, shown as a code and not folded into a sentence;
 2. the address it must be used with (`client_email`, the one being written to);
 3. the link — `https://<hub host>/signin`.
 
