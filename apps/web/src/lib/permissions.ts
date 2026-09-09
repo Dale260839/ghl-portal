@@ -40,6 +40,7 @@ import type { Role } from './demo-accounts.ts';
 export type Resource =
   | 'project'
   | 'milestone'
+  | 'schedule'
   | 'task'
   | 'dailyUpdate'
   | 'selection'
@@ -103,6 +104,22 @@ const MATRIX: Matrix = {
     delete: CONTRACTOR,
     archive: CONTRACTOR,
     publish: CONTRACTOR,
+  },
+
+  // §6.3 `Schedule Item` — the appointments on a job. Same shape as a
+  // milestone: the office sets the dates, everyone may read, and a homeowner
+  // sees only the ones released to them (`clientVisible` plus the §9.1 gate).
+  //
+  // Read is EVERYONE rather than contractor-only because the crew needs to know
+  // when they are expected on site. It is not a way onto this screen: the whole
+  // `/dashboard` tree redirects any session that is not a contractor, so a
+  // field member cannot reach the management surface regardless of the matrix.
+  schedule: {
+    create: CONTRACTOR,
+    read: EVERYONE,
+    update: CONTRACTOR,
+    delete: CONTRACTOR,
+    archive: CONTRACTOR,
   },
 
   // The crew starts and completes their own work; the office assigns it.

@@ -20,6 +20,7 @@ import { actionTenantScope, requireTenantScope } from './scope';
 import { getHubVisibility } from './hub-db/visibility';
 import { isUuid } from './data/visibility-overlay.ts';
 import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db/records';
+import { getHubSchedule } from './hub-db/schedule.ts';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
 import { resolveInvoiceRail, draftFromStored } from './invoicing/rail.ts';
@@ -944,4 +945,106 @@ export async function createInvoiceOnRail(formData: FormData) {
   );
 
   revalidatePath('/dashboard/invoices');
+}
+
+// ── Schedule (§6.3) ─────────────────────────────────────────────────────────
+//
+// The Schedule screen rendered a fixture list behind a button with no handler.
+// These are the write paths behind it. Every one asserts the contractor, and
+// `/dashboard` already refuses any session that is not one — the route is the
+// first gate, `assertCan` the second, and the tenant filter on the row the
+// third.
+
+/** The Hub's schedule repository, or a clear failure. Shared by the three below. */
+async function scheduleContext() {
+  const session = await getSession();
+  if (session === null) throw new Error('not signed in');
+
+  const hub = getHubSchedule();
+  if (!hub.available) {
+    throw new Error(`the Hub database is not connected (missing ${hub.missing.join(', ')})`);
+  }
+  return { session, scope: await actionTenantScope(session), schedule: hub.schedule };
+}
+
+/**
+ * A datetime-local input gives `2026-09-10T08:00` or nothing at all.
+ *
+ * Returned as null rather than an empty string, because an appointment with no
+ * date is a real state — a job pencilled in before the date is agreed — and
+ * `''` would be stored as a date nobody can order by.
+ */
+function optionalDateTime(value: FormDataEntryValue | null): string | null {
+  const text = String(value ?? '').trim();
+  return text === '' ? null : text;
+}
+
+export async function createScheduleItem(formData: FormData) {
+  const { session, scope, schedule } = await scheduleContext();
+  assertCan(session.role, 'create', 'schedule');
+
+  const projectId = String(formData.get('projectId') ?? '');
+  const title = String(formData.get('title') ?? '');
+  if (projectId === '') throw new Error('projectId is required');
+  if (title.trim() === '') throw new Error('an appointment needs a title');
+
+  await schedule.create(
+    scope,
+    {
+      projectId,
+      title,
+      startsAt: optionalDateTime(formData.get('startsAt')),
+      endsAt: optionalDateTime(formData.get('endsAt')),
+      trade: String(formData.get('trade') ?? ''),
+      status: String(formData.get('status') ?? 'Scheduled'),
+      // Never released on creation. The contractor decides when a homeowner
+      // sees a date, and a checkbox that defaults to on would publish work
+      // nobody had confirmed.
+      clientVisible: false,
+      notes: String(formData.get('notes') ?? ''),
+    },
+    { name: session.name },
+  );
+
+  revalidatePath(`/dashboard/projects/${projectId}/schedule`);
+}
+
+export async function updateScheduleItem(formData: FormData) {
+  const { session, scope, schedule } = await scheduleContext();
+  assertCan(session.role, 'update', 'schedule');
+
+  const itemId = String(formData.get('itemId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+  if (itemId === '') throw new Error('itemId is required');
+
+  await schedule.update(
+    scope,
+    itemId,
+    {
+      title: String(formData.get('title') ?? ''),
+      startsAt: optionalDateTime(formData.get('startsAt')),
+      endsAt: optionalDateTime(formData.get('endsAt')),
+      trade: String(formData.get('trade') ?? ''),
+      status: String(formData.get('status') ?? 'Scheduled'),
+      // An unchecked box submits nothing, so this is read as a presence test.
+      // Reading only the present keys would make un-releasing a no-op.
+      clientVisible: formData.get('clientVisible') !== null,
+      notes: String(formData.get('notes') ?? ''),
+    },
+    { name: session.name },
+  );
+
+  revalidatePath(`/dashboard/projects/${projectId}/schedule`);
+}
+
+export async function archiveScheduleItem(formData: FormData) {
+  const { session, scope, schedule } = await scheduleContext();
+  assertCan(session.role, 'archive', 'schedule');
+
+  const itemId = String(formData.get('itemId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+  if (itemId === '') throw new Error('itemId is required');
+
+  await schedule.archive(scope, itemId, { name: session.name });
+  revalidatePath(`/dashboard/projects/${projectId}/schedule`);
 }
