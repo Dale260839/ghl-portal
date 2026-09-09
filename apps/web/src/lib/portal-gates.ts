@@ -28,6 +28,7 @@ import { getHubSchedule } from './hub-db/schedule.ts';
 import { getHubMedia } from './hub-db/media.ts';
 import { clientSelection, getHubSelections } from './hub-db/selections.ts';
 import { scopeOfProject } from './tenant-scope.ts';
+import { clientCanSeeDocument } from './document-folders.ts';
 import type {
   BudgetLine,
   ClientPaymentLine,
@@ -162,8 +163,17 @@ async function filesFor(project: Project, kind: 'document' | 'photo'): Promise<C
     project.buildsuiteProjectId,
   );
 
+  // Documents carry a second gate: the folder. The release switch alone is not
+  // enough, because a row released before folders existed still sits in a
+  // legacy category, and one released and later moved into a trade folder
+  // would otherwise keep showing. Photos have no folders, so the switch is all
+  // there is on that side.
   return items
-    .filter((item) => item.clientVisible)
+    .filter((item) =>
+      kind === 'document'
+        ? clientCanSeeDocument({ category: item.category, clientVisible: item.clientVisible })
+        : item.clientVisible,
+    )
     .map((item) => ({
       id: item.id,
       label: item.label,
