@@ -23,6 +23,7 @@ import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db
 import { getHubSchedule } from './hub-db/schedule.ts';
 import { getHubOperational } from './hub-db/operational.ts';
 import { getHubMedia } from './hub-db/media.ts';
+import { getHubSelections } from './hub-db/selections.ts';
 import { getHubStorage } from './hub-db/storage.ts';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
@@ -1248,4 +1249,149 @@ export async function archiveProjectFile(formData: FormData) {
 
   await media.archive(scope, kind, itemId, { name: session.name });
   revalidatePath(`/dashboard/projects/${projectId}/${kind === 'document' ? 'documents' : 'photos'}`);
+}
+
+// ── Selections and change orders (§6.5 / §6.6) ──────────────────────────────
+//
+// The last two of the six screens that existed and did nothing. These are the
+// only two whose tables did not exist; 0009 creates them.
+
+async function selectionsContext() {
+  const session = await getSession();
+  if (session === null) throw new Error('not signed in');
+
+  const hub = getHubSelections();
+  if (!hub.available) {
+    throw new Error(`the Hub database is not connected (missing ${hub.missing.join(', ')})`);
+  }
+  return { session, scope: await actionTenantScope(session), repo: hub.selections };
+}
+
+/**
+ * A money field from a form.
+ *
+ * Blank is null, not zero — "no allowance recorded" and "an allowance of £0"
+ * are different claims, and the second one appears on a client's screen.
+ */
+function optionalMoney(value: FormDataEntryValue | null): number | null {
+  const text = String(value ?? '').trim();
+  if (text === '') return null;
+  const parsed = Number(text.replace(/[$,\s]/g, ''));
+  if (!Number.isFinite(parsed)) throw new Error(`"${text}" is not an amount`);
+  return parsed;
+}
+
+export async function createSelection(formData: FormData) {
+  const { session, scope, repo } = await selectionsContext();
+  assertCan(session.role, 'create', 'selection');
+
+  const projectId = String(formData.get('projectId') ?? '');
+  await repo.createSelection(
+    scope,
+    {
+      projectId,
+      selectionName: String(formData.get('selectionName') ?? ''),
+      category: String(formData.get('category') ?? ''),
+      roomOrArea: String(formData.get('roomOrArea') ?? ''),
+      allowance: optionalMoney(formData.get('allowance')),
+      actualCost: optionalMoney(formData.get('actualCost')),
+      upgradeAmount: optionalMoney(formData.get('upgradeAmount')),
+      status: String(formData.get('status') ?? 'Pending'),
+    },
+    { name: session.name },
+  );
+
+  revalidatePath(`/dashboard/projects/${projectId}/designs`);
+}
+
+export async function updateSelection(formData: FormData) {
+  const { session, scope, repo } = await selectionsContext();
+  assertCan(session.role, 'update', 'selection');
+
+  const selectionId = String(formData.get('selectionId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+  if (selectionId === '') throw new Error('selectionId is required');
+
+  await repo.updateSelection(scope, selectionId, {
+    selectionName: String(formData.get('selectionName') ?? ''),
+    category: String(formData.get('category') ?? ''),
+    roomOrArea: String(formData.get('roomOrArea') ?? ''),
+    allowance: optionalMoney(formData.get('allowance')),
+    actualCost: optionalMoney(formData.get('actualCost')),
+    upgradeAmount: optionalMoney(formData.get('upgradeAmount')),
+    status: String(formData.get('status') ?? 'Pending'),
+    clientVisible: formData.get('clientVisible') !== null,
+  });
+
+  revalidatePath(`/dashboard/projects/${projectId}/designs`);
+}
+
+export async function archiveSelection(formData: FormData) {
+  const { session, scope, repo } = await selectionsContext();
+  assertCan(session.role, 'archive', 'selection');
+
+  const selectionId = String(formData.get('selectionId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+  if (selectionId === '') throw new Error('selectionId is required');
+
+  await repo.archiveSelection(scope, selectionId, { name: session.name });
+  revalidatePath(`/dashboard/projects/${projectId}/designs`);
+}
+
+export async function createChangeOrder(formData: FormData) {
+  const { session, scope, repo } = await selectionsContext();
+  assertCan(session.role, 'create', 'changeOrder');
+
+  const projectId = String(formData.get('projectId') ?? '');
+  await repo.createChangeOrder(
+    scope,
+    {
+      projectId,
+      changeOrderNumber: String(formData.get('changeOrderNumber') ?? ''),
+      title: String(formData.get('title') ?? ''),
+      description: String(formData.get('description') ?? ''),
+      reason: String(formData.get('reason') ?? ''),
+      addedCost: optionalMoney(formData.get('addedCost')) ?? 0,
+      creditAmount: optionalMoney(formData.get('creditAmount')) ?? 0,
+      scheduleImpactDays: Number(formData.get('scheduleImpactDays') ?? 0) || 0,
+      status: String(formData.get('status') ?? 'Draft'),
+    },
+    { name: session.name },
+  );
+
+  revalidatePath(`/dashboard/projects/${projectId}/change-orders`);
+}
+
+export async function updateChangeOrder(formData: FormData) {
+  const { session, scope, repo } = await selectionsContext();
+  assertCan(session.role, 'update', 'changeOrder');
+
+  const changeOrderId = String(formData.get('changeOrderId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+  if (changeOrderId === '') throw new Error('changeOrderId is required');
+
+  await repo.updateChangeOrder(scope, changeOrderId, {
+    title: String(formData.get('title') ?? ''),
+    description: String(formData.get('description') ?? ''),
+    reason: String(formData.get('reason') ?? ''),
+    addedCost: optionalMoney(formData.get('addedCost')) ?? 0,
+    creditAmount: optionalMoney(formData.get('creditAmount')) ?? 0,
+    scheduleImpactDays: Number(formData.get('scheduleImpactDays') ?? 0) || 0,
+    status: String(formData.get('status') ?? 'Draft'),
+    clientVisible: formData.get('clientVisible') !== null,
+  });
+
+  revalidatePath(`/dashboard/projects/${projectId}/change-orders`);
+}
+
+export async function archiveChangeOrder(formData: FormData) {
+  const { session, scope, repo } = await selectionsContext();
+  assertCan(session.role, 'archive', 'changeOrder');
+
+  const changeOrderId = String(formData.get('changeOrderId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+  if (changeOrderId === '') throw new Error('changeOrderId is required');
+
+  await repo.archiveChangeOrder(scope, changeOrderId, { name: session.name });
+  revalidatePath(`/dashboard/projects/${projectId}/change-orders`);
 }

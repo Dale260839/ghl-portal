@@ -9,7 +9,11 @@
 
 import { normalizeFieldName } from './field-names.ts';
 
-/** Verbatim §9.3, including the slash-separated variants as distinct entries. */
+/**
+ * Verbatim §9.3, including the slash-separated variants as distinct entries —
+ * plus one field §9.3 does not name and the architecture marks internal
+ * elsewhere. That one is called out below rather than folded in silently.
+ */
 export const INTERNAL_FIELD_DENY_LIST = [
   'Internal Notes',
   'Vendor Cost',
@@ -26,6 +30,24 @@ export const INTERNAL_FIELD_DENY_LIST = [
   'Internal Risk Assessment',
   'Delay Reason',
   'Internal Priority',
+
+  /**
+   * NOT from §9.3's list. From §6.5, which specifies the Material Selection
+   * entity as: "Allowance (currency), **Actual Cost (internal)**, Upgrade
+   * Amount, Credit Amount…".
+   *
+   * Found on 2026-09-10 while building the Selections screen: the type comment
+   * said `actualCost` was deny-listed, and it was not. Two documents both true
+   * — §9.3 names the fields it names, and §6.5 marks this one internal — with
+   * nothing joining them.
+   *
+   * Added here because the list's own definition is "fields that are NEVER
+   * serialized into any client-facing response", and a field the architecture
+   * marks internal meets it. Flagged rather than folded in silently, because
+   * this file is meant to be a transcription and this entry comes from a
+   * different section than the rest.
+   */
+  'Actual Cost',
 ] as const;
 
 /**
