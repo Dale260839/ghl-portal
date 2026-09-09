@@ -107,3 +107,30 @@ export function scopeOfProject(project: Project): TenantScope {
     authProfileIds: [project.ownerAuthProfileId],
   };
 }
+
+/**
+ * The project's scope WITH the contractor it belongs to, for reading the Hub.
+ *
+ * `scopeOfProject` names the owner's auth profile and nothing else, which is
+ * enough for BuildSuite reads (they filter on the owner). Every Hub repository
+ * files rows under a `contractor_id` and asserts one before it queries, so a
+ * scope without it does not return nothing, it throws. On 10 Sep that threw on
+ * every portal screen the moment a project's master switch was turned on: the
+ * schedule, documents, change orders and updates pages all crashed for the
+ * homeowner they had just been released to.
+ *
+ * This resolves the contractor through the same three-link chain the
+ * contractor's own session uses (`resolveContractor`, cached ten minutes), so
+ * the homeowner reads exactly the rows their contractor filed. Null when the
+ * owner's profile resolves to no contractor: the caller then shows nothing,
+ * which is the honest answer, rather than throwing.
+ */
+export async function hubScopeOfProject(
+  project: Project,
+  deps: Pick<TenantScopeDeps, 'lookupContractorId'> = LIVE,
+): Promise<TenantScope | null> {
+  const base = scopeOfProject(project);
+  if (base.authProfileIds[0] === undefined || base.authProfileIds[0].trim() === '') return null;
+  const contractorId = await deps.lookupContractorId(base);
+  return contractorId === null ? null : { ...base, contractorId };
+}

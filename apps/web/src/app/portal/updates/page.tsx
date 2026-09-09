@@ -1,6 +1,7 @@
 import { currentPortalProject, photosFor } from '@/lib/portal-data';
 
 import { scopeOfProject } from '@/lib/scope';
+import { hubScopeOfProject } from '@/lib/tenant-scope';
 import { toClientUpdates } from '@/lib/client-view';
 import { Card, PortalEmpty, shortDate } from '@/components/ui';
 import { currentDataSource } from '@/lib/data/current-source';
@@ -22,8 +23,13 @@ export default async function PortalUpdates({
     return <PortalEmpty title="No project" body="Nothing is shared with this account yet." />;
   }
 
-  const all = await (await currentDataSource()).listDailyUpdates(
-    scopeOfProject(project),
+  // Through a source that knows the project's contractor, so the Hub's
+  // published updates are read. Without the contractor the read is empty, and
+  // that is the honest answer rather than a thrown TenancyError.
+  const hubScope = await hubScopeOfProject(project);
+  const opsDb = await currentDataSource(hubScope ?? undefined);
+  const all = await opsDb.listDailyUpdates(
+    hubScope ?? scopeOfProject(project),
     project.buildsuiteProjectId,
   );
   const updates = toClientUpdates(all, project);

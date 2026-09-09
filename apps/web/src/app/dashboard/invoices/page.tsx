@@ -2,6 +2,7 @@ import { SubmitButton } from '@/components/submit-button';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getProposalsReader } from '@/lib/buildsuite/proposals';
+import { getBuildSuiteReader } from '@/lib/buildsuite/projects';
 import { resolveContractor, resolveContractorProfile } from '@/lib/buildsuite/contractor-identity';
 import { DEFAULT_DUE_IN_DAYS } from '@/lib/invoicing/ghl-rail';
 import { InvoicePreview } from '@/components/invoice-preview';
@@ -176,6 +177,21 @@ export default async function Invoices() {
     }),
   );
 
+  // The homeowner's email for each project, read once here so the preview
+  // shows the recipient the rail will use. Null renders as nothing.
+  const buildsuite = getBuildSuiteReader();
+  const emailByProject = new Map<string, string | null>(
+    await Promise.all(
+      sections.map(async ({ row }) => {
+        const id = row.project.buildsuiteProjectId;
+        const email = buildsuite.available
+          ? await buildsuite.clientEmailForProject(scope, id).catch(() => null)
+          : null;
+        return [id, email] as const;
+      }),
+    ),
+  );
+
   return shell(
     <div className="space-y-6">
       {sections.map(({ row, proposal, lines, drafts, stored }) => {
@@ -310,9 +326,8 @@ export default async function Invoices() {
                       {/* The document itself, as the rail will build it. The
                           reference is composed exactly as `draftFromStored`
                           composes it, so what a contractor reads here is what
-                          GoHighLevel receives. The homeowner's email is not on
-                          the project record, so it is simply not shown — the
-                          invoice attaches to their GHL contact, which holds it. */}
+                          GoHighLevel receives, including the homeowner's email
+                          the invoice will be addressed to. */}
                       <InvoicePreview
                         business={business}
                         reference={
@@ -321,7 +336,7 @@ export default async function Invoices() {
                             : `${row.project.projectCode} · Invoice ${draft.line.order}`
                         }
                         clientName={row.project.clientName}
-                        clientEmail={null}
+                        clientEmail={emailByProject.get(row.project.buildsuiteProjectId) ?? null}
                         title={title ?? ''}
                         terms={saved?.description ?? draft.line.description}
                         amount={amount}

@@ -28,7 +28,7 @@ import { CLIENT_FOLDER, DEFAULT_FOLDER, isFieldFolder } from './document-folders
 import { getHubSelections } from './hub-db/selections.ts';
 import { requireAccess } from './access.ts';
 import { clientProjectsFor } from './client-scope.ts';
-import { scopeOfProject } from './tenant-scope.ts';
+import { hubScopeOfProject } from './tenant-scope.ts';
 import { getHubStorage } from './hub-db/storage.ts';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
@@ -954,6 +954,14 @@ export async function createInvoiceOnRail(formData: FormData) {
           address: profile.address,
         },
   );
+  // The homeowner's email, read once for this purpose. Without it the rail
+  // refuses (an invoice with nobody to send it to), which is what happened
+  // on every attempt until 10 Sep: the recipient was built with email ''.
+  const buildsuiteForEmail = getBuildSuiteReader();
+  const clientEmail = buildsuiteForEmail.available
+    ? await buildsuiteForEmail.clientEmailForProject(scope, draft.projectId)
+    : null;
+
   const invoice = draftFromStored(draft, project);
   const result = await rail.createDraft(invoice, {
     ghlContactId: project.primaryContactId,
@@ -961,7 +969,7 @@ export async function createInvoiceOnRail(formData: FormData) {
     // The address is not ours to supply — the rail attaches to the contact,
     // which already holds it. Passing one here would be a second source of
     // truth for where an invoice goes.
-    email: '',
+    email: clientEmail ?? '',
   });
 
   if (!result.created) {
@@ -1498,7 +1506,13 @@ export async function recordClientDecision(formData: FormData) {
   const project = mine.find((p) => p.buildsuiteProjectId === projectId);
   if (project === undefined) throw new Error('that project is not one of yours');
 
-  await hub.selections.recordClientDecision(scopeOfProject(project), kind, itemId, {
+  // Filed under the project's contractor: the repository asserts one, and the
+  // owner profile alone is not it.
+  const decisionScope = await hubScopeOfProject(project);
+  if (decisionScope === null) {
+    throw new Error('this project is not linked to a contractor, so nothing can be filed under it');
+  }
+  await hub.selections.recordClientDecision(decisionScope, kind, itemId, {
     accepted: String(formData.get('decision') ?? '') === 'approve',
     comments: String(formData.get('comments') ?? ''),
   });

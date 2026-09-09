@@ -1,6 +1,7 @@
 import { currentPortalProject, clientStageFor } from '@/lib/portal-data';
 
 import { scopeOfProject } from '@/lib/scope';
+import { hubScopeOfProject } from '@/lib/tenant-scope';
 import { toClientMilestones } from '@/lib/client-view';
 import { Badge, Card, PortalEmpty, shortDate } from '@/components/ui';
 import { currentDataSource } from '@/lib/data/current-source';
@@ -13,7 +14,15 @@ export default async function PortalTimeline({
   const { project } = await currentPortalProject(await searchParams);
   if (project === null) return <PortalEmpty title="No project" body="Nothing is shared with this account yet." />;
 
-  const all = await (await currentDataSource()).listMilestones(scopeOfProject(project), project.buildsuiteProjectId);
+  // Milestones are Hub rows filed under the project's contractor. A source built
+  // without that contractor never reads the Hub, which is why released
+  // milestones showed as "not shared yet" here on 10 Sep.
+  const hubScope = await hubScopeOfProject(project);
+  const opsDb = await currentDataSource(hubScope ?? undefined);
+  const all = await opsDb.listMilestones(
+    hubScope ?? scopeOfProject(project),
+    project.buildsuiteProjectId,
+  );
   const milestones = toClientMilestones(all, project);
 
   return (

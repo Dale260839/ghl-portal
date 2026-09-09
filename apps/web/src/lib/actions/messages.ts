@@ -7,7 +7,7 @@ import { assertCan } from '../permissions.ts';
 import { actionTenantScope } from '../scope.ts';
 import { requireAccess } from '../access.ts';
 import { clientProjectsFor } from '../client-scope.ts';
-import { scopeOfProject } from '../tenant-scope.ts';
+import { hubScopeOfProject } from '../tenant-scope.ts';
 import { currentDataSource } from '../data/current-source.ts';
 import { getHubMessages, type HubMessages } from '../hub-db/messages.ts';
 
@@ -140,8 +140,14 @@ export async function postClientMessage(formData: FormData) {
   const project = mine.find((p) => p.buildsuiteProjectId === projectId);
   if (project === undefined) throw new Error('that project is not one of yours');
 
+  // The Hub files messages under the contractor, so the write needs the
+  // project's contractor resolved, not only its owner profile.
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) {
+    throw new Error('this project is not linked to a contractor, so nothing can be filed under it');
+  }
   await repository().post(
-    scopeOfProject(project),
+    scope,
     { projectId, body, clientVisible: true },
     { name: session.name, role: 'client' },
   );

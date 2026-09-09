@@ -1,13 +1,24 @@
 import { currentPortalProject, scheduleFor } from '@/lib/portal-data';
 import { Badge, Card, PortalEmpty } from '@/components/ui';
 
-function dayParts(iso: string): { weekday: string; day: string; month: string } {
-  const [y, m, d] = iso.split('-').map(Number);
-  const date = new Date(Date.UTC(y ?? 2026, (m ?? 1) - 1, d ?? 1));
+/**
+ * The calendar block for an appointment.
+ *
+ * `startsAt` is a full timestamp from the Hub ("2026-09-11T09:00:00+00:00"),
+ * not a bare date. The first version split it on "-" and fed "11T09:00:00+00:00"
+ * to `Date.UTC`, which produced an Invalid Date, and `toLocaleDateString` on an
+ * Invalid Date throws. That took the whole client schedule page down the
+ * moment a contractor released their first appointment (10 Sep). An unparseable
+ * or missing start now renders a "TBC" block instead of an error page.
+ */
+function dayParts(iso: string | null): { weekday: string; day: string; month: string } {
+  if (iso === null || iso.trim() === '') return { weekday: 'Date', day: 'TBC', month: '' };
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return { weekday: 'Date', day: 'TBC', month: '' };
   return {
-    weekday: date.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }),
-    day: String(date.getUTCDate()),
-    month: date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }),
+    weekday: date.toLocaleDateString('en-US', { weekday: 'long' }),
+    day: String(date.getDate()),
+    month: date.toLocaleDateString('en-US', { month: 'short' }),
   };
 }
 
@@ -65,7 +76,7 @@ export default async function PortalSchedule({
       ) : (
         <div className="space-y-4">
           {items.map((item) => {
-            const { weekday, day, month } = dayParts(item.startsAt ?? '');
+            const { weekday, day, month } = dayParts(item.startsAt);
             return (
               <Card key={item.id} className="p-5">
                 <div className="flex flex-wrap items-start gap-5">

@@ -57,6 +57,10 @@ export default async function FieldMessages({
     );
     thread = perProject
       .flat()
+      // The crew's thread is the company's side of the conversation. What the
+      // homeowner wrote is between them and the contractor (D2, §9.4), so a
+      // client-authored message is not shown here, released or not.
+      .filter((m) => m.authorRole !== 'client')
       .map((m) => ({
         id: m.id,
         projectId: m.projectId,

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { getSession } from '@/lib/session';
 
 import { scopeOfProject } from '@/lib/scope';
+import { hubScopeOfProject } from '@/lib/tenant-scope';
 import { toClientMilestones, toClientProject, toClientUpdates } from '@/lib/client-view';
 import { Badge, Card, CardHeader, ProgressBar, currency, shortDate } from '@/components/ui';
 import { hasFinancials, hasOperationalDetail, type Contact, type Project } from '@/lib/data/types';
@@ -117,9 +118,15 @@ export default async function ClientPortal({
   }
 
   const view = gated.view;
+  // Updates and milestones live in the Hub, filed under the project's
+  // contractor. Read them through a source that knows that contractor, or the
+  // homeowner sees an empty list for work that was released to them.
+  const hubScope = await hubScopeOfProject(project);
+  const childScope = hubScope ?? scopeOfProject(project);
+  const opsDb = hubScope === null ? db : await currentDataSource(hubScope);
   const [allUpdates, allMilestones] = await Promise.all([
-    db.listDailyUpdates(scopeOfProject(project), project.buildsuiteProjectId),
-    db.listMilestones(scopeOfProject(project), project.buildsuiteProjectId),
+    opsDb.listDailyUpdates(childScope, project.buildsuiteProjectId),
+    opsDb.listMilestones(childScope, project.buildsuiteProjectId),
   ]);
   const updates = toClientUpdates(allUpdates, project);
   const milestones = toClientMilestones(allMilestones, project);

@@ -7,6 +7,12 @@
 --
 -- READ THIS BEFORE RUNNING.
 --
+-- EVIDENCE FROM PRODUCTION, 10 Sep: 0009 enabled RLS on two tables by mistake
+-- and the app immediately lost them (empty lists, refused inserts). RLS only
+-- bites a non-service key, so HUB_SUPABASE_KEY on the deployment IS the anon
+-- key today. Running this file before swapping that key would take the whole
+-- Hub down. Do step 2 first. 0011 undoes the 0009 accident in the meantime.
+--
 -- The app talks to the Hub with HUB_SUPABASE_KEY. If that key is the
 -- **service_role** key, RLS does not apply to it and this migration changes
 -- nothing for the app: every read and write keeps working, and only the anon

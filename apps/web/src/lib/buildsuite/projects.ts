@@ -178,6 +178,14 @@ export interface BuildSuiteReader {
     projectCode: string,
     clientEmail: string,
   ): Promise<{ id: string; ghlContactId: string } | null>;
+  /**
+   * The homeowner's email on ONE of this tenant's projects, for the invoice
+   * recipient. `client_email` is kept out of `PROJECT_COLUMNS` on purpose
+   * (D-010): this is the single read that needs it, it is filtered on the
+   * owner like every other project read, and the value goes to the rail,
+   * never to a client screen. Null when the row has none.
+   */
+  clientEmailForProject(scope: TenantScope, projectId: string): Promise<string | null>;
 }
 
 export interface BuildSuiteUnavailable {
@@ -305,6 +313,22 @@ class SupabaseReader implements BuildSuiteReader {
    * nothing — see `client-lookup.ts`.
    * ---------------------------------------------------------------------------
    */
+  async clientEmailForProject(scope: TenantScope, projectId: string): Promise<string | null> {
+    if (projectId.trim() === '') return null;
+    const rows = await this.client.select<{ client_email: string | null }>({
+      from: 'projects',
+      columns: ['client_email'],
+      filters: {
+        ...this.tenantFilter(scope, 'client email'),
+        id: `eq.${projectId}`,
+        deleted_at: 'is.null',
+      },
+      limit: 1,
+    });
+    const email = (rows[0]?.client_email ?? '').trim().toLowerCase();
+    return email === '' ? null : email;
+  }
+
   async findProjectForClientLogin(
     projectCode: string,
     clientEmail: string,

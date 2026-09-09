@@ -35,7 +35,7 @@ import {
   type HubIssue,
 } from './hub-db/operational.ts';
 import { clientSelection, getHubSelections } from './hub-db/selections.ts';
-import { scopeOfProject } from './tenant-scope.ts';
+import { hubScopeOfProject } from './tenant-scope.ts';
 import { clientCanSeeDocument } from './document-folders.ts';
 import type {
   BudgetLine,
@@ -122,8 +122,11 @@ export async function scheduleFor(project: Project): Promise<ClientScheduleItem[
   const hub = getHubSchedule();
   if (!hub.available) return [];
 
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) return [];
+
   const items = await hub.schedule.listForProject(
-    scopeOfProject(project),
+    scope,
     project.buildsuiteProjectId,
   );
 
@@ -165,8 +168,11 @@ async function filesFor(project: Project, kind: 'document' | 'photo'): Promise<C
   const hub = getHubMedia();
   if (!hub.available) return [];
 
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) return [];
+
   const items = await hub.media.listForProject(
-    scopeOfProject(project),
+    scope,
     kind,
     project.buildsuiteProjectId,
   );
@@ -222,7 +228,9 @@ export async function messagesFor(project: Project): Promise<Message[]> {
   const projectId = project.buildsuiteProjectId;
   const hub = getHubMessages();
   if (hub.available && isUuid(projectId)) {
-    const rows = await hub.messages.listForProject(scopeOfProject(project), projectId, {
+    const scope = await hubScopeOfProject(project);
+    if (scope === null) return [];
+    const rows = await hub.messages.listForProject(scope, projectId, {
       clientVisibleOnly: true,
     });
     return rows.map((row) => ({
@@ -320,8 +328,11 @@ export async function issuesFor(project: Project): Promise<ClientIssue[]> {
   const hub = getHubOperational();
   if (!hub.available) return [];
 
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) return [];
+
   const rows = await hub.ops.listIssues(
-    scopeOfProject(project),
+    scope,
     project.buildsuiteProjectId,
   );
 
@@ -358,8 +369,11 @@ export async function selectionsFor(project: Project) {
   const hub = getHubSelections();
   if (!hub.available) return [];
 
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) return [];
+
   const rows = await hub.selections.listSelections(
-    scopeOfProject(project),
+    scope,
     project.buildsuiteProjectId,
   );
   return rows.filter((r) => r.clientVisible).map(clientSelection);
@@ -379,8 +393,11 @@ export async function changeOrdersFor(project: Project) {
   const hub = getHubSelections();
   if (!hub.available) return [];
 
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) return [];
+
   const rows = await hub.selections.listChangeOrders(
-    scopeOfProject(project),
+    scope,
     project.buildsuiteProjectId,
   );
   return rows.filter((r) => r.clientVisible);
@@ -426,8 +443,11 @@ export async function punchListFor(project: Project): Promise<ClientPunchItem[]>
   const hub = getHubOperational();
   if (!hub.available) return [];
 
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) return [];
+
   const rows = await hub.ops.listIssues(
-    scopeOfProject(project),
+    scope,
     project.buildsuiteProjectId,
   );
 
