@@ -23,6 +23,7 @@ import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db
 import { getHubSchedule } from './hub-db/schedule.ts';
 import { getHubOperational } from './hub-db/operational.ts';
 import { getHubMedia } from './hub-db/media.ts';
+import { CLIENT_FOLDER, DEFAULT_FOLDER, isFieldFolder } from './document-folders.ts';
 import { getHubSelections } from './hub-db/selections.ts';
 import { requireAccess } from './access.ts';
 import { clientProjectsFor } from './client-scope.ts';
@@ -1208,7 +1209,13 @@ export async function attachProjectFile(formData: FormData) {
       // A photo with no caption is fine; a document with no title is not, and
       // the repository enforces that rather than this form.
       label: label || (file instanceof File ? file.name : ''),
-      category: String(formData.get('category') ?? ''),
+      // Documents are filed into a folder. A form that somehow sends none
+      // lands in the general field folder rather than nowhere, so the file is
+      // never invisible to the crew and never accidentally client-side.
+      category:
+        kind === 'document'
+          ? String(formData.get('category') ?? '').trim() || DEFAULT_FOLDER
+          : String(formData.get('category') ?? ''),
       storagePath,
       externalUrl: externalUrl || null,
       clientVisible: false,
@@ -1230,10 +1237,27 @@ export async function updateProjectFile(formData: FormData) {
   const projectId = String(formData.get('projectId') ?? '');
   if (itemId === '') throw new Error('itemId is required');
 
+  const requestedFolder = String(formData.get('category') ?? '').trim();
+  let clientVisible = formData.get('clientVisible') !== null;
+  let category = requestedFolder;
+
+  if (kind === 'document') {
+    // The two folder rules, enforced here and not only in the form. A hand
+    // rolled POST is the case that matters: the UI hides the release switch on
+    // a field folder, and this makes hiding it more than a suggestion.
+    if (isFieldFolder(requestedFolder)) clientVisible = false;
+    // Releasing a document IS filing it under Client. Leaving it where it was
+    // would mean a released row sitting in a trade folder, which the homeowner
+    // gate refuses anyway — the file would simply never appear.
+    if (clientVisible) category = CLIENT_FOLDER;
+  }
+
   await media.update(scope, kind, itemId, {
     label: String(formData.get('label') ?? ''),
-    category: String(formData.get('category') ?? ''),
-    clientVisible: formData.get('clientVisible') !== null,
+    // An empty folder means "leave it where it is" — the Unsorted rows offer a
+    // placeholder option, and choosing nothing must not blank the category.
+    ...(category === '' ? {} : { category }),
+    clientVisible,
   });
 
   revalidatePath(`/dashboard/projects/${projectId}/${kind === 'document' ? 'documents' : 'photos'}`);
