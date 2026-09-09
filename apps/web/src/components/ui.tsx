@@ -148,15 +148,45 @@ export function shortDate(iso: string): string {
  * configured — there is no longer a toggle that chooses it — so it means "this
  * deployment is misconfigured", not "someone flipped a switch".
  */
-export function DataModeBanner({ kind }: { kind: 'fixture' | 'buildsuite' | 'ghl' }) {
+export function DataModeBanner({
+  kind,
+  hubConnected,
+}: {
+  kind: 'fixture' | 'buildsuite' | 'ghl';
+  /**
+   * Whether the Hub database is reachable from this deployment.
+   *
+   * The banner used to say "field updates, milestones and budgets arrive once
+   * this deployment is connected to the Hub database" as fixed text, whether or
+   * not it was connected. It has been connected for over a week — invitations,
+   * team management and invoice drafts all write to it — so the banner was
+   * telling every contractor that working features did not exist yet.
+   *
+   * Optional, so a caller that genuinely cannot tell says nothing rather than
+   * guessing. `undefined` keeps the old wording.
+   */
+  hubConnected?: boolean;
+}) {
   if (kind === 'ghl') return null;
 
   if (kind === 'buildsuite') {
     return (
       <div className="border-b border-navy-200 bg-navy-50 px-4 py-1.5 text-center text-xs text-navy-600">
         <strong className="font-semibold">Live BuildSuite data</strong> — real projects, clients and
-        dates. Field updates, milestones and budgets arrive once this deployment is connected to
-        the Hub database.
+        dates.{' '}
+        {hubConnected === true ? (
+          <>Schedule, field updates and invoices are saving to the Hub database.</>
+        ) : hubConnected === false ? (
+          <span className="text-amber-700">
+            The Hub database is not reachable, so schedule, field updates and invoices cannot be
+            saved.
+          </span>
+        ) : (
+          <>
+            Field updates, milestones and budgets arrive once this deployment is connected to the
+            Hub database.
+          </>
+        )}
       </div>
     );
   }

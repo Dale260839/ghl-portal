@@ -11,6 +11,7 @@ import { AccountSwitcher } from '@/components/account-switcher';
 import { listDevAccounts } from '@/lib/dev-accounts';
 import { viewAsEnabled } from '@/lib/view-as';
 import { DataModeBanner } from '@/components/ui';
+import { getHubClient } from '@/lib/hub-db/client';
 import { currentDataSource, currentSourceKind } from '@/lib/data/current-source';
 import {
   IconBudget,
@@ -124,7 +125,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           {viewAsEnabled() && <ViewSwitcher current="contractor" viewing={false} />}
         </>
       }
-      banner={<DataModeBanner kind={await currentSourceKind()} />}
+      banner={<DataModeBanner kind={await currentSourceKind()} hubConnected={getHubClient().available} />}
     >
       {children}
     </AppShell>
