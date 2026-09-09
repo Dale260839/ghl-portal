@@ -2,9 +2,14 @@ import { notFound } from 'next/navigation';
 
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
-import { Badge, Card } from '@/components/ui';
+import { Badge, Card, CardHeader } from '@/components/ui';
 import { shortDate } from '@/components/ui';
-import { ControlButton, ControlEmpty, ControlHeader, ControlNote, VisibilityTag } from '@/components/control';
+import { ControlEmpty, ControlHeader, ControlNote, VisibilityTag } from '@/components/control';
+import { archiveMilestone, createMilestone, updateMilestone } from '@/lib/actions';
+
+/** The four §6.2 states. Free text in the column, a list here. */
+const MILESTONE_STATUSES = ['Not Started', 'In Progress', 'Completed', 'Blocked'] as const;
+const FIELD = 'rounded-lg border border-navy-200 px-3 py-2 text-sm';
 
 /**
  * Timeline — contractor control side of the client's Project Timeline.
@@ -33,7 +38,6 @@ export default async function ProjectTimelineControl({
         title="Timeline"
         subtitle="You set the milestones. The client sees the timeline once you release it."
         clientHref={`/portal/timeline?preview=${id}`}
-        action={<ControlButton>Add milestone</ControlButton>}
       />
 
       <ControlNote>
@@ -41,6 +45,44 @@ export default async function ProjectTimelineControl({
         the Hub. Toggling a milestone client-visible is what puts it on the homeowner&rsquo;s
         tracker.
       </ControlNote>
+
+      <Card>
+        <CardHeader title="Add milestone" />
+        <form action={createMilestone} className="grid gap-3 px-5 py-4 sm:grid-cols-4">
+          <input type="hidden" name="projectId" value={id} />
+          <input
+            name="milestoneName"
+            required
+            placeholder="Milestone, e.g. Rough-in complete"
+            className={`${FIELD} sm:col-span-2`}
+          />
+          <input
+            name="sequence"
+            type="number"
+            min="0"
+            defaultValue={milestones.length + 1}
+            placeholder="Order"
+            className={FIELD}
+          />
+          <button
+            type="submit"
+            className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
+          >
+            Add
+          </button>
+          <label className="text-xs text-navy-500 sm:col-span-2">
+            Planned start
+            <input type="date" name="plannedStart" className={`${FIELD} mt-1 w-full`} />
+          </label>
+          <label className="text-xs text-navy-500 sm:col-span-2">
+            Planned end
+            <input type="date" name="plannedEnd" className={`${FIELD} mt-1 w-full`} />
+          </label>
+          <p className="text-xs text-navy-400 sm:col-span-4">
+            Saved internal. Release it to the homeowner with the switch on the milestone.
+          </p>
+        </form>
+      </Card>
 
       {milestones.length === 0 ? (
         <ControlEmpty title="No milestones yet" body="Add the first milestone to start the timeline." />
@@ -81,13 +123,72 @@ export default async function ProjectTimelineControl({
                   <div className="mt-0.5 text-xs text-navy-400">
                     {shortDate(m.plannedStart)} → {shortDate(m.plannedEnd)}
                   </div>
+
+                  <form action={updateMilestone} className="mt-3 grid gap-2 sm:grid-cols-4">
+                    <input type="hidden" name="milestoneId" value={m.id} />
+                    <input type="hidden" name="projectId" value={id} />
+                    <input
+                      name="milestoneName"
+                      defaultValue={m.milestoneName}
+                      required
+                      className={`${FIELD} sm:col-span-2`}
+                    />
+                    <select name="status" defaultValue={m.status} className={FIELD}>
+                      {MILESTONE_STATUSES.map((st) => (
+                        <option key={st} value={st}>
+                          {st}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      name="sequence"
+                      type="number"
+                      min="0"
+                      defaultValue={m.sequence}
+                      className={FIELD}
+                    />
+                    <input
+                      type="date"
+                      name="plannedStart"
+                      defaultValue={m.plannedStart?.slice(0, 10) ?? ''}
+                      className={`${FIELD} sm:col-span-2`}
+                    />
+                    <input
+                      type="date"
+                      name="plannedEnd"
+                      defaultValue={m.plannedEnd?.slice(0, 10) ?? ''}
+                      className={`${FIELD} sm:col-span-2`}
+                    />
+                    <div className="flex flex-wrap items-center gap-4 sm:col-span-4">
+                      <label className="flex items-center gap-2 text-xs text-navy-600">
+                        <input
+                          type="checkbox"
+                          name="clientVisible"
+                          defaultChecked={m.clientVisible}
+                          className="rounded border-navy-300"
+                        />
+                        Show this milestone to the client
+                      </label>
+                      <button
+                        type="submit"
+                        className="rounded-lg border border-navy-200 px-3 py-1.5 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </form>
+
+                  <form action={archiveMilestone} className="mt-2">
+                    <input type="hidden" name="milestoneId" value={m.id} />
+                    <input type="hidden" name="projectId" value={id} />
+                    <button
+                      type="submit"
+                      className="text-xs font-medium text-red-700 transition hover:underline"
+                    >
+                      Remove milestone
+                    </button>
+                  </form>
                 </div>
-                <button
-                  type="button"
-                  className="shrink-0 text-xs font-medium text-navy-600 hover:underline"
-                >
-                  Edit
-                </button>
               </li>
             ))}
           </ol>

@@ -21,6 +21,7 @@ import { getHubVisibility } from './hub-db/visibility';
 import { isUuid } from './data/visibility-overlay.ts';
 import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db/records';
 import { getHubSchedule } from './hub-db/schedule.ts';
+import { getHubOperational } from './hub-db/operational.ts';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
 import { resolveInvoiceRail, draftFromStored } from './invoicing/rail.ts';
@@ -1047,4 +1048,87 @@ export async function archiveScheduleItem(formData: FormData) {
 
   await schedule.archive(scope, itemId, { name: session.name });
   revalidatePath(`/dashboard/projects/${projectId}/schedule`);
+}
+
+// ── Milestones (§6.2) ───────────────────────────────────────────────────────
+//
+// `hub_milestones` and `createMilestone` have both existed for days; nothing
+// called them. Same three gates as the schedule: the route refuses non-
+// contractors, `assertCan` checks the matrix, the query filters on the tenant.
+
+async function milestoneContext() {
+  const session = await getSession();
+  if (session === null) throw new Error('not signed in');
+
+  const hub = getHubOperational();
+  if (!hub.available) {
+    throw new Error(`the Hub database is not connected (missing ${hub.missing.join(', ')})`);
+  }
+  return { session, scope: await actionTenantScope(session), ops: hub.ops };
+}
+
+function optionalDate(value: FormDataEntryValue | null): string | null {
+  const text = String(value ?? '').trim();
+  return text === '' ? null : text;
+}
+
+export async function createMilestone(formData: FormData) {
+  const { session, scope, ops } = await milestoneContext();
+  assertCan(session.role, 'create', 'milestone');
+
+  const projectId = String(formData.get('projectId') ?? '');
+  const milestoneName = String(formData.get('milestoneName') ?? '');
+  if (projectId === '') throw new Error('projectId is required');
+  if (milestoneName.trim() === '') throw new Error('a milestone needs a name');
+
+  const rawSequence = Number(formData.get('sequence') ?? 0);
+
+  await ops.createMilestone(scope, {
+    projectId,
+    milestoneName,
+    sequence: Number.isFinite(rawSequence) ? rawSequence : 0,
+    plannedStart: optionalDate(formData.get('plannedStart')) ?? undefined,
+    plannedEnd: optionalDate(formData.get('plannedEnd')) ?? undefined,
+    // Internal until released, same as a schedule item.
+    clientVisible: false,
+    createdBy: session.name,
+  });
+
+  revalidatePath(`/dashboard/projects/${projectId}/timeline`);
+}
+
+export async function updateMilestone(formData: FormData) {
+  const { session, scope, ops } = await milestoneContext();
+  assertCan(session.role, 'update', 'milestone');
+
+  const milestoneId = String(formData.get('milestoneId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+  if (milestoneId === '') throw new Error('milestoneId is required');
+
+  const rawSequence = Number(formData.get('sequence') ?? 0);
+
+  await ops.updateMilestone(scope, milestoneId, {
+    milestoneName: String(formData.get('milestoneName') ?? ''),
+    sequence: Number.isFinite(rawSequence) ? rawSequence : 0,
+    status: String(formData.get('status') ?? 'Not Started'),
+    plannedStart: optionalDate(formData.get('plannedStart')),
+    plannedEnd: optionalDate(formData.get('plannedEnd')),
+    // Presence test: an unchecked box submits nothing, and reading only the
+    // present keys would make un-releasing a milestone a no-op.
+    clientVisible: formData.get('clientVisible') !== null,
+  });
+
+  revalidatePath(`/dashboard/projects/${projectId}/timeline`);
+}
+
+export async function archiveMilestone(formData: FormData) {
+  const { session, scope, ops } = await milestoneContext();
+  assertCan(session.role, 'archive', 'milestone');
+
+  const milestoneId = String(formData.get('milestoneId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+  if (milestoneId === '') throw new Error('milestoneId is required');
+
+  await ops.archiveMilestone(scope, milestoneId, { name: session.name });
+  revalidatePath(`/dashboard/projects/${projectId}/timeline`);
 }

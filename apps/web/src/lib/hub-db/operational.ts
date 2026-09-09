@@ -358,6 +358,70 @@ export class HubOperational {
     return toMilestone(row!);
   }
 
+  /**
+   * Edit a milestone. Filtered on the asserted contractor as well as the id, so
+   * knowing an id is not enough to change another contractor's plan.
+   *
+   * Only the fields given are written. A patch that always wrote every column
+   * would blank a name when the caller meant to change a status.
+   */
+  async updateMilestone(
+    scope: TenantScope,
+    milestoneId: string,
+    patch: {
+      milestoneName?: string;
+      sequence?: number;
+      status?: string;
+      plannedStart?: string | null;
+      plannedEnd?: string | null;
+      clientVisible?: boolean;
+    },
+  ): Promise<void> {
+    const { contractorId } = this.tenant(scope, 'update milestone');
+    if (milestoneId.trim() === '') throw new TypeError('milestoneId is required');
+    if (patch.milestoneName !== undefined && patch.milestoneName.trim() === '') {
+      throw new TypeError('a milestone needs a name');
+    }
+
+    const values: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (patch.milestoneName !== undefined) values.milestone_name = patch.milestoneName.trim();
+    if (patch.sequence !== undefined) values.sequence = patch.sequence;
+    if (patch.status !== undefined) values.status = patch.status;
+    if (patch.plannedStart !== undefined) values.target_date = patch.plannedStart;
+    if (patch.plannedEnd !== undefined) values.completed_date = patch.plannedEnd;
+    if (patch.clientVisible !== undefined) values.client_visible = patch.clientVisible;
+
+    await this.client.update({
+      from: 'hub_milestones',
+      filters: { id: `eq.${milestoneId}`, contractor_id: `eq.${contractorId}` },
+      patch: values,
+    });
+  }
+
+  /** Archive rather than delete. A milestone that happened is a record. */
+  async archiveMilestone(
+    scope: TenantScope,
+    milestoneId: string,
+    actor: { name: string },
+  ): Promise<void> {
+    const { contractorId } = this.tenant(scope, 'archive milestone');
+    if (milestoneId.trim() === '') throw new TypeError('milestoneId is required');
+
+    await this.client.update({
+      from: 'hub_milestones',
+      filters: {
+        id: `eq.${milestoneId}`,
+        contractor_id: `eq.${contractorId}`,
+        archived_at: 'is.null',
+      },
+      patch: {
+        archived_at: new Date().toISOString(),
+        archived_by: actor.name,
+        updated_at: new Date().toISOString(),
+      },
+    });
+  }
+
   async createTask(
     scope: TenantScope,
     input: { projectId: string; taskName: string; assignedTrade?: string; assignedTo?: string; pmNote?: string; scheduledDate?: string; createdBy: string },
