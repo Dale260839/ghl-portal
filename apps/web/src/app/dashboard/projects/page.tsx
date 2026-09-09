@@ -193,9 +193,6 @@ export default async function ProjectsList() {
                 </td>
                 <td className="tabular px-5 py-3.5 text-right text-sm text-navy-900">
                   <MoneyCell project={p} proposal={proposal} />
-                  <div className="mt-1">
-                    <SignedPdfCell url={proposal?.signedPdfUrl ?? null} />
-                  </div>
                 </td>
                 <td className="px-5 py-3.5 text-sm">
                   <SignedPdfCell url={proposal?.signedPdfUrl ?? null} />
@@ -253,6 +250,14 @@ export default async function ProjectsList() {
                   {p.estimatedCompletionDate !== '' &&
                     ` · due ${shortDate(p.estimatedCompletionDate)}`}
                 </div>
+                {/* The narrow layout has no columns, so the contract document
+                    gets a line of its own rather than a bare "View". */}
+                {proposal?.signedPdfUrl != null && (
+                  <div className="mt-1 text-xs">
+                    <span className="text-navy-400">Signed PDF · </span>
+                    <SignedPdfCell url={proposal.signedPdfUrl} />
+                  </div>
+                )}
               </Link>
             </li>
           ))}
