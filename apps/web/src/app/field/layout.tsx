@@ -47,6 +47,9 @@ export default async function FieldLayout({ children }: { children: React.ReactN
     { href: '/field', label: 'Today', icon: 'today' },
     { href: '/field/tasks', label: 'Tasks', icon: 'tasks', badge: unseen },
     { href: '/field/update', label: 'Update', icon: 'update' },
+    { href: '/field/documents', label: 'Docs', icon: 'docs' },
+    { href: '/field/issues', label: 'Issues', icon: 'issues' },
+    { href: '/field/punch', label: 'Punch', icon: 'punch' },
     { href: '/field/messages', label: 'Messages', icon: 'messages' },
   ];
 

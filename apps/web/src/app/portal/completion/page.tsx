@@ -71,7 +71,7 @@ export default async function PortalCompletion({
     return <PortalEmpty title="No project" body="Nothing is shared with this account yet." />;
   }
 
-  const items = punchListFor(project);
+  const items = await punchListFor(project);
   const progress = punchListProgress(items);
 
   return (
