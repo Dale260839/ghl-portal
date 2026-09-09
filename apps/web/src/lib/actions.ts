@@ -24,6 +24,9 @@ import { getHubSchedule } from './hub-db/schedule.ts';
 import { getHubOperational } from './hub-db/operational.ts';
 import { getHubMedia } from './hub-db/media.ts';
 import { getHubSelections } from './hub-db/selections.ts';
+import { requireAccess } from './access.ts';
+import { clientProjectsFor } from './client-scope.ts';
+import { scopeOfProject } from './tenant-scope.ts';
 import { getHubStorage } from './hub-db/storage.ts';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
@@ -1394,4 +1397,53 @@ export async function archiveChangeOrder(formData: FormData) {
 
   await repo.archiveChangeOrder(scope, changeOrderId, { name: session.name });
   revalidatePath(`/dashboard/projects/${projectId}/change-orders`);
+}
+
+// ── The client's answer (§6.5 / §6.6) ───────────────────────────────────────
+//
+// D4 §5: "the client approves, comments and reports." Until now the portal had
+// zero server actions across all thirteen screens — a homeowner could read
+// everything and do nothing, including answer a change order sent to them
+// explicitly for a decision.
+//
+// This is the only write a client makes. It is scoped by the PROJECT they were
+// already authorized to read, not by a tenant scope they do not hold.
+
+export async function recordClientDecision(formData: FormData) {
+  const session = await getSession();
+  if (session === null) throw new Error('not signed in');
+
+  const kind = String(formData.get('kind') ?? '') as 'selection' | 'changeOrder';
+  if (kind !== 'selection' && kind !== 'changeOrder') {
+    throw new Error('kind must be selection or changeOrder');
+  }
+  // The matrix already grants `approve` to a client; nothing had ever called
+  // it. A contractor may also answer, recording a decision taken by phone.
+  assertCan(session.role, 'approve', kind);
+
+  const itemId = String(formData.get('itemId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+  if (itemId === '' || projectId === '') throw new Error('itemId and projectId are required');
+
+  const hub = getHubSelections();
+  if (!hub.available) {
+    throw new Error(`the Hub database is not connected (missing ${hub.missing.join(', ')})`);
+  }
+
+  // The project is the authority. `clientProjectsFor` returns only the projects
+  // this person may see, so a project id they were not given resolves to
+  // nothing and the decision is refused — a homeowner cannot answer on another
+  // homeowner's job by editing a hidden field.
+  const access = await requireAccess();
+  const db = await currentDataSource();
+  const mine = await clientProjectsFor(access, db);
+  const project = mine.find((p) => p.buildsuiteProjectId === projectId);
+  if (project === undefined) throw new Error('that project is not one of yours');
+
+  await hub.selections.recordClientDecision(scopeOfProject(project), kind, itemId, {
+    accepted: String(formData.get('decision') ?? '') === 'approve',
+    comments: String(formData.get('comments') ?? ''),
+  });
+
+  revalidatePath(kind === 'selection' ? '/portal/designs' : '/portal/change-orders');
 }

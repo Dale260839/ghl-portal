@@ -1,3 +1,4 @@
+import { recordClientDecision } from '@/lib/actions';
 import { changeOrdersFor, currentPortalProject } from '@/lib/portal-data';
 import { Badge, Card, PortalEmpty, currency, shortDate } from '@/components/ui';
 
@@ -135,25 +136,51 @@ export default async function PortalChangeOrders({
                   )}
 
                   {c.status === 'Awaiting Client' && (
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        className="rounded-lg bg-navy-900 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-navy-800"
-                      >
-                        Approve change order
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-lg border border-navy-200 px-3.5 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50"
-                      >
-                        Ask a question
-                      </button>
-                      {c.approvalDeadline !== '' && (
-                        <span className="text-xs text-navy-400">
-                          by {shortDate(c.approvalDeadline ?? '')}
-                        </span>
-                      )}
-                    </div>
+                    <form
+                      action={recordClientDecision}
+                      className="mt-4 rounded-lg border border-navy-100 bg-navy-50/60 p-3"
+                    >
+                      <input type="hidden" name="kind" value="changeOrder" />
+                      <input type="hidden" name="itemId" value={c.id} />
+                      <input type="hidden" name="projectId" value={project.buildsuiteProjectId} />
+
+                      <label className="block text-xs text-navy-500">
+                        Anything you want to say about it
+                        <textarea
+                          name="comments"
+                          rows={2}
+                          placeholder="Optional"
+                          className="mt-1 w-full rounded-lg border border-navy-200 px-3 py-2 text-sm"
+                        />
+                      </label>
+
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {/* Two submits, one form. The value carries the answer,
+                            so approving and declining go through the same
+                            checked path rather than one being an afterthought. */}
+                        <button
+                          type="submit"
+                          name="decision"
+                          value="approve"
+                          className="rounded-lg bg-navy-900 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-navy-800"
+                        >
+                          Approve change order
+                        </button>
+                        <button
+                          type="submit"
+                          name="decision"
+                          value="decline"
+                          className="rounded-lg border border-navy-200 px-3.5 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50"
+                        >
+                          Decline
+                        </button>
+                        {c.approvalDeadline !== '' && (
+                          <span className="text-xs text-navy-400">
+                            by {shortDate(c.approvalDeadline ?? '')}
+                          </span>
+                        )}
+                      </div>
+                    </form>
                   )}
                 </Card>
               );

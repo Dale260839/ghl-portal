@@ -196,3 +196,63 @@ test('removal archives rather than deletes', async () => {
   assert.equal((calls[0]!.args.patch as Record<string, unknown>).archived_by, 'Ralph');
   assert.equal((calls[0]!.args.filters as Record<string, string>).archived_at, 'is.null');
 });
+
+// ── The client's answer (2026-09-10) ────────────────────────────────────────
+
+test('§ only a RELEASED record can be answered', async () => {
+  // An unreleased record is one the contractor has not shown anybody. A client
+  // answering it would be answering something they were never sent, so the
+  // filter refuses rather than the screen remembering not to offer it.
+  const { calls, repo } = recording();
+  await repo.recordClientDecision(SCOPE, 'changeOrder', 'c1', { accepted: true });
+
+  const filters = calls[0]!.args.filters as Record<string, string>;
+  assert.equal(filters.client_visible, 'is.true');
+  assert.equal(filters.archived_at, 'is.null');
+  assert.equal(filters.contractor_id, 'eq.contractor-1');
+});
+
+test('approving records the date; declining does not', async () => {
+  // An approval date on a rejected record would read as an approval that was
+  // later reversed, which is a different history.
+  const { calls, repo } = recording();
+  await repo.recordClientDecision(SCOPE, 'selection', 's1', { accepted: true });
+  await repo.recordClientDecision(SCOPE, 'selection', 's2', { accepted: false });
+
+  const approved = calls[0]!.args.patch as Record<string, unknown>;
+  const declined = calls[1]!.args.patch as Record<string, unknown>;
+
+  assert.equal(approved.client_decision, 'Approved');
+  assert.ok(approved.approved_date);
+  assert.equal(declined.client_decision, 'Rejected');
+  assert.equal(declined.approved_date, null);
+});
+
+test('a decision carries the client’s own words', async () => {
+  const { calls, repo } = recording();
+  await repo.recordClientDecision(SCOPE, 'changeOrder', 'c1', {
+    accepted: false,
+    comments: '  Too much for the tiling  ',
+  });
+
+  assert.equal(
+    (calls[0]!.args.patch as Record<string, unknown>).client_comments,
+    'Too much for the tiling',
+  );
+});
+
+test('an empty comment is null rather than an empty answer', async () => {
+  const { calls, repo } = recording();
+  await repo.recordClientDecision(SCOPE, 'selection', 's1', { accepted: true, comments: '   ' });
+
+  assert.equal((calls[0]!.args.patch as Record<string, unknown>).client_comments, null);
+});
+
+test('a decision goes to the right table', async () => {
+  const { calls, repo } = recording();
+  await repo.recordClientDecision(SCOPE, 'selection', 's1', { accepted: true });
+  await repo.recordClientDecision(SCOPE, 'changeOrder', 'c1', { accepted: true });
+
+  assert.equal(calls[0]!.args.from, 'hub_selections');
+  assert.equal(calls[1]!.args.from, 'hub_change_orders');
+});

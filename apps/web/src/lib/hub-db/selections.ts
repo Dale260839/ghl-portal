@@ -381,6 +381,68 @@ export class HubSelections {
     });
   }
 
+  /**
+   * A homeowner's answer on a selection or a change order.
+   *
+   * ---------------------------------------------------------------------------
+   * THIS IS THE ONE WRITE A CLIENT MAKES, AND IT IS SCOPED BY THE PROJECT
+   *
+   * Every other method here asserts the CONTRACTOR, because every other caller
+   * is one. A homeowner holds no tenant scope — so this takes the scope derived
+   * from the project they were already authorized to read (`scopeOfProject`),
+   * and additionally requires the row to be released to them.
+   *
+   * `client_visible = true` in the filter is doing real work: an unreleased
+   * record is one the contractor has not shown anybody, and a client answering
+   * it would be answering something they were never sent. A wrong id therefore
+   * updates nothing rather than answering on someone else's behalf.
+   *
+   * The decision does NOT move `status` to Approved by itself. A client's
+   * answer and a contractor's acceptance of it are two different events, and
+   * collapsing them would let a homeowner mark their own change order approved.
+   * ---------------------------------------------------------------------------
+   */
+  async recordClientDecision(
+    scope: TenantScope,
+    kind: 'selection' | 'changeOrder',
+    itemId: string,
+    decision: { accepted: boolean; comments?: string; at?: string },
+  ): Promise<void> {
+    const contractorId = assertContractor(scope, `${kind} decision`);
+    if (itemId.trim() === '') throw new TypeError('itemId is required');
+
+    const answered = decision.at ?? new Date().toISOString().slice(0, 10);
+    const table = kind === 'selection' ? 'hub_selections' : 'hub_change_orders';
+
+    const patch: Record<string, unknown> =
+      kind === 'selection'
+        ? {
+            client_decision: decision.accepted ? 'Approved' : 'Rejected',
+            client_comments: decision.comments?.trim() || null,
+            approved_date: decision.accepted ? answered : null,
+            status: decision.accepted ? 'Approved' : 'Rejected',
+            updated_at: new Date().toISOString(),
+          }
+        : {
+            client_comments: decision.comments?.trim() || null,
+            approval_date: decision.accepted ? answered : null,
+            status: decision.accepted ? 'Approved' : 'Rejected',
+            updated_at: new Date().toISOString(),
+          };
+
+    await this.client.update({
+      from: table,
+      filters: {
+        id: `eq.${itemId}`,
+        contractor_id: `eq.${contractorId}`,
+        // Only a released record can be answered.
+        client_visible: 'is.true',
+        archived_at: 'is.null',
+      },
+      patch,
+    });
+  }
+
   async archiveChangeOrder(
     scope: TenantScope,
     changeOrderId: string,
