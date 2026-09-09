@@ -1,0 +1,212 @@
+import { attachProjectFile, archiveProjectFile, updateProjectFile } from '@/lib/actions';
+import { Badge, Card, CardHeader, shortDate } from '@/components/ui';
+import { ControlEmpty, VisibilityTag } from '@/components/control';
+import { DOCUMENT_CATEGORIES, type MediaItem, type MediaKind } from '@/lib/hub-db/media';
+
+/**
+ * The add-and-manage surface for documents and photos.
+ *
+ * ---------------------------------------------------------------------------
+ * ONE COMPONENT FOR BOTH, FOR THE SAME REASON THE REPOSITORY IS ONE MODULE
+ *
+ * The two screens differ by a noun and one field. Two copies would be the same
+ * rules written twice, and the second copy is the one that stops matching when
+ * the release rule changes.
+ * ---------------------------------------------------------------------------
+ *
+ * Every file is private in the bucket. Nothing here links directly to storage —
+ * the download route mints a short-lived signed URL after checking the caller
+ * is the owning contractor, so a copied link is dead within minutes.
+ */
+
+const FIELD = 'rounded-lg border border-navy-200 px-3 py-2 text-sm';
+
+export function MediaManager({
+  kind,
+  projectId,
+  items,
+  released,
+  hub,
+}: {
+  kind: MediaKind;
+  projectId: string;
+  items: MediaItem[];
+  /** The project-level switch. Both it and the row must be on. */
+  released: boolean;
+  hub: { available: boolean; missing: string[] };
+}) {
+  const isDoc = kind === 'document';
+  const noun = isDoc ? 'document' : 'photo';
+  const route = isDoc ? 'documents' : 'photos';
+
+  if (!hub.available) {
+    return (
+      <ControlEmpty
+        title="The Hub database is not connected"
+        body={`Missing: ${hub.missing.join(', ')}. Files cannot be listed or saved.`}
+      />
+    );
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader title={isDoc ? 'Add a document' : 'Add a photo'} />
+        <form action={attachProjectFile} className="grid gap-3 px-5 py-4 sm:grid-cols-4">
+          <input type="hidden" name="projectId" value={projectId} />
+          <input type="hidden" name="kind" value={kind} />
+
+          <input
+            name="label"
+            required={isDoc}
+            placeholder={isDoc ? 'Title, e.g. Signed permit' : 'Caption (optional)'}
+            className={`${FIELD} sm:col-span-2`}
+          />
+          {isDoc ? (
+            <select name="category" defaultValue="Other" className={FIELD}>
+              {DOCUMENT_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span />
+          )}
+          <button
+            type="submit"
+            className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
+          >
+            Add
+          </button>
+
+          <label className="text-xs text-navy-500 sm:col-span-2">
+            Upload a file
+            <input
+              type="file"
+              name="file"
+              accept={isDoc ? '.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,image/*' : 'image/*'}
+              className={`${FIELD} mt-1 w-full`}
+            />
+          </label>
+          <label className="text-xs text-navy-500 sm:col-span-2">
+            …or paste a link
+            <input
+              name="externalUrl"
+              type="url"
+              placeholder="https://…"
+              className={`${FIELD} mt-1 w-full`}
+            />
+          </label>
+
+          <p className="text-xs text-navy-400 sm:col-span-4">
+            {/* Saying which, rather than leaving them to discover it. */}
+            One or the other is required. Saved internal — release it to the client with the switch
+            on the {noun}.
+          </p>
+        </form>
+      </Card>
+
+      {items.length === 0 ? (
+        <ControlEmpty
+          title={isDoc ? 'No documents yet' : 'No photos yet'}
+          body={`Add the first ${noun} for this project.`}
+        />
+      ) : (
+        <div className="space-y-3">
+          {items.map((item) => (
+            <Card key={item.id} className="px-5 py-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-navy-900">
+                  {item.label || (isDoc ? 'Untitled document' : 'Untitled photo')}
+                </span>
+                {item.category !== '' && <Badge tone="neutral">{item.category}</Badge>}
+                {/* Both halves: the row's own flag AND the project switch. */}
+                <VisibilityTag shown={released && item.clientVisible} />
+                <span className="ml-auto text-xs text-navy-400">
+                  {shortDate(item.createdAt)} · {item.uploadedBy ?? 'unknown'}
+                </span>
+              </div>
+
+              <div className="mt-1 text-xs">
+                {item.externalUrl !== null ? (
+                  <a
+                    href={item.externalUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-navy-600 underline underline-offset-2"
+                  >
+                    Open link
+                  </a>
+                ) : item.storagePath !== null ? (
+                  <a
+                    href={`/api/files?path=${encodeURIComponent(item.storagePath)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-navy-600 underline underline-offset-2"
+                  >
+                    Open file
+                  </a>
+                ) : (
+                  <span className="text-navy-400">No file attached</span>
+                )}
+              </div>
+
+              <form action={updateProjectFile} className="mt-3 grid gap-2 sm:grid-cols-4">
+                <input type="hidden" name="itemId" value={item.id} />
+                <input type="hidden" name="projectId" value={projectId} />
+                <input type="hidden" name="kind" value={kind} />
+                <input
+                  name="label"
+                  defaultValue={item.label}
+                  required={isDoc}
+                  className={`${FIELD} sm:col-span-2`}
+                />
+                {isDoc ? (
+                  <select name="category" defaultValue={item.category || 'Other'} className={FIELD}>
+                    {DOCUMENT_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span />
+                )}
+                <button
+                  type="submit"
+                  className="rounded-lg border border-navy-200 px-3 py-1.5 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
+                >
+                  Save
+                </button>
+                <label className="flex items-center gap-2 text-xs text-navy-600 sm:col-span-4">
+                  <input
+                    type="checkbox"
+                    name="clientVisible"
+                    defaultChecked={item.clientVisible}
+                    className="rounded border-navy-300"
+                  />
+                  Show this {noun} to the client
+                </label>
+              </form>
+
+              {/* Archives the row and leaves the file in the bucket. Removing
+                  the object would break any signed URL already issued. */}
+              <form action={archiveProjectFile} className="mt-2 border-t border-navy-100 pt-2">
+                <input type="hidden" name="itemId" value={item.id} />
+                <input type="hidden" name="projectId" value={projectId} />
+                <input type="hidden" name="kind" value={kind} />
+                <button
+                  type="submit"
+                  className="text-xs font-medium text-red-700 transition hover:underline"
+                >
+                  Remove from {route}
+                </button>
+              </form>
+            </Card>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}

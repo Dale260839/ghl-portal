@@ -1,10 +1,12 @@
+import { getHubMedia } from '@/lib/hub-db/media';
+import { MediaManager } from '@/components/media-manager';
 import { notFound } from 'next/navigation';
 
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { DOCUMENTS } from '@/lib/data/portal-fixtures';
 import { Badge, Card, shortDate } from '@/components/ui';
-import { ControlButton, ControlEmpty, ControlHeader, ControlNote, VisibilityTag } from '@/components/control';
+import { ControlEmpty, ControlHeader, ControlNote, VisibilityTag } from '@/components/control';
 
 /**
  * Documents — contractor control side. Every file on the project, and whether
@@ -22,9 +24,11 @@ export default async function ProjectDocumentsControl({
   const project = await db.getProject(scope, id);
   if (project === null) notFound();
 
-  const docs = DOCUMENTS.filter((d) => d.projectId === id).sort((a, b) =>
-    b.uploadedDate.localeCompare(a.uploadedDate),
-  );
+  const hub = getHubMedia();
+  const items = hub.available ? await hub.media.listForProject(scope, 'document', id) : [];
+  // No per-type switch exists for documents — the portal master is the only
+  // project-level gate, and the row's own flag is the other half.
+  const released = project.clientPortalEnabled;
 
   return (
     <div className="space-y-6">
@@ -32,7 +36,6 @@ export default async function ProjectDocumentsControl({
         title="Documents"
         subtitle="Every file on the project. Share the ones the client should have."
         clientHref={`/portal/documents?preview=${id}`}
-        action={<ControlButton>Upload</ControlButton>}
       />
 
       <ControlNote>
@@ -40,34 +43,13 @@ export default async function ProjectDocumentsControl({
         client-visible show up in the homeowner&rsquo;s Documents screen.
       </ControlNote>
 
-      {docs.length === 0 ? (
-        <ControlEmpty title="No documents" body="Upload the first file for this project." />
-      ) : (
-        <Card>
-          <ul className="divide-y divide-navy-100">
-            {docs.map((d) => (
-              <li key={d.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium text-navy-900">{d.name}</span>
-                    <Badge>{d.category}</Badge>
-                    <VisibilityTag shown={project.clientPortalEnabled && d.clientVisible} />
-                  </div>
-                  <div className="mt-0.5 text-xs text-navy-400">
-                    Uploaded {shortDate(d.uploadedDate)}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="shrink-0 text-xs font-medium text-navy-600 hover:underline"
-                >
-                  {d.clientVisible ? 'Unshare' : 'Share with client'}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
+      <MediaManager
+        kind="document"
+        projectId={id}
+        items={items}
+        released={released}
+        hub={hub.available ? { available: true, missing: [] } : { available: false, missing: hub.missing }}
+      />
     </div>
   );
 }

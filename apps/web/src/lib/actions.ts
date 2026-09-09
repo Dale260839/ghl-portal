@@ -22,6 +22,8 @@ import { isUuid } from './data/visibility-overlay.ts';
 import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db/records';
 import { getHubSchedule } from './hub-db/schedule.ts';
 import { getHubOperational } from './hub-db/operational.ts';
+import { getHubMedia } from './hub-db/media.ts';
+import { getHubStorage } from './hub-db/storage.ts';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
 import { resolveInvoiceRail, draftFromStored } from './invoicing/rail.ts';
@@ -1131,4 +1133,119 @@ export async function archiveMilestone(formData: FormData) {
 
   await ops.archiveMilestone(scope, milestoneId, { name: session.name });
   revalidatePath(`/dashboard/projects/${projectId}/timeline`);
+}
+
+// ── Documents and photos (§6.10 / §6.11) ────────────────────────────────────
+//
+// Both tables have existed since 0001 and nothing wrote either. `storage.ts`
+// could already put a file in the bucket; nothing wrote the row saying which
+// project it belonged to, so an uploaded file was unreachable.
+
+async function mediaContext() {
+  const session = await getSession();
+  if (session === null) throw new Error('not signed in');
+
+  const hub = getHubMedia();
+  if (!hub.available) {
+    throw new Error(`the Hub database is not connected (missing ${hub.missing.join(', ')})`);
+  }
+  return { session, scope: await actionTenantScope(session), media: hub.media };
+}
+
+/**
+ * Upload a file and record it, in that order.
+ *
+ * The file goes to the bucket FIRST. If that fails nothing is written, so there
+ * is no row pointing at a file that does not exist — a document that lists but
+ * will not open reads as data loss, and is worse than a failed upload the
+ * contractor can retry.
+ *
+ * A link is the alternative for anything we do not host, and needs no upload.
+ */
+export async function attachProjectFile(formData: FormData) {
+  const { session, scope, media } = await mediaContext();
+
+  const kind = String(formData.get('kind') ?? '') as 'document' | 'photo';
+  if (kind !== 'document' && kind !== 'photo') throw new Error('kind must be document or photo');
+  assertCan(session.role, 'create', kind);
+
+  const projectId = String(formData.get('projectId') ?? '');
+  if (projectId === '') throw new Error('projectId is required');
+
+  const label = String(formData.get('label') ?? '');
+  const externalUrl = String(formData.get('externalUrl') ?? '').trim();
+  const file = formData.get('file');
+
+  let storagePath: string | null = null;
+  if (file instanceof File && file.size > 0) {
+    const storage = getHubStorage();
+    if (!storage.available) {
+      throw new Error(`file storage is not connected (missing ${storage.missing.join(', ')})`);
+    }
+    const stored = await storage.storage.upload(scope, {
+      projectId,
+      kind: kind === 'document' ? 'documents' : 'photos',
+      filename: file.name,
+      contentType: file.type || 'application/octet-stream',
+      body: await file.arrayBuffer(),
+    });
+    storagePath = stored.path;
+  }
+
+  if (storagePath === null && externalUrl === '') {
+    throw new Error('choose a file to upload, or paste a link');
+  }
+
+  await media.attach(
+    scope,
+    kind,
+    {
+      projectId,
+      // A photo with no caption is fine; a document with no title is not, and
+      // the repository enforces that rather than this form.
+      label: label || (file instanceof File ? file.name : ''),
+      category: String(formData.get('category') ?? ''),
+      storagePath,
+      externalUrl: externalUrl || null,
+      clientVisible: false,
+    },
+    { name: session.name },
+  );
+
+  revalidatePath(`/dashboard/projects/${projectId}/${kind === 'document' ? 'documents' : 'photos'}`);
+}
+
+export async function updateProjectFile(formData: FormData) {
+  const { session, scope, media } = await mediaContext();
+
+  const kind = String(formData.get('kind') ?? '') as 'document' | 'photo';
+  if (kind !== 'document' && kind !== 'photo') throw new Error('kind must be document or photo');
+  assertCan(session.role, 'update', kind);
+
+  const itemId = String(formData.get('itemId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+  if (itemId === '') throw new Error('itemId is required');
+
+  await media.update(scope, kind, itemId, {
+    label: String(formData.get('label') ?? ''),
+    category: String(formData.get('category') ?? ''),
+    clientVisible: formData.get('clientVisible') !== null,
+  });
+
+  revalidatePath(`/dashboard/projects/${projectId}/${kind === 'document' ? 'documents' : 'photos'}`);
+}
+
+export async function archiveProjectFile(formData: FormData) {
+  const { session, scope, media } = await mediaContext();
+
+  const kind = String(formData.get('kind') ?? '') as 'document' | 'photo';
+  if (kind !== 'document' && kind !== 'photo') throw new Error('kind must be document or photo');
+  assertCan(session.role, 'archive', kind);
+
+  const itemId = String(formData.get('itemId') ?? '');
+  const projectId = String(formData.get('projectId') ?? '');
+  if (itemId === '') throw new Error('itemId is required');
+
+  await media.archive(scope, kind, itemId, { name: session.name });
+  revalidatePath(`/dashboard/projects/${projectId}/${kind === 'document' ? 'documents' : 'photos'}`);
 }
