@@ -1,5 +1,42 @@
+import { PROJECT_CODE_PATTERN } from '@buildsuite/contracts';
+
 import { BuildSuiteClient, readBuildSuiteConfig } from './client.ts';
+import { resolveContractor } from './contractor-identity.ts';
+import { UNKNOWN_LOCATION } from '../tenant-scope.ts';
 import { assertScope, type TenantScope } from '../tenancy.ts';
+
+/**
+ * `proposals.signature_status` when a contract has actually been signed.
+ *
+ * Verbatim from the live column — 6 of 48 rows carry it and the other 42 are
+ * null. A literal at each call site is how the value and the comparison drift
+ * apart.
+ */
+export const SIGNED_SIGNATURE_STATUS = 'SIGNED';
+
+/**
+ * Normalise and validate the two halves a homeowner types, or refuse.
+ *
+ * Validated, NOT escaped. Anything that is not a well-formed code or a
+ * plausible address never reaches the query, which fails closed and removes the
+ * question of PostgREST filter injection rather than answering it — a `,` or a
+ * `)` inside a filter value would otherwise change what the filter means.
+ *
+ * One copy for both doors. The code pattern comes from `@buildsuite/contracts`
+ * rather than being written out again here: this file used to hold its own copy
+ * of it, and a three-digits-only version rejected every contractor-created
+ * project (`BSA-ASJF-006`), whose homeowner could then never sign in at all.
+ */
+function clientLoginPair(
+  projectCode: string,
+  clientEmail: string,
+): { code: string; email: string } | null {
+  const code = projectCode.trim().toUpperCase();
+  const email = clientEmail.trim().toLowerCase();
+  if (!PROJECT_CODE_PATTERN.test(code)) return null;
+  if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(email)) return null;
+  return { code, email };
+}
 
 /**
  * Reading BuildSuite's live projects.
@@ -178,6 +215,44 @@ export interface BuildSuiteReader {
     projectCode: string,
     clientEmail: string,
   ): Promise<{ id: string; ghlContactId: string } | null>;
+
+  /**
+   * The same match, but it also proves the contract is SIGNED and says whose.
+   *
+   * -------------------------------------------------------------------------
+   * WHY THIS IS A SECOND METHOD AND NOT A FLAG ON THE FIRST
+   *
+   * `findProjectForClientLogin` backs the emailed-link door, which mints
+   * nothing. This one backs the door where the project code IS the password
+   * (Chris, 2026-09-10), so it mints a session directly, and the two must not
+   * share a signature that a caller could get the wrong way round.
+   *
+   * The signature requirement is the load-bearing half. A code alone is about
+   * six bits — `BSA-001` through `BSA-052`, sequential — so what stops it being
+   * a guessing game is that only 6 of 48 proposals are signed, and an unsigned
+   * project's code opens nothing at all. Attempt limiting sits in front of it
+   * as well (`lib/auth/rate-limit.ts`), keyed on the email and the caller, never
+   * on the code.
+   *
+   * `contractorId` comes off the PROPOSAL, which is where BuildSuite's tenancy
+   * for that table actually lives — not resolved from the project's auth
+   * profile, which would be a second guess at an answer the row already holds.
+   * -------------------------------------------------------------------------
+   */
+  findSignedProjectForClient(
+    projectCode: string,
+    clientEmail: string,
+  ): Promise<SignedProjectForClient | null>;
+}
+
+/** What the code-as-password door needs to open a session, and nothing more. */
+export interface SignedProjectForClient {
+  projectId: string;
+  /** `contractors.id`, read from the signed proposal. Files the membership. */
+  contractorId: string;
+  ghlContactId: string;
+  /** For the greeting and the contractor's Team screen. Never an email. */
+  clientName: string;
 }
 
 export interface BuildSuiteUnavailable {
@@ -185,12 +260,26 @@ export interface BuildSuiteUnavailable {
   readonly missing: string[];
 }
 
-class SupabaseReader implements BuildSuiteReader {
+/** How the reader reaches a contractor when a proposal names none. Injectable. */
+export type ContractorLookup = (scope: TenantScope) => Promise<
+  { resolved: true; identity: { contractorId: string } } | { resolved: false; reason: string }
+>;
+
+export class SupabaseReader implements BuildSuiteReader {
   readonly available = true as const;
   private readonly client: BuildSuiteClient;
+  private readonly lookupContractor: ContractorLookup;
 
-  constructor(client: BuildSuiteClient) {
+  /**
+   * `lookupContractor` defaults to the real resolver and is a parameter only so
+   * the sign-in path can be tested without a network. Exported for the same
+   * reason: this class decides who gets into a homeowner's portal, and that
+   * decision should be exercised directly rather than through `getBuildSuiteReader`,
+   * which builds its own client from environment variables.
+   */
+  constructor(client: BuildSuiteClient, lookupContractor: ContractorLookup = resolveContractor) {
     this.client = client;
+    this.lookupContractor = lookupContractor;
   }
 
   /**
@@ -309,22 +398,13 @@ class SupabaseReader implements BuildSuiteReader {
     projectCode: string,
     clientEmail: string,
   ): Promise<{ id: string; ghlContactId: string } | null> {
-    const code = projectCode.trim().toUpperCase();
-    const email = clientEmail.trim().toLowerCase();
-
-    // Validated, not escaped. Anything that is not a well-formed code or a
-    // plausible address never reaches the query — which fails closed and
-    // removes the question of PostgREST filter injection rather than answering
-    // it. A `,` or `)` in a filter value would otherwise change its meaning.
-    // Both shapes Sing confirmed. Three-digits-only rejected every
-    // contractor-created project, whose homeowner could then never sign in.
-    if (!/^BSA-(?:\d+|[A-Z]{2,6}-\d+)$/.test(code)) return null;
-    if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(email)) return null;
+    const pair = clientLoginPair(projectCode, clientEmail);
+    if (pair === null) return null;
 
     const rows = await this.client.select<{ id: string; ghl_contact_id: string | null }>({
       from: 'projects',
       columns: ['id', 'ghl_contact_id'],
-      filters: { project_code: `eq.${code}`, client_email: `eq.${email}` },
+      filters: { project_code: `eq.${pair.code}`, client_email: `eq.${pair.email}` },
       limit: 2,
     });
 
@@ -332,6 +412,102 @@ class SupabaseReader implements BuildSuiteReader {
     // picking one of them would sign somebody into a job that may not be theirs.
     if (rows.length !== 1) return null;
     return { id: rows[0]!.id, ghlContactId: rows[0]!.ghl_contact_id ?? '' };
+  }
+
+  async findSignedProjectForClient(
+    projectCode: string,
+    clientEmail: string,
+  ): Promise<SignedProjectForClient | null> {
+    const pair = clientLoginPair(projectCode, clientEmail);
+    if (pair === null) return null;
+
+    // Both halves inside the query, and `client_email` is never selected — the
+    // address the visitor typed is compared in the database and no client
+    // address comes back out of it (D-010).
+    const rows = await this.client.select<{
+      id: string;
+      ghl_contact_id: string | null;
+      client_name: string | null;
+      auth_profile_id: string | null;
+    }>({
+      from: 'projects',
+      columns: ['id', 'ghl_contact_id', 'client_name', 'auth_profile_id'],
+      filters: { project_code: `eq.${pair.code}`, client_email: `eq.${pair.email}` },
+      limit: 2,
+    });
+    if (rows.length !== 1) return null;
+    const project = rows[0]!;
+
+    // THE SIGNATURE GATE. Not decoration: it is what makes a six-bit code
+    // survivable, and it is the rule as stated — "all the signed project should
+    // have that". A project whose contract is unsigned admits nobody, whatever
+    // code is typed at it.
+    //
+    // `signature_status` is the explicit state column; `signature_signed_at` is
+    // the timestamp behind it. Both are required, so a half-written row — a
+    // status set by an automation that never recorded a time, or the reverse —
+    // does not open a portal.
+    const signed = await this.client.select<{ contractor_id: string | null }>({
+      from: 'proposals',
+      columns: ['contractor_id'],
+      filters: {
+        project_id: `eq.${project.id}`,
+        signature_status: `eq.${SIGNED_SIGNATURE_STATUS}`,
+        signature_signed_at: 'not.is.null',
+        deleted_at: 'is.null',
+      },
+      order: 'signature_signed_at.desc',
+      limit: 1,
+    });
+
+    // No signed proposal at all. Nobody gets in, whatever code was typed.
+    if (signed.length === 0) return null;
+
+    const contractorId =
+      (signed[0]?.contractor_id ?? '').trim() ||
+      (await this.contractorOfProject(project.auth_profile_id));
+
+    // A signed contract that names no contractor by ANY of the links. The
+    // membership this opens is filed under a contractor id, and filing it under
+    // an empty string would put a homeowner in a tenant that does not exist.
+    if (contractorId === '') return null;
+
+    return {
+      projectId: project.id,
+      contractorId,
+      ghlContactId: project.ghl_contact_id ?? '',
+      clientName: (project.client_name ?? '').trim(),
+    };
+  }
+
+  /**
+   * The contractor behind a project, when the proposal did not name one.
+   *
+   * `proposals.contractor_id` is null on 13 of 48 rows, and on one of the six
+   * SIGNED ones — `BSA-APS-001`, whose homeowner could otherwise never sign in
+   * even though their contract is signed and their code is correct. Found on
+   * 2026-09-10 by running the real reader against live data rather than by
+   * reading the schema.
+   *
+   * This delegates to `ContractorResolver` instead of walking the links again
+   * here. That resolver is the ONE place that knows how a BuildSuite profile
+   * maps to a contractor — dedicated id fields only, ambiguity resolving to
+   * nothing rather than to a coin flip (§3.6, D4 §6) — and a second copy of
+   * that chain is a second thing to keep in step with it.
+   *
+   * `UNKNOWN_LOCATION` because there is no session here to take a location
+   * from, and the resolver never filters on one: it reads the profile by id.
+   * The same placeholder `scopeOfProject` uses, for the same reason.
+   */
+  private async contractorOfProject(authProfileId: string | null): Promise<string> {
+    const profileId = (authProfileId ?? '').trim();
+    if (profileId === '') return '';
+
+    const identity = await this.lookupContractor({
+      locationId: UNKNOWN_LOCATION,
+      authProfileIds: [profileId],
+    });
+    return identity.resolved ? identity.identity.contractorId : '';
   }
 
   async countByStatus(scope: TenantScope): Promise<Record<string, number>> {

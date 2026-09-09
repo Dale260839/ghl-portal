@@ -74,6 +74,11 @@ function readerOf(rows: BuildSuiteProjectRow[]): BuildSuiteReader {
       );
       return p === undefined ? null : { id: p.id, ghlContactId: p.ghl_contact_id ?? '' };
     },
+    // The signed-contract door. These rows carry no proposal, so it finds
+    // nothing — this source's tests are about scoping, not about sign-in.
+    async findSignedProjectForClient() {
+      return null;
+    },
     async listProjectRowsByIds(projectIds) {
       const wanted = new Set(projectIds.filter((id) => id.trim() !== ''));
       return wanted.size === 0 ? [] : rows.filter((r) => wanted.has(r.id));

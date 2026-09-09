@@ -6,6 +6,12 @@ import { redirect } from 'next/navigation';
 import { getBuildSuiteReader } from './buildsuite/projects.ts';
 import type { ClientLoginReader } from './auth/client-lookup.ts';
 import { clientIpFrom } from './auth/rate-limit.ts';
+import {
+  clientCodeLimiter,
+  clientCodeMessage,
+  signInWithProjectCode,
+  type SignedProjectReader,
+} from './auth/client-credentials.ts';
 import { resolveSessionSecret } from './auth/session-crypto.ts';
 import {
   requestSignInLink,
@@ -857,6 +863,69 @@ export async function requestSignIn(
 
   return { message: signInRequestMessage(outcome) };
 
+}
+
+/**
+ * The homeowner's sign-in: email plus the project code from their contract.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS MINTS A SESSION WHERE `requestSignIn` MINTS AN EMAIL
+ *
+ * Chris, 2026-09-10: signing the contract fires a BuildSuite automation that
+ * sends the homeowner their project code, and that code is the password. There
+ * is no invitation to wait for and no link to expire, which is the point — the
+ * whole path is automatic from signature to first login.
+ *
+ * The policy is in `auth/client-credentials.ts` and is tested without a
+ * database. This function is only the wiring: the live reader, the live store,
+ * the caller's IP, and the cookie at the end.
+ *
+ * BOTH DEPENDENCIES MUST BE LIVE. An unavailable BuildSuite must never become
+ * an unauthenticated sign-in, so a missing reader or a missing Hub reports an
+ * outage rather than falling through to anything — there is deliberately no
+ * fixture path here at all.
+ * ---------------------------------------------------------------------------
+ */
+export async function signInWithCode(
+  _prev: { message?: string } | undefined,
+  formData: FormData,
+): Promise<{ message: string }> {
+  const email = String(formData.get('email') ?? '');
+  const projectCode = String(formData.get('projectCode') ?? '');
+
+  const buildsuite = getBuildSuiteReader();
+  const hub = getHubTeam();
+  if (!buildsuite.available || !hub.available) {
+    return { message: clientCodeMessage({ result: 'unavailable' }) };
+  }
+
+  const reader: SignedProjectReader = buildsuite;
+  const outcome = await signInWithProjectCode(email, projectCode, {
+    reader,
+    store: hub.team,
+    limiter: clientCodeLimiter,
+    ip: clientIpFrom(await headers()),
+  });
+
+  if (outcome.result !== 'signed-in') return { message: clientCodeMessage(outcome) };
+
+  const m = outcome.membership;
+  await setSession({
+    role: 'client',
+    name: m.fullName === '' ? m.email : m.fullName,
+    email: m.email,
+    membershipId: m.id,
+    // EMPTY, and this is the privacy model rather than an oversight. A
+    // homeowner reads only the Hub's own tables; a profile here would open
+    // BuildSuite to them. `currentAccess` reads their projects from the
+    // membership on every request, so revocation and assignment are live.
+    authProfileIds: [],
+    // No `contactId`. A contact id would send `clientProjectsFor` down the
+    // contact path and return every project that contact holds — including
+    // ones whose code this person has never proved.
+  } as Session);
+
+  redirect(homeFor('client'));
 }
 
 /**

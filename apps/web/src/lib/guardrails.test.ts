@@ -164,6 +164,12 @@ test('every mutating server action checks permission before it writes', () => {
     // are pinned below rather than taken on trust.
     'switchAccount',
     'requestSignIn',
+    // The homeowner's code sign-in. Unlike `requestSignIn` it DOES write — it
+    // opens a membership — so the exemption is not "it writes nothing" but "it
+    // runs before there is a session, so there is no role for `assertCan` to
+    // check". What authorises the write is the signed contract itself, matched
+    // inside BuildSuite. Pinned below, so this line cannot quietly widen.
+    'signInWithCode',
   ]);
 
   const bodies = [...actions.text.matchAll(/^export async function (\w+)[\s\S]*?\n\}/gm)];
@@ -310,6 +316,101 @@ test('the account switch is gated by a flag AND the real identity', () => {
   assert.match(body[0], /accountSwitchEnabled\(\)/, 'it must check the flag server-side');
   assert.match(body[0], /realIdentity\(/, 'it must check the REAL identity, not the assumed one');
   assert.match(body[0], /findDevAccount\(/, 'it must look the account up, not trust the form');
+});
+
+test('the code sign-in delegates its whole decision, and widens nothing', () => {
+  // `signInWithCode` is exempt from the permission rule because it runs before
+  // a session exists. That exemption is only safe while the action stays pure
+  // wiring: every decision in `auth/client-credentials.ts`, which is tested
+  // without a database, and nothing decided inline where it cannot be.
+  //
+  // The three ways this goes wrong are all cheap to check and expensive to
+  // find later, so they are checked here rather than trusted.
+  const actions = FILES.find((f) => rel(f.path) === 'lib/actions.ts');
+  assert.ok(actions);
+
+  const body = actions.text.match(/export async function signInWithCode\([\s\S]*?\n\}/);
+  assert.ok(body, 'signInWithCode has moved or been renamed');
+
+  assert.match(
+    body[0],
+    /signInWithProjectCode\(/,
+    'the decision must come from the policy module, not from a comparison written here',
+  );
+
+  // An unavailable BuildSuite must never become an unauthenticated sign-in.
+  // There is deliberately no fixture reader on this path at all.
+  assert.match(
+    body[0],
+    /!buildsuite\.available \|\| !hub\.available/,
+    'a missing database must refuse, not fall through to anything',
+  );
+
+  // A `contactId` sends the portal down `listProjectsForContact`, which returns
+  // EVERY project that contact holds — including ones whose code this visitor
+  // has never proved. That is precisely the widening the retired emailed-link
+  // door had, and the reason it was retired.
+  assert.equal(
+    /contactId:/.test(body[0]),
+    false,
+    'a code sign-in must scope to the membership, never to a contact',
+  );
+});
+
+test('the homeowner code door is the only unauthenticated path that opens an account', () => {
+  // `provisionClientFromSignedProject` creates a membership with no session, no
+  // scope and no invitation behind it. Exactly one caller may do that, and it
+  // is the one whose input BuildSuite has already verified against a signed
+  // contract. Anywhere else, it is an account-creation primitive with nothing
+  // in front of it.
+  const callers = FILES.filter((f) => {
+    const path = rel(f.path);
+    if (path.startsWith('lib/hub-db/team.') || path.endsWith('.test.ts')) return false;
+    return /provisionClientFromSignedProject\(/.test(f.text);
+  }).map((f) => rel(f.path));
+
+  assert.deepEqual(callers, ['lib/auth/client-credentials.ts']);
+});
+
+test('a homeowner is never invited, and never inherits a BuildSuite profile', () => {
+  // Two doors for one person, with different rules, is how the stale one wins.
+  // Chris removed the invited-client door on 2026-09-10; access now follows the
+  // signed contract. `INVITABLE_ROLES` is the single place that decides it, and
+  // `invite()` validates against it.
+  const team = FILES.find((f) => rel(f.path) === 'lib/hub-db/team.ts');
+  assert.ok(team);
+
+  const roles = team.text.match(/export const INVITABLE_ROLES = \[([^\]]*)\]/);
+  assert.ok(roles, 'INVITABLE_ROLES has moved or been reshaped');
+  assert.equal(
+    /'client'/.test(roles[1]!),
+    false,
+    'a homeowner must not be invitable — their account follows the signed contract',
+  );
+
+  // And the profile list they are created with. An inherited profile would open
+  // every one of the contractor's BuildSuite projects to them.
+  //
+  // Sliced by index rather than matched with one regex: the method's PARAMETER
+  // object closes with the same `\n  }` the method does, so a lazy match
+  // stopped at the signature and asserted against six lines that could never
+  // contain either thing. Caught by watching this pass on a body it had not
+  // read — the failure mode a source-scanning test is most prone to.
+  const from = team.text.indexOf('async provisionClientFromSignedProject(');
+  assert.notEqual(from, -1, 'provisionClientFromSignedProject has moved or been renamed');
+  const rest = team.text.slice(from + 1);
+  const next = rest.search(/\n {2}(async |\/\*\*)/);
+  const provision = [rest.slice(0, next === -1 ? undefined : next)];
+  assert.match(
+    provision[0],
+    /auth_profile_ids: \[\]/,
+    'a homeowner must be created with no BuildSuite profiles at all',
+  );
+  assert.equal(
+    /password_hash:/.test(provision[0]),
+    false,
+    'the project code must never be written to password_hash',
+  );
 });
 
 test('the account switch is off unless explicitly enabled', () => {

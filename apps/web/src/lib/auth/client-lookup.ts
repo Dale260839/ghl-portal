@@ -27,6 +27,21 @@ import { issueVerificationToken } from './verification-token.ts';
  * because this mints nothing: guessing a code gets an attacker an email sent to
  * somebody else's address. **If this ever issues a session directly, the code is
  * not enough.**
+ *
+ * ---------------------------------------------------------------------------
+ * THAT "EVER" ARRIVED — AND THIS FILE IS NO LONGER WIRED TO ANYTHING (2026-09-10)
+ *
+ * Chris decided the code IS the password: a BuildSuite automation sends it when
+ * the contract is signed, and `auth/client-credentials.ts` opens a session from
+ * it. The paragraph above was raised before that was built and the decision
+ * stands, so it is kept here as written rather than softened — it is the reason
+ * the new door carries a signature gate, a tighter attempt limit and no stored
+ * hash, and the reason raising the code's entropy is logged as the real fix
+ * (`docs/CLIENT-LOGIN-PROJECT-CODE.md` §5).
+ *
+ * Nothing on a screen imports this module or `sign-in-request.ts` any more, and
+ * `/auth/verify` refuses. It is kept, and kept tested, because the design is
+ * sound and is the obvious answer if six bits are ever judged insufficient.
  * ---------------------------------------------------------------------------
  */
 

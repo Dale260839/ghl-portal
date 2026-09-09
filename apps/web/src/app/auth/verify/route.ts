@@ -1,101 +1,52 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import {
-  clientIpFrom,
-  createRateLimiter,
-  verifyKeys,
-  VERIFY_LIMIT,
-} from '@/lib/auth/rate-limit';
-import { resolveSessionSecret } from '@/lib/auth/session-crypto';
-import { consumeVerificationToken, createMemoryConsumedTokens } from '@/lib/auth/verification-token';
-import { CONTACTS } from '@/lib/data/fixtures';
-import { homeFor, setSession } from '@/lib/session';
-
 /**
- * Client sign-in landing (§9.2, C-2).
+ * RETIRED — the emailed sign-in link (§9.2, C-2).
  *
- * The homeowner's path, and the counterpart to the contractor's GHL landing.
- * The emailed link is `https://<domain>/auth/verify?token=<signed token>`. The
- * token is the credential — a single-use, expiring, signed proof (see
- * `verification-token.ts`). Email + project ID only *located* the record and
- * triggered the email; neither reaches this route, and neither would mint a
- * session if it did.
+ * ---------------------------------------------------------------------------
+ * WHY THIS ROUTE NO LONGER MINTS ANYTHING (2026-09-10)
  *
- * On success this mints the SAME signed session cookie the contractor path
- * uses (`setSession`), so every downstream check — approvals, documents,
- * payments — reads the session and never a URL parameter.
+ * This was the homeowner's door: `/signin` took an email and a project code,
+ * located the record, and emailed a single-use signed token to the address on
+ * it. This route consumed that token and opened the session.
  *
- * The Alliance-branded page that collects email + project ID and calls
- * `beginClientVerification` is deliberately not built here — where that front
- * door lives is Chris's to decide (SPRINT §3, Day 4).
+ * Chris replaced the whole path with the project code as the password, sent by
+ * a BuildSuite automation the moment the contract is signed. Two doors for one
+ * person is bad on its own; these two had DIFFERENT RULES, and the retired one
+ * was the weaker of the pair in both directions that matter:
+ *
+ *   · it required no signature, so an unsigned project let a homeowner in;
+ *   · it minted a session carrying `contactId`, which sends the portal down
+ *     `listProjectsForContact` and returns EVERY project that contact holds —
+ *     including ones whose code the visitor has never proved.
+ *
+ * Leaving it wired would have made the new signature gate decorative: an
+ * attacker with a token, or anyone holding the pre-rotation `SESSION_SECRET`,
+ * could bypass it entirely. So the route refuses instead of being deleted —
+ * anyone who follows an old link is told what happened and sent to the door
+ * that still works, rather than getting a 404 and phoning their contractor.
+ *
+ * The machinery behind it is intact and still tested — `auth/client-lookup.ts`,
+ * `auth/sign-in-request.ts`, `auth/verification-token.ts`. Nothing reaches them
+ * from a screen any more, which is what closes the door: a server action that
+ * no component imports is not in the bundle and has no callable id. They are
+ * kept because the design is sound and is the obvious answer if the code's six
+ * bits are ever judged insufficient — see `auth/client-credentials.ts`.
+ * ---------------------------------------------------------------------------
  */
 
 export const dynamic = 'force-dynamic';
 
-/**
- * Single-use store, module-level so it holds between requests in one process.
- * PROVISIONAL — see `verification-token.ts`: production keys this on a table so
- * it survives restarts and is shared across serverless instances.
- */
-const consumed = createMemoryConsumedTokens();
-
-/**
- * Attempt limiting, module-level for the same reason as `consumed` above.
- *
- * A signed token is not guessable, so this is not the counter that stops an
- * attack — `signInRequestKeys` on the request side is. This caps the noise:
- * a bot replaying links cannot spin this route without limit. Same provisional
- * in-memory caveat as the store above.
- */
-const verifyLimiter = createRateLimiter(VERIFY_LIMIT);
-
-const FAILURES = {
-  expired: 'That sign-in link has expired. Please request a new one.',
-  already_used: 'That sign-in link has already been used. Please request a new one.',
-  wrong_purpose: 'That link is not a sign-in link.',
-  invalid: 'That sign-in link is not valid.',
-} as const;
-
-const TOO_MANY = 'Too many sign-in attempts. Please wait a few minutes and try again.';
-
-function reject(request: NextRequest, message: string): NextResponse {
-  const url = new URL('/', request.nextUrl.origin);
-  url.searchParams.set('error', message);
-  return NextResponse.redirect(url);
-}
+const REPLACED =
+  'Sign-in links have been replaced. Use your email address and your project code to sign in.';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  // Counted before the token is examined, so a refused caller cannot use this
-  // route to test tokens at all.
-  const decision = verifyLimiter.consume(verifyKeys(clientIpFrom(request.headers)));
-  if (!decision.allowed) {
-    console.warn(`[auth] client verification rate-limited for ${decision.retryAfterSeconds}s`);
-    return reject(request, TOO_MANY);
-  }
+  // The token is deliberately not read, not verified and not logged. There is
+  // nothing here that could act on it, and a route that parses a credential it
+  // will never honour is one refactor away from honouring it again.
+  console.warn('[auth] refused a retired sign-in link');
 
-  const token = request.nextUrl.searchParams.get('token') ?? undefined;
-  const outcome = consumeVerificationToken(token, resolveSessionSecret(), consumed);
-
-  if (!outcome.valid) {
-    console.warn(`[auth] client verification refused: ${outcome.reason}`);
-    return reject(request, FAILURES[outcome.reason]);
-  }
-
-  const contact = CONTACTS.find((c) => c.id === outcome.contactId);
-  if (contact === undefined) {
-    // The token is valid but names a contact we can't resolve — refuse rather
-    // than mint a session with no identity behind it.
-    console.warn(`[auth] client verification: unknown contact ${outcome.contactId}`);
-    return reject(request, FAILURES.invalid);
-  }
-
-  await setSession({
-    role: 'client',
-    name: contact.name,
-    email: contact.email,
-    contactId: contact.id,
-  });
-
-  console.log(`[auth] client signed in via verification link — ${contact.id}`);
-  return NextResponse.redirect(new URL(homeFor('client'), request.nextUrl.origin));
+  const url = new URL('/signin', request.nextUrl.origin);
+  url.searchParams.set('error', REPLACED);
+  return NextResponse.redirect(url);
 }

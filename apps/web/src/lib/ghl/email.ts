@@ -157,13 +157,16 @@ export class GhlEmail {
 export function invitationEmail(input: {
   inviterName: string;
   companyName: string;
-  role: 'field' | 'client';
+  /**
+   * Field crew only. The homeowner branch was removed on 2026-09-10 when
+   * clients stopped being invited — their project code is their password and
+   * BuildSuite emails it on signature, so no invitation reaches them. Copy for
+   * a role nobody can be invited as is copy that gets read as still true.
+   */
+  role: 'field';
   acceptUrl: string;
 }): { subject: string; html: string } {
-  const what =
-    input.role === 'field'
-      ? 'file updates from site and see the work assigned to you'
-      : 'follow your project, see progress and read updates as they are published';
+  const what = 'file updates from site and see the work assigned to you';
 
   const company = input.companyName === '' ? 'your contractor' : input.companyName;
 

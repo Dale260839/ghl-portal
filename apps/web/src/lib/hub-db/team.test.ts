@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { HubClient } from './client.ts';
 import {
   HubTeam,
+  CLIENT_PROVISIONED_BY,
   INVITABLE_ROLES,
   INVITE_PURPOSE,
   hashPassword,
@@ -147,20 +148,28 @@ test('only the hash is ever stored', async () => {
 
 // ── Who a contractor may invite ──────────────────────────────────────────────
 
-test('a contractor can invite field and client, and nothing else', async () => {
-  assert.deepEqual([...INVITABLE_ROLES], ['field', 'client']);
+test('a contractor can invite FIELD CREW and nothing else', async () => {
+  // Chris, 2026-09-10: homeowners stopped being invited. Their account opens
+  // itself when they sign in with the project code from their signed contract,
+  // so an invitation is a second door to the same person with different rules —
+  // and the invited one goes stale, because it follows whatever a contractor
+  // last ticked rather than what the contract says.
+  assert.deepEqual([...INVITABLE_ROLES], ['field']);
 
   const { team } = fakeTeam();
-  await assert.rejects(
-    () =>
-      team.invite(
-        scope,
-        { email: 'x@y.com', fullName: '', role: 'contractor' as 'field', projectIds: [] },
-        actor,
-      ),
-    /not a role a contractor can invite/,
-    'minting another contractor is an account decision, not a team one',
-  );
+
+  for (const role of ['contractor', 'client']) {
+    await assert.rejects(
+      () =>
+        team.invite(
+          scope,
+          { email: 'x@y.com', fullName: '', role: role as 'field', projectIds: [] },
+          actor,
+        ),
+      /not a role a contractor can invite/,
+      `${role} must not be invitable`,
+    );
+  }
 });
 
 test('inviting refuses without a scope and reaches no network', async () => {
@@ -347,15 +356,175 @@ test('a field member inherits the contractor profiles; a client inherits none', 
   const fieldRow = (field.calls.find((c) => c.url.includes('hub_memberships'))!.body as Record<string, unknown>[])[0]!;
   assert.deepEqual(fieldRow.auth_profile_ids, [...scope.authProfileIds]);
 
-  const client = fakeTeam();
-  await client.team.invite(
-    scope,
-    { email: 'owner@example.com', fullName: 'Owner', role: 'client', projectIds: ['p1'] },
-    actor,
-  );
-  const clientRow = (client.calls.find((c) => c.url.includes('hub_memberships'))!.body as Record<string, unknown>[])[0]!;
+  // The homeowner half of this rule now lives on the provisioning path, since
+  // that is the only way a client account is created. The requirement is
+  // unchanged: an empty profile list is what keeps BuildSuite closed to them.
+  const client = fakeTeam([[], [{ id: 'm-new', contractor_id: 'c1', email: 'owner@example.com', role: 'client', project_ids: ['p1'], activated_at: '2026-09-10T00:00:00Z', password_hash: null, last_seen_at: null, revoked_at: null, created_at: '2026-09-10T00:00:00Z', full_name: 'Owner', invited_by: 'Signed contract' }]]);
+  await client.team.provisionClientFromSignedProject({
+    contractorId: 'c1',
+    email: 'owner@example.com',
+    projectId: 'p1',
+    clientName: 'Owner',
+  });
+  const clientRow = (client.calls.find((c) => c.method === 'POST')!.body as Record<string, unknown>[])[0]!;
   assert.deepEqual(clientRow.auth_profile_ids, [], 'a homeowner must not inherit BuildSuite access');
-  assert.deepEqual(clientRow.project_ids, ['p1'], 'their access is the projects they are on');
+  assert.deepEqual(clientRow.project_ids, ['p1'], 'their access is the project they proved');
+  assert.equal(clientRow.role, 'client');
+});
+
+// ── Homeowners: the account that opens itself from a signed contract ─────────
+
+/** A membership row as PostgREST returns it. */
+function clientRow(over: Record<string, unknown> = {}) {
+  return {
+    id: 'm-client',
+    contractor_id: 'c1',
+    auth_profile_ids: [],
+    email: 'owner@example.com',
+    full_name: 'Owner',
+    role: 'client',
+    project_ids: ['p1'],
+    activated_at: '2026-09-01T00:00:00Z',
+    password_hash: null,
+    last_seen_at: null,
+    revoked_at: null,
+    created_at: '2026-09-01T00:00:00Z',
+    invited_by: CLIENT_PROVISIONED_BY,
+    ...over,
+  };
+}
+
+test('a first sign-in opens the account, activated and with no password', async () => {
+  // No hash, ever. The code is checked live against BuildSuite on every visit,
+  // so `hub_memberships` holds no client credential to crack — which matters
+  // more than usual when the credential is six bits wide.
+  const { team, calls } = fakeTeam([[], [clientRow({ id: 'm-new' })]]);
+  const result = await team.provisionClientFromSignedProject({
+    contractorId: 'c1',
+    email: 'Owner@Example.com ',
+    projectId: 'p1',
+    clientName: 'Owner',
+  });
+
+  assert.equal(result.ok, true);
+  const insert = calls.find((c) => c.method === 'POST')!;
+  const row = (insert.body as Record<string, unknown>[])[0]!;
+
+  assert.equal(row.email, 'owner@example.com', 'the address is normalised before it is stored');
+  assert.equal(row.role, 'client');
+  assert.deepEqual(row.project_ids, ['p1']);
+  assert.deepEqual(row.auth_profile_ids, []);
+  assert.ok(row.activated_at, 'a homeowner has no set-a-password step to activate them later');
+  assert.equal(row.password_hash, undefined, 'the project code must never be stored as a hash');
+  assert.equal(row.invited_by, CLIENT_PROVISIONED_BY);
+});
+
+test('a second project is ADDED, not swapped in, and no second row is written', async () => {
+  // §1.4 — a contact may hold several projects, and eleven client addresses in
+  // BuildSuite already do. `hub_memberships_live_email` is unique per
+  // (contractor, email), so a row per project is impossible anyway.
+  const { team, calls } = fakeTeam([[clientRow({ project_ids: ['p1'] })], [clientRow({ project_ids: ['p1', 'p2'] })]]);
+
+  await team.provisionClientFromSignedProject({
+    contractorId: 'c1',
+    email: 'owner@example.com',
+    projectId: 'p2',
+    clientName: 'Owner',
+  });
+
+  assert.equal(calls.filter((c) => c.method === 'POST').length, 0, 'a duplicate row was inserted');
+  const patch = calls.find((c) => c.method === 'PATCH')!.body as Record<string, unknown>;
+  assert.deepEqual(patch.project_ids, ['p1', 'p2']);
+});
+
+test('signing in again does not re-add a project it already has', async () => {
+  const { team, calls } = fakeTeam([[clientRow({ project_ids: ['p1'] })], [clientRow()]]);
+
+  await team.provisionClientFromSignedProject({
+    contractorId: 'c1',
+    email: 'owner@example.com',
+    projectId: 'p1',
+    clientName: 'Owner',
+  });
+
+  const patch = calls.find((c) => c.method === 'PATCH')!.body as Record<string, unknown>;
+  assert.deepEqual(patch.project_ids, ['p1']);
+});
+
+test('a REVOKED homeowner stays out, and nothing is written', async () => {
+  // The one control that overrides the code. The contract still being signed is
+  // not an argument against the contractor having withdrawn access — and since
+  // a code cannot be un-issued, revoke is the only way to take access back.
+  const { team, calls } = fakeTeam([[clientRow({ revoked_at: '2026-09-05T00:00:00Z' })]]);
+
+  const result = await team.provisionClientFromSignedProject({
+    contractorId: 'c1',
+    email: 'owner@example.com',
+    projectId: 'p1',
+    clientName: 'Owner',
+  });
+
+  assert.deepEqual(result, { ok: false, reason: 'revoked' });
+  assert.deepEqual(
+    calls.filter((c) => c.method === 'POST' || c.method === 'PATCH'),
+    [],
+    'a revoked homeowner must not be silently reinstated by signing in',
+  );
+});
+
+test('the update is filtered by the contractor as well as the row id', async () => {
+  // Same rule as `setProjects`: a membership id is guessable in a way a tenant
+  // boundary must not depend on.
+  const { team, calls } = fakeTeam([[clientRow()], [clientRow()]]);
+
+  await team.provisionClientFromSignedProject({
+    contractorId: 'c1',
+    email: 'owner@example.com',
+    projectId: 'p2',
+    clientName: 'Owner',
+  });
+
+  const url = calls.find((c) => c.method === 'PATCH')!.url;
+  assert.match(url, /id=eq\.m-client/);
+  assert.match(url, /contractor_id=eq\.c1/);
+});
+
+test('signing in never changes a role or a password already set', async () => {
+  // Somebody invited as field crew before this flow existed, who then signs a
+  // contract, must not be silently demoted to client — or have the password
+  // they chose wiped by a code sign-in.
+  const { team, calls } = fakeTeam([
+    [clientRow({ role: 'field', password_hash: 'scrypt$16384$aa$bb' })],
+    [clientRow({ role: 'field' })],
+  ]);
+
+  await team.provisionClientFromSignedProject({
+    contractorId: 'c1',
+    email: 'owner@example.com',
+    projectId: 'p2',
+    clientName: 'Owner',
+  });
+
+  const patch = calls.find((c) => c.method === 'PATCH')!.body as Record<string, unknown>;
+  assert.equal(patch.role, undefined, 'the role must not be rewritten by a sign-in');
+  assert.equal(patch.password_hash, undefined, 'an existing password must not be wiped');
+  assert.equal(patch.auth_profile_ids, undefined, 'profiles must not be rewritten either');
+});
+
+test('the lookup is scoped to the contractor from the signed proposal', async () => {
+  // Emails are not unique across contractors — the same homeowner can hold jobs
+  // with two of them. Reading by email alone would find the wrong tenant's row.
+  const { team, calls } = fakeTeam([[], [clientRow({ id: 'm-new', contractor_id: 'c-other' })]]);
+  await team.provisionClientFromSignedProject({
+    contractorId: 'c-other',
+    email: 'owner@example.com',
+    projectId: 'p9',
+    clientName: 'Owner',
+  });
+
+  const lookup = calls.find((c) => c.method === 'GET')!.url;
+  assert.match(lookup, /contractor_id=eq\.c-other/);
+  assert.match(lookup, /email=eq\.owner%40example\.com|email=eq\.owner@example\.com/);
 });
 
 test('setProjects filters on the contractor, not just the membership id', async () => {

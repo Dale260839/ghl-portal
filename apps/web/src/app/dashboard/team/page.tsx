@@ -2,7 +2,12 @@ import { SubmitButton } from '@/components/submit-button';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getSession } from '@/lib/session';
-import { getHubTeam, INVITABLE_ROLES, type Membership } from '@/lib/hub-db/team';
+import {
+  CLIENT_PROVISIONED_BY,
+  getHubTeam,
+  INVITABLE_ROLES,
+  type Membership,
+} from '@/lib/hub-db/team';
 import { GRANTABLE_RESOURCES } from '@/lib/permissions';
 import {
   inviteTeamMember,
@@ -101,7 +106,8 @@ export default async function Team({
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-navy-900">Team</h1>
         <p className="mt-1 text-sm text-navy-400">
-          Invite your crew and your homeowners. Tick what each person can see.
+          Invite your crew, and see the homeowners who signed in with their project code. Tick
+          what each person can see.
         </p>
       </div>
 
@@ -149,17 +155,14 @@ export default async function Team({
             className="rounded-lg border border-navy-200 px-3 py-2 text-sm"
           />
           <div className="flex gap-2">
-            <select
-              name="role"
-              className="flex-1 rounded-lg border border-navy-200 px-3 py-2 text-sm"
-              defaultValue="field"
-            >
-              {INVITABLE_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {role === 'field' ? 'Field crew' : 'Client'}
-                </option>
-              ))}
-            </select>
+            {/* Field crew is the only invitable role now, so this states the
+                fact rather than offering a select with one option in it. A
+                homeowner is not invited at all — their account opens itself
+                when they sign in with the project code from their contract. */}
+            <input type="hidden" name="role" value={INVITABLE_ROLES[0]} />
+            <span className="flex flex-1 items-center rounded-lg border border-navy-200 bg-navy-50/60 px-3 py-2 text-sm text-navy-600">
+              Field crew
+            </span>
             <SubmitButton
               className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
             >
@@ -216,8 +219,9 @@ export default async function Team({
           </fieldset>
         </form>
         <p className="border-t border-navy-100 px-5 py-3 text-xs text-navy-400">
-          You can invite field crew and clients. Another contractor is an account-level change,
-          not a team one.
+          Invitations are for field crew. A homeowner does not need one — signing the contract
+          emails them their project code, and that code signs them in. Another contractor is an
+          account-level change, not a team one.
         </p>
       </Card>
 
@@ -244,7 +248,13 @@ export default async function Team({
                     </div>
                     <div className="mt-0.5 text-xs text-navy-400">
                       {member.email}
-                      {member.invitedBy !== null && ` · invited by ${member.invitedBy}`}
+                      {/* A homeowner who let themselves in with a project code
+                          was invited by nobody. Rendering the marker value as
+                          "invited by Signed contract" would read as a person's
+                          name and would be untrue in both halves. */}
+                      {member.invitedBy === CLIENT_PROVISIONED_BY
+                        ? ' · signed in with their project code'
+                        : member.invitedBy !== null && ` · invited by ${member.invitedBy}`}
                       {member.activatedAt !== null &&
                         ` · joined ${shortDate(member.activatedAt.slice(0, 10))}`}
                     </div>

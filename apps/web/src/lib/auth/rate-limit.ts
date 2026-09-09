@@ -43,6 +43,30 @@ export const SIGN_IN_REQUEST_LIMIT: RateLimitConfig = { limit: 5, windowSeconds:
  */
 export const VERIFY_LIMIT: RateLimitConfig = { limit: 20, windowSeconds: 15 * 60 };
 
+/**
+ * Signing in with a project code. THE TIGHTEST LIMIT HERE, because it is the
+ * only one that mints a session.
+ *
+ * ---------------------------------------------------------------------------
+ * THE ARITHMETIC, WRITTEN DOWN SO NOBODY HAS TO REDO IT
+ *
+ * Codes in BuildSuite today run `BSA-001` to `BSA-052` and are sequential —
+ * about six bits. Once a code is a password rather than a lookup (Chris,
+ * 2026-09-10), an attacker holding a homeowner's email address has one number
+ * to find, and exactly one value works for that address.
+ *
+ * Five an hour puts the expected search at roughly ten hours of sustained,
+ * uninterrupted guessing against a single named victim, per IP. That is the
+ * mitigation, and it is the honest size of it. The signature gate does the rest
+ * of the work: a project with no signed proposal admits nobody at any rate.
+ *
+ * Deliberately a longer WINDOW rather than a smaller limit. A homeowner reading
+ * a code off a phone gets a handful of tries; what a longer window costs is the
+ * attacker's throughput, not the real user's first session.
+ * ---------------------------------------------------------------------------
+ */
+export const CLIENT_CODE_LIMIT: RateLimitConfig = { limit: 5, windowSeconds: 60 * 60 };
+
 export interface RateLimitDecision {
   readonly allowed: boolean;
   /** Seconds until the offending window resets. Zero when allowed. */
@@ -124,6 +148,24 @@ export function signInRequestKeys(email: string, ip: string): readonly string[] 
   const normalizedEmail = email.trim().toLowerCase();
   if (normalizedEmail !== '') keys.push(`signin:email:${normalizedEmail}`);
   if (ip !== '') keys.push(`signin:ip:${ip}`);
+  return keys;
+}
+
+/**
+ * The keys a project-code sign-in is counted against.
+ *
+ * A SEPARATE PREFIX from `signin:`, on purpose. The two doors have different
+ * limits because one mints a session and the other mints an email, and shared
+ * counters would let the looser door spend the tighter one's budget.
+ *
+ * The code is not a key here for the same reason it is not one above: it is the
+ * value being guessed, so keying on it would hand every guess a fresh counter.
+ */
+export function clientCodeKeys(email: string, ip: string): readonly string[] {
+  const keys: string[] = [];
+  const normalizedEmail = email.trim().toLowerCase();
+  if (normalizedEmail !== '') keys.push(`code:email:${normalizedEmail}`);
+  if (ip !== '') keys.push(`code:ip:${ip}`);
   return keys;
 }
 

@@ -37,8 +37,34 @@ export const INVITE_PURPOSE = 'hub-invite';
  */
 export const INVITE_TTL_SECONDS = 7 * 24 * 60 * 60;
 
-/** Roles a contractor may hand out. Deliberately not `contractor`. */
-export const INVITABLE_ROLES = ['field', 'client'] as const;
+/**
+ * Roles a contractor may hand out by invitation. FIELD CREW ONLY.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY `client` LEFT THIS LIST (Chris, 2026-09-10)
+ *
+ * A homeowner no longer gets invited. When the contractor and the homeowner
+ * sign, a BuildSuite automation sends them their project code, and that code is
+ * their password — `provisionClientFromSignedProject` below opens the account
+ * on their first sign-in. Nobody has to remember to invite them, and there is
+ * no link to expire between signature and first visit.
+ *
+ * Leaving `client` here as well would give a homeowner two doors with different
+ * rules: one where access follows the signed contract, one where it follows
+ * whatever a contractor last ticked. The second is the one that goes stale.
+ *
+ * `contractor` was never on this list and still is not: minting one is an
+ * account-level decision, not a team one.
+ * ---------------------------------------------------------------------------
+ */
+export const INVITABLE_ROLES = ['field'] as const;
+
+/**
+ * What `invited_by` says for a homeowner who opened their own account with a
+ * project code. A constant because the Team screen compares against it, and a
+ * string literal in two places is a label that stops matching after a reword.
+ */
+export const CLIENT_PROVISIONED_BY = 'Signed contract';
 export type InvitableRole = (typeof INVITABLE_ROLES)[number];
 
 export interface Membership {
@@ -290,16 +316,17 @@ export class HubTeam {
       throw new Error(`${input.role} is not a role a contractor can invite`);
     }
 
-    // A FIELD member inherits the inviter's BuildSuite profiles; a CLIENT does
-    // not, and the difference is the whole privacy model.
+    // A FIELD member inherits the inviter's BuildSuite profiles. The field
+    // interface reads the contractor's projects to know what work exists, so a
+    // crew member with no profile is bounced straight back out by `assertScope`
+    // — which is what happened to the first field invitation.
     //
-    // The field interface reads the contractor's projects to know what work
-    // exists, so a crew member with no profile is bounced straight back out by
-    // `assertScope` — which is what happened to the first field invitation.
-    //
-    // A homeowner must never inherit them: that would hand them every project
-    // the contractor has. Their access is `project_ids` plus the §9.1 gate, and
-    // an empty profile list is what keeps BuildSuite closed to them.
+    // A HOMEOWNER never inherits them, which is the whole privacy model: that
+    // would hand them every project the contractor has. Their access is
+    // `project_ids` plus the §9.1 gate, and an empty profile list is what keeps
+    // BuildSuite closed to them. Clients no longer arrive through this method
+    // at all (see `INVITABLE_ROLES`), and `provisionClientFromSignedProject`
+    // writes an empty list for exactly this reason.
     const inheritedProfiles =
       input.role === 'field' ? [...assertScope(scope, 'invite').authProfileIds] : [];
 
@@ -456,6 +483,118 @@ export class HubTeam {
     }
 
     return { ok: false, reason: 'unknown' };
+  }
+
+  /**
+   * Open (or re-open) a homeowner's account from a project they have signed.
+   *
+   * ---------------------------------------------------------------------------
+   * THE CALLER HAS ALREADY PROVEN EVERYTHING. THIS ONLY RECORDS IT.
+   *
+   * `findSignedProjectForClient` matched the code AND the email inside
+   * BuildSuite and found a signed proposal on that project. This method takes
+   * that answer and nothing else — it does no matching of its own, so there is
+   * no second copy of the rule here to drift away from the first.
+   *
+   * Deliberately no `scope` argument, exactly like `authenticate`: this runs
+   * before there is a session. The contractor id arrives from the signed
+   * proposal, which is the tenant.
+   *
+   * ---------------------------------------------------------------------------
+   * ONE ROW PER PERSON, NOT ONE PER PROJECT
+   *
+   * `hub_memberships_live_email` is unique on `(contractor_id, lower(email))`
+   * where `revoked_at is null`, so a second row for the same homeowner is
+   * impossible — and it should be. Eleven client addresses in BuildSuite
+   * already hold more than one project, and §1.4 says never collapse a contact
+   * to a single project.
+   *
+   * So `project_ids` is a UNION: each code proves one project and adds it. It
+   * never shrinks here. A contractor who unticks a project on the Team screen
+   * will see it come back the next time that project's code is used, because
+   * the signed contract still says it is theirs — REVOKE is the control that
+   * removes a code-authenticated homeowner, and revoking is checked first and
+   * refuses outright.
+   *
+   * ---------------------------------------------------------------------------
+   * `password_hash` STAYS NULL, ALWAYS
+   *
+   * The project code is verified live against BuildSuite on every sign-in; it
+   * is never hashed and stored. Two consequences, both wanted:
+   *
+   *   · A leak of `hub_memberships` yields no client credential to crack —
+   *     and a six-bit code would not survive being cracked at.
+   *   · `authenticate()` skips rows whose hash is null, so the password door
+   *     stays shut for these accounts. The code door is the only way in.
+   * ---------------------------------------------------------------------------
+   */
+  async provisionClientFromSignedProject(input: {
+    contractorId: string;
+    email: string;
+    projectId: string;
+    clientName: string;
+  }): Promise<{ ok: true; membership: Membership } | { ok: false; reason: 'revoked' }> {
+    const email = input.email.trim().toLowerCase();
+    const now = new Date().toISOString();
+
+    const [existing] = await this.client.select<MembershipRow>({
+      from: 'hub_memberships',
+      filters: { contractor_id: `eq.${input.contractorId}`, email: `eq.${email}` },
+      order: 'created_at.desc',
+      limit: 1,
+    });
+
+    if (existing !== undefined) {
+      // A revoked homeowner stays out. The contract being signed is not an
+      // argument against the contractor having withdrawn access — this is the
+      // one control that overrides the code, and it has to be checked before
+      // anything is written.
+      if (existing.revoked_at !== null) return { ok: false, reason: 'revoked' };
+
+      const projectIds = [...new Set([...(existing.project_ids ?? []), input.projectId])];
+      const [updated] = await this.client.update<MembershipRow>({
+        from: 'hub_memberships',
+        // Both filters. The id says which row; the contractor says whose, so a
+        // stale id from elsewhere cannot reach another tenant's member.
+        filters: { id: `eq.${existing.id}`, contractor_id: `eq.${input.contractorId}` },
+        patch: {
+          project_ids: projectIds,
+          // Activated the moment they prove the code. There is no separate
+          // set-a-password step for them, so leaving this null would leave
+          // every homeowner permanently "invited, not yet accepted".
+          activated_at: existing.activated_at ?? now,
+          last_seen_at: now,
+          // NOT touched: role, full_name, auth_profile_ids, password_hash. A
+          // homeowner who was also invited as field crew before this flow
+          // existed must not be silently demoted by signing a contract.
+        },
+      });
+      return { ok: true, membership: toMembership(updated ?? existing) };
+    }
+
+    const [created] = await this.client.insert<MembershipRow>({
+      from: 'hub_memberships',
+      rows: [
+        {
+          contractor_id: input.contractorId,
+          // Empty, and load-bearing: a homeowner reads only the Hub's own
+          // tables, and an inherited profile would open BuildSuite to them.
+          auth_profile_ids: [],
+          email,
+          full_name: input.clientName,
+          role: 'client',
+          project_ids: [input.projectId],
+          activated_at: now,
+          last_seen_at: now,
+          // Shown on the Team screen where an inviter's name would be, so a
+          // contractor can tell at a glance which homeowners let themselves in
+          // with a code and which they added by hand.
+          invited_by: CLIENT_PROVISIONED_BY,
+        },
+      ],
+    });
+
+    return { ok: true, membership: toMembership(created!) };
   }
 
   /**
