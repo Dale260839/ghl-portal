@@ -66,7 +66,9 @@ function MoneyCell({
  * the storage host is told which of our pages it was opened from.
  */
 function SignedPdfCell({ url }: { url: string | null }) {
-  if (url === null) return <span className="text-xs text-navy-300">—</span>;
+  if (url === null) {
+    return <span className="text-xs text-navy-400">No link available</span>;
+  }
   return (
     <a
       href={url}
