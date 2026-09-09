@@ -10,7 +10,7 @@ import {
   PUNCH_STATUSES,
   punchItemFromIssue,
 } from '@/lib/hub-db/operational';
-import { addPunchItem, releasePunchItem, setPunchStatus } from '@/lib/actions/issues';
+import { addPunchItem, archiveIssue, releasePunchItem, setPunchStatus } from '@/lib/actions/issues';
 import { punchListProgress } from '@/lib/data/types';
 import { Badge, Card, CardHeader, InternalNote, ProgressBar, shortDate } from '@/components/ui';
 import { ControlEmpty, ControlHeader, ControlNote, VisibilityTag } from '@/components/control';
@@ -221,6 +221,18 @@ export default async function ProjectCompletionControl({
                   </label>
                   <SubmitButton className="rounded-lg border border-navy-200 px-3 py-1.5 text-xs font-medium text-navy-700 transition hover:bg-navy-50">
                     Save
+                  </SubmitButton>
+                </form>
+
+                {/* Archive, never delete: the row keeps its history, it just
+                    leaves the list. Without this a punch item added by mistake
+                    stayed on the job forever, and on the homeowner's screen if
+                    it had been released. */}
+                <form action={archiveIssue} className="mt-2 border-t border-navy-100 pt-2">
+                  <input type="hidden" name="issueId" value={p.id} />
+                  <input type="hidden" name="projectId" value={id} />
+                  <SubmitButton className="text-xs font-medium text-red-700 transition hover:underline">
+                    Remove from the list
                   </SubmitButton>
                 </form>
               </Card>
