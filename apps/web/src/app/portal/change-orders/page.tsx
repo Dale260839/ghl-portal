@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { recordClientDecision } from '@/lib/actions';
 import { changeOrdersFor, currentPortalProject } from '@/lib/portal-data';
 import { Badge, Card, PortalEmpty, currency, shortDate } from '@/components/ui';
@@ -158,22 +159,20 @@ export default async function PortalChangeOrders({
                         {/* Two submits, one form. The value carries the answer,
                             so approving and declining go through the same
                             checked path rather than one being an afterthought. */}
-                        <button
-                          type="submit"
+                        <SubmitButton
                           name="decision"
                           value="approve"
                           className="rounded-lg bg-navy-900 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-navy-800"
                         >
                           Approve change order
-                        </button>
-                        <button
-                          type="submit"
+                        </SubmitButton>
+                        <SubmitButton
                           name="decision"
                           value="decline"
                           className="rounded-lg border border-navy-200 px-3.5 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50"
                         >
                           Decline
-                        </button>
+                        </SubmitButton>
                         {c.approvalDeadline !== '' && (
                           <span className="text-xs text-navy-400">
                             by {shortDate(c.approvalDeadline ?? '')}

@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import {
   archiveChangeOrder,
   archiveSelection,
@@ -89,12 +90,11 @@ export function SelectionsManager({
             Actual cost <InternalOnly>internal</InternalOnly>
             <input name="actualCost" inputMode="decimal" placeholder="0.00" className={`${FIELD} mt-1 w-full`} />
           </label>
-          <button
-            type="submit"
+          <SubmitButton
             className="self-end rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
           >
             Add
-          </button>
+          </SubmitButton>
           <p className="text-xs text-navy-400 sm:col-span-4">
             Saved internal. Actual cost never reaches the client, released or not.
           </p>
@@ -170,21 +170,20 @@ export function SelectionsManager({
                     />
                     Show this selection to the client
                   </label>
-                  <button
-                    type="submit"
+                  <SubmitButton
                     className="rounded-lg border border-navy-200 px-3 py-1.5 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
                   >
                     Save
-                  </button>
+                  </SubmitButton>
                 </div>
               </form>
 
               <form action={archiveSelection} className="mt-2 border-t border-navy-100 pt-2">
                 <input type="hidden" name="selectionId" value={s.id} />
                 <input type="hidden" name="projectId" value={projectId} />
-                <button type="submit" className="text-xs font-medium text-red-700 hover:underline">
+                <SubmitButton className="text-xs font-medium text-red-700 hover:underline">
                   Remove selection
-                </button>
+                </SubmitButton>
               </form>
             </Card>
           ))}
@@ -249,12 +248,11 @@ export function ChangeOrdersManager({
             Schedule impact (days)
             <input name="scheduleImpactDays" type="number" defaultValue={0} className={`${FIELD} mt-1 w-full`} />
           </label>
-          <button
-            type="submit"
+          <SubmitButton
             className="self-end rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
           >
             Add
-          </button>
+          </SubmitButton>
 
           <textarea
             name="description"
@@ -362,21 +360,20 @@ export function ChangeOrdersManager({
                     />
                     Send this to the client for approval
                   </label>
-                  <button
-                    type="submit"
+                  <SubmitButton
                     className="rounded-lg border border-navy-200 px-3 py-1.5 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
                   >
                     Save
-                  </button>
+                  </SubmitButton>
                 </div>
               </form>
 
               <form action={archiveChangeOrder} className="mt-2 border-t border-navy-100 pt-2">
                 <input type="hidden" name="changeOrderId" value={c.id} />
                 <input type="hidden" name="projectId" value={projectId} />
-                <button type="submit" className="text-xs font-medium text-red-700 hover:underline">
+                <SubmitButton className="text-xs font-medium text-red-700 hover:underline">
                   Withdraw change order
-                </button>
+                </SubmitButton>
               </form>
             </Card>
           ))}

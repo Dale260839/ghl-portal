@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { INTERNAL_FIELD_DENY_LIST } from '@buildsuite/contracts';
@@ -80,12 +81,11 @@ export default async function VisibilitySettings({
               ))}
             </ul>
             <div className="border-t border-navy-100 px-5 py-4">
-              <button
-                type="submit"
+              <SubmitButton
                 className="press rounded-lg bg-navy-900 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(10,31,68,0.2),0_8px_20px_-10px_rgba(10,31,68,0.5)] hover:bg-navy-800"
               >
                 Save visibility
-              </button>
+              </SubmitButton>
               <p className="mt-3 text-xs leading-relaxed text-navy-400">
                 Saved to the Hub for live projects. Detailed Pricing and Assigned Team are not yet
                 stored there and stay off on live projects until that column exists.

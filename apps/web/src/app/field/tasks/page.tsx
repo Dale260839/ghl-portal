@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { getSession } from '@/lib/session';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
@@ -102,12 +103,11 @@ export default async function FieldTasks() {
                     // a badge they cannot clear stops trusting the badge.
                     <form action={markTaskSeen}>
                       <input type="hidden" name="taskId" value={task.id} />
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="min-h-9 rounded-lg bg-navy-900 px-3.5 text-sm font-semibold text-white transition hover:bg-navy-800"
                       >
                         Got it
-                      </button>
+                      </SubmitButton>
                     </form>
                   )}
                 </div>

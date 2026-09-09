@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { redirect } from 'next/navigation';
 import { signOut } from '@/lib/actions';
 import { requireAccess } from '@/lib/access';
@@ -67,12 +68,11 @@ export default async function FieldLayout({ children }: { children: React.ReactN
               <ViewSwitcher current={session.role} viewing={viewing} />
             )}
             <form action={signOut}>
-              <button
-                type="submit"
+              <SubmitButton
                 className="min-h-9 rounded-md border border-navy-100 px-2.5 text-xs font-medium text-navy-600"
               >
                 Sign out
-              </button>
+              </SubmitButton>
             </form>
           </div>
         </div>

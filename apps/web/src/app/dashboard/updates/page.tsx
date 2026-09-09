@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { reviewUpdate } from '@/lib/actions';
 
 import { requireTenantScope } from '@/lib/scope';
@@ -83,38 +84,34 @@ export default async function ReviewQueue() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="submit"
+                    <SubmitButton
                       name="action"
                       value="publish"
                       className="rounded-lg bg-navy-900 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-navy-800"
                     >
                       Approve and Publish
-                    </button>
-                    <button
-                      type="submit"
+                    </SubmitButton>
+                    <SubmitButton
                       name="action"
                       value="internal"
                       className="rounded-lg border border-navy-200 px-3.5 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50"
                     >
                       Approve Internally
-                    </button>
-                    <button
-                      type="submit"
+                    </SubmitButton>
+                    <SubmitButton
                       name="action"
                       value="save"
                       className="rounded-lg border border-navy-200 px-3.5 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50"
                     >
                       Edit Client Summary
-                    </button>
-                    <button
-                      type="submit"
+                    </SubmitButton>
+                    <SubmitButton
                       name="action"
                       value="return"
                       className="rounded-lg border border-navy-200 px-3.5 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50"
                     >
                       Return for Revision
-                    </button>
+                    </SubmitButton>
                   </div>
                 </form>
               </div>

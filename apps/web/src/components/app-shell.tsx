@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import type { ReactNode } from 'react';
 import { signOut } from '@/lib/actions';
 import { PageTransition } from './page-transition';
@@ -95,12 +96,11 @@ export function AppShell({
               {headerExtra}
               <span className="hidden text-xs text-navy-400 sm:block">{userName}</span>
               <form action={signOut}>
-                <button
-                  type="submit"
+                <SubmitButton
                   className="press rounded-full border border-navy-200 bg-white px-3 py-1.5 text-xs font-medium text-navy-600 shadow-[0_1px_2px_rgba(10,31,68,0.06)] transition-colors hover:border-navy-400/40 hover:bg-navy-50"
                 >
                   Sign out
-                </button>
+                </SubmitButton>
               </form>
             </div>
           </header>

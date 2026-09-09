@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { acceptInvitation } from '@/lib/actions';
 import { getHubTeam, readInviteToken } from '@/lib/hub-db/team';
 import { Card } from '@/components/ui';
@@ -110,12 +111,11 @@ export default async function AcceptInvite({
             />
             <p className="mt-1 text-xs text-navy-400">At least 10 characters.</p>
           </div>
-          <button
-            type="submit"
+          <SubmitButton
             className="w-full rounded-lg bg-navy-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-navy-700"
           >
             Set password and continue
-          </button>
+          </SubmitButton>
         </form>
       </Card>
 

@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { NotLinkedToContractor } from '@/components/not-linked';
 import { notFound } from 'next/navigation';
 
@@ -159,12 +160,11 @@ export default async function ProjectScheduleControl({
               <p className="text-xs text-navy-400">
                 Saved as internal. Release it to the client with the switch on the appointment.
               </p>
-              <button
-                type="submit"
+              <SubmitButton
                 className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
               >
                 Add appointment
-              </button>
+              </SubmitButton>
             </div>
           </form>
         </Card>
@@ -255,12 +255,11 @@ export default async function ProjectScheduleControl({
                     />
                     Show this appointment to the client
                   </label>
-                  <button
-                    type="submit"
+                  <SubmitButton
                     className="rounded-lg border border-navy-200 px-3 py-1.5 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
                   >
                     Save
-                  </button>
+                  </SubmitButton>
                   <span className="ml-auto text-xs text-navy-300">
                     added by {item.createdBy ?? 'unknown'}
                   </span>
@@ -272,12 +271,11 @@ export default async function ProjectScheduleControl({
               <form action={archiveScheduleItem} className="mt-2 border-t border-navy-100 pt-2">
                 <input type="hidden" name="itemId" value={item.id} />
                 <input type="hidden" name="projectId" value={id} />
-                <button
-                  type="submit"
+                <SubmitButton
                   className="text-xs font-medium text-red-700 transition hover:underline"
                 >
                   Remove from schedule
-                </button>
+                </SubmitButton>
               </form>
             </Card>
           ))}

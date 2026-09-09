@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { submitFieldUpdate } from '@/lib/actions';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
@@ -163,12 +164,11 @@ export default async function FieldUpdate() {
             />
           </div>
 
-          <button
-            type="submit"
+          <SubmitButton
             className="w-full rounded-lg bg-navy-900 px-4 py-3 text-sm font-semibold text-white"
           >
             Submit to Project Manager
-          </button>
+          </SubmitButton>
           <p className="text-center text-xs text-navy-400">
             Submitting notifies your PM. It does not notify the client.
           </p>

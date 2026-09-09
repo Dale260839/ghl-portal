@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { getSession } from '@/lib/session';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
@@ -103,12 +104,11 @@ export default async function FieldMessages({
             />
           </div>
 
-          <button
-            type="submit"
+          <SubmitButton
             className="min-h-12 w-full rounded-lg bg-navy-900 text-sm font-semibold text-white transition hover:bg-navy-800"
           >
             Send to PM
-          </button>
+          </SubmitButton>
         </form>
       </Card>
 

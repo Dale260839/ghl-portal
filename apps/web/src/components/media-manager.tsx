@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { attachProjectFile, archiveProjectFile, updateProjectFile } from '@/lib/actions';
 import { Badge, Card, CardHeader, shortDate } from '@/components/ui';
 import { ControlEmpty, VisibilityTag } from '@/components/control';
@@ -73,12 +74,11 @@ export function MediaManager({
           ) : (
             <span />
           )}
-          <button
-            type="submit"
+          <SubmitButton
             className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
           >
             Add
-          </button>
+          </SubmitButton>
 
           <label className="text-xs text-navy-500 sm:col-span-2">
             Upload a file
@@ -173,12 +173,11 @@ export function MediaManager({
                 ) : (
                   <span />
                 )}
-                <button
-                  type="submit"
+                <SubmitButton
                   className="rounded-lg border border-navy-200 px-3 py-1.5 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
                 >
                   Save
-                </button>
+                </SubmitButton>
                 <label className="flex items-center gap-2 text-xs text-navy-600 sm:col-span-4">
                   <input
                     type="checkbox"
@@ -196,12 +195,11 @@ export function MediaManager({
                 <input type="hidden" name="itemId" value={item.id} />
                 <input type="hidden" name="projectId" value={projectId} />
                 <input type="hidden" name="kind" value={kind} />
-                <button
-                  type="submit"
+                <SubmitButton
                   className="text-xs font-medium text-red-700 transition hover:underline"
                 >
                   Remove from {route}
-                </button>
+                </SubmitButton>
               </form>
             </Card>
           ))}

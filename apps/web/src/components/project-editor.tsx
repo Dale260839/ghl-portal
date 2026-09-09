@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { archiveProject, editProjectDetails, restoreArchivedItem } from '@/lib/actions';
 import { Badge, Card, CardHeader } from '@/components/ui';
 import type { ProjectOverlay } from '@/lib/hub-db/records';
@@ -79,12 +80,11 @@ export function ProjectEditor({
             <input type="hidden" name="table" value="project" />
             <input type="hidden" name="id" value={projectId} />
             <input type="hidden" name="projectId" value={projectId} />
-            <button
-              type="submit"
+            <SubmitButton
               className="rounded-lg border border-navy-200 px-3 py-1.5 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
             >
               Restore this project
-            </button>
+            </SubmitButton>
           </form>
         </div>
       ) : (
@@ -107,12 +107,11 @@ export function ProjectEditor({
                 className="mt-1 w-full rounded-lg border border-navy-200 px-3 py-2 text-sm"
               />
             </div>
-            <button
-              type="submit"
+            <SubmitButton
               className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
             >
               Save changes
-            </button>
+            </SubmitButton>
           </form>
 
           <form
@@ -131,12 +130,11 @@ export function ProjectEditor({
                 className="mt-1 w-full rounded-lg border border-navy-200 px-3 py-2 text-sm"
               />
             </div>
-            <button
-              type="submit"
+            <SubmitButton
               className="rounded-lg border border-navy-200 px-3 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50"
             >
               Archive
-            </button>
+            </SubmitButton>
           </form>
         </>
       )}

@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getProposalsReader } from '@/lib/buildsuite/proposals';
@@ -273,13 +274,12 @@ export default async function Invoices() {
                           disabled={saved?.status === 'sent'}
                           className="rounded-lg border border-navy-200 px-3 py-2 text-sm"
                         />
-                        <button
-                          type="submit"
+                        <SubmitButton
                           disabled={saved?.status === 'sent'}
                           className="rounded-lg border border-navy-200 px-4 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50 disabled:opacity-40"
                         >
                           Save
-                        </button>
+                        </SubmitButton>
 
                         <textarea
                           name="description"
@@ -317,13 +317,12 @@ export default async function Invoices() {
                           <form action={createInvoiceOnRail} className="flex items-center gap-3">
                             <input type="hidden" name="draftId" value={saved?.id ?? ''} />
                             <input type="hidden" name="proposalId" value={proposal.id} />
-                            <button
-                              type="submit"
+                            <SubmitButton
                               disabled={saved === undefined || saved.amount === null}
                               className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700 disabled:opacity-40"
                             >
                               Create in GoHighLevel
-                            </button>
+                            </SubmitButton>
                             <span className="text-xs text-navy-400">
                               {saved === undefined
                                 ? 'Save this line first.'

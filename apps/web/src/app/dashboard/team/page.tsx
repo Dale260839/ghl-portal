@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getSession } from '@/lib/session';
@@ -159,12 +160,11 @@ export default async function Team({
                 </option>
               ))}
             </select>
-            <button
-              type="submit"
+            <SubmitButton
               className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
             >
               Invite
-            </button>
+            </SubmitButton>
           </div>
 
           {/* WHICH projects, not just which permissions. These are two different
@@ -255,8 +255,7 @@ export default async function Team({
                     className="shrink-0"
                   >
                     <input type="hidden" name="membershipId" value={member.id} />
-                    <button
-                      type="submit"
+                    <SubmitButton
                       className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
                         member.revoked
                           ? 'border-navy-200 text-navy-700 hover:bg-navy-50'
@@ -264,7 +263,7 @@ export default async function Team({
                       }`}
                     >
                       {member.revoked ? 'Restore access' : 'Revoke'}
-                    </button>
+                    </SubmitButton>
                   </form>
                 </div>
 
@@ -286,12 +285,11 @@ export default async function Team({
                           {RESOURCE_LABELS[resource] ?? resource}
                         </label>
                       ))}
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="rounded-lg border border-navy-200 px-3 py-1 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
                       >
                         Save
-                      </button>
+                      </SubmitButton>
                     </div>
                   </form>
                 )}
@@ -328,12 +326,11 @@ export default async function Team({
                           <span className="max-w-48 truncate">{project.projectName}</span>
                         </label>
                       ))}
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="rounded-lg border border-navy-200 px-3 py-1 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
                       >
                         Save projects
-                      </button>
+                      </SubmitButton>
                     </div>
                   </form>
                 )}

@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { requireTenantScope } from '@/lib/scope';
 import { getSession } from '@/lib/session';
 import { getHubRecords, type ArchivedItem } from '@/lib/hub-db/records';
@@ -118,12 +119,11 @@ export default async function Archive() {
                   <input type="hidden" name="table" value={item.table} />
                   <input type="hidden" name="id" value={item.id} />
                   <input type="hidden" name="projectId" value={item.projectId} />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     className="rounded-lg border border-navy-200 px-3 py-1.5 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
                   >
                     Restore
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
             </li>

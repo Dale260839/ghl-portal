@@ -487,3 +487,38 @@ test('a screen that reads the Hub handles an account with no contractor', () => 
     'a Hub-backed screen throws TenancyError instead of explaining the account is unlinked',
   );
 });
+
+test('no form submits through a button that stays live during the round trip', () => {
+  // A server action takes a round trip. A plain `<button type="submit">` stays
+  // clickable throughout, so a second click fires the action again.
+  //
+  // Mostly that is a duplicate row. Twice it is worse: "Create in GoHighLevel"
+  // would make a SECOND real invoice a homeowner could be asked to pay, and
+  // "Approve change order" would record a client's answer twice. The unique
+  // index behind the first is a guard that has to win a race; a button that
+  // cannot be clicked twice is a click that never happens.
+  const offenders: string[] = [];
+
+  for (const file of FILES) {
+    const path = rel(file.path);
+    if (!path.startsWith('app/') && !path.startsWith('components/')) continue;
+    // The component that implements the behaviour, and the four that had
+    // already solved it their own way with `useFormStatus` before this existed.
+    // Exempt because they DO disable while pending, not because they are old.
+    const handlesItsOwn = [
+      'components/submit-button.tsx',
+      'app/login-form.tsx',
+      'app/signin/sign-in-form.tsx',
+      'components/account-switcher.tsx',
+      'components/view-switcher.tsx',
+    ];
+    if (handlesItsOwn.includes(path)) continue;
+    if (/type="submit"/.test(file.text)) offenders.push(path);
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    'use <SubmitButton>, which disables itself while the form is in flight',
+  );
+});

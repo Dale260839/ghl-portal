@@ -1,3 +1,4 @@
+import { SubmitButton } from '@/components/submit-button';
 import { NotLinkedToContractor } from '@/components/not-linked';
 import { notFound } from 'next/navigation';
 
@@ -73,12 +74,11 @@ export default async function ProjectTimelineControl({
             placeholder="Order"
             className={FIELD}
           />
-          <button
-            type="submit"
+          <SubmitButton
             className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
           >
             Add
-          </button>
+          </SubmitButton>
           <label className="text-xs text-navy-500 sm:col-span-2">
             Planned start
             <input type="date" name="plannedStart" className={`${FIELD} mt-1 w-full`} />
@@ -178,24 +178,22 @@ export default async function ProjectTimelineControl({
                         />
                         Show this milestone to the client
                       </label>
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="rounded-lg border border-navy-200 px-3 py-1.5 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
                       >
                         Save
-                      </button>
+                      </SubmitButton>
                     </div>
                   </form>
 
                   <form action={archiveMilestone} className="mt-2">
                     <input type="hidden" name="milestoneId" value={m.id} />
                     <input type="hidden" name="projectId" value={id} />
-                    <button
-                      type="submit"
+                    <SubmitButton
                       className="text-xs font-medium text-red-700 transition hover:underline"
                     >
                       Remove milestone
-                    </button>
+                    </SubmitButton>
                   </form>
                 </div>
               </li>
