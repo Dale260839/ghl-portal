@@ -94,6 +94,16 @@ export interface Project {
   showDetailedPricing: boolean;
   showScheduleToClient: boolean;
   showAssignedTeam: boolean;
+  /**
+   * The four section switches `hub_visibility_settings` also stores. They join
+   * the set on 2026-09-10, with the messages build, because the table has had
+   * the columns since 0001 and nothing mapped them onto a project — so a
+   * contractor turning off documents or photos changed nothing anywhere.
+   */
+  showDocuments: boolean;
+  showPhotos: boolean;
+  showDailyUpdates: boolean;
+  showChangeOrders: boolean;
   allowClientMessaging: boolean;
   allowIssueSubmission: boolean;
   allowFileUploads: boolean;

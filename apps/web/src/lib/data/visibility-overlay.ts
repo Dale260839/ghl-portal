@@ -13,10 +13,15 @@ import type { Project } from './types.ts';
  * Pure. The Hub read is injected (`VisibilityOverlaySource`) so this can be
  * unit-tested and so the BuildSuite source stays free of database clients.
  *
- * Only what the table actually stores is applied: the master switch, schedule
- * and budget. `showDetailedPricing` and `showAssignedTeam` have no column, and
- * inventing one is a migration, not a mapping — they stay as the source set
- * them until that migration exists.
+ * Only what the table actually stores is applied: the master switch, schedule,
+ * budget, and the four section switches added on 2026-09-10 (documents, photos,
+ * daily updates, change orders). `showDetailedPricing` and `showAssignedTeam`
+ * have no column, and inventing one is a migration, not a mapping — they stay
+ * as the source set them until that migration exists.
+ *
+ * `allowClientMessaging` has no column either, and follows the master switch
+ * instead: there is no separate "messages" row to store, and a homeowner who
+ * has a portal has a way to write to their contractor.
  */
 
 export interface VisibilityRow {
@@ -24,11 +29,22 @@ export interface VisibilityRow {
   client_portal_enabled: boolean;
   show_schedule: boolean;
   show_budget: boolean;
+  show_documents?: boolean;
+  show_photos?: boolean;
+  show_daily_updates?: boolean;
+  show_change_orders?: boolean;
 }
 
 export type VisibilityOverlay = Pick<
   Project,
-  'clientPortalEnabled' | 'showScheduleToClient' | 'showBudgetToClient'
+  | 'clientPortalEnabled'
+  | 'showScheduleToClient'
+  | 'showBudgetToClient'
+  | 'showDocuments'
+  | 'showPhotos'
+  | 'showDailyUpdates'
+  | 'showChangeOrders'
+  | 'allowClientMessaging'
 >;
 
 export interface VisibilityOverlaySource {
@@ -48,6 +64,15 @@ export function overlayFromRow(row: VisibilityRow): VisibilityOverlay {
     clientPortalEnabled: row.client_portal_enabled === true,
     showScheduleToClient: row.show_schedule === true,
     showBudgetToClient: row.show_budget === true,
+    showDocuments: row.show_documents === true,
+    showPhotos: row.show_photos === true,
+    showDailyUpdates: row.show_daily_updates === true,
+    showChangeOrders: row.show_change_orders === true,
+    // The table has no `show_messages` column, and adding one is a migration
+    // rather than a mapping. The master switch is what decides whether a
+    // homeowner has a thread at all, so messaging follows it: portal on means
+    // they can write to their contractor, portal off means they cannot.
+    allowClientMessaging: row.client_portal_enabled === true,
   };
 }
 
