@@ -21,6 +21,7 @@ import { getHubVisibility } from './hub-db/visibility';
 import { isUuid } from './data/visibility-overlay.ts';
 import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db/records';
 import { getHubSchedule } from './hub-db/schedule.ts';
+import { getHubMessages } from './hub-db/messages.ts';
 import { getHubOperational } from './hub-db/operational.ts';
 import { getHubMedia } from './hub-db/media.ts';
 import { getHubSelections } from './hub-db/selections.ts';
@@ -384,6 +385,22 @@ export async function sendFieldMessage(formData: FormData) {
   const projectId = String(formData.get('projectId') ?? '');
   const body = String(formData.get('body') ?? '').trim();
   if (projectId === '' || body === '') return;
+
+  // Written to the Hub where there is one, so the note survives the request and
+  // the contractor sees it on their side. Internal, and stored with the field
+  // role so the contractor screen can say where it came from and offer no
+  // release control for it.
+  const hub = getHubMessages();
+  if (hub.available) {
+    await hub.messages.post(
+      await actionTenantScope(session),
+      { projectId, body, clientVisible: false },
+      { name: session.name, role: 'field' },
+    );
+    revalidatePath('/field/messages');
+    revalidatePath(`/dashboard/projects/${projectId}/messages`);
+    redirect('/field/messages?sent=1');
+  }
 
   MESSAGES.push({
     id: `msg-field-${MESSAGES.length + 1}`,

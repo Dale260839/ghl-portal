@@ -26,6 +26,8 @@ import {
 import { ISSUES, PROJECTS } from './data/fixtures.ts';
 import { getHubSchedule } from './hub-db/schedule.ts';
 import { getHubMedia } from './hub-db/media.ts';
+import { getHubMessages } from './hub-db/messages.ts';
+import { isUuid } from './data/visibility-overlay.ts';
 import { clientSelection, getHubSelections } from './hub-db/selections.ts';
 import { scopeOfProject } from './tenant-scope.ts';
 import type {
@@ -178,13 +180,55 @@ async function filesFor(project: Project, kind: 'document' | 'photo'): Promise<C
 
 
 
-export function messagesFor(project: Project): Message[] {
+/**
+ * The messages a homeowner sees.
+ *
+ * ---------------------------------------------------------------------------
+ * READS THE HUB, NOT FIXTURES (2026-09-10)
+ *
+ * Same story as the schedule. Every message screen rendered the same in-memory
+ * array, so nothing anyone typed survived the request and the three sides of
+ * the conversation never met. This reads `hub_messages`.
+ *
+ * The gate is the master switch, `clientPortalEnabled`. It used to be
+ * `allowClientMessaging`, which BuildSuite never sets and the Hub has no column
+ * for, so on every live project it was false and the homeowner's thread was
+ * permanently shut. Portal on means they have a thread; the fixture projects
+ * keep their own flag so the demo data reads the way it always has.
+ *
+ * `clientVisibleOnly` is passed down to the QUERY. An internal note is never
+ * fetched here, so no screen can leak one by forgetting to filter.
+ * ---------------------------------------------------------------------------
+ */
+export async function messagesFor(project: Project): Promise<Message[]> {
   if (!portalOpen(project)) return [];
-  // §6.1 — a contractor can switch client messaging off entirely.
+
+  const projectId = project.buildsuiteProjectId;
+  const hub = getHubMessages();
+  if (hub.available && isUuid(projectId)) {
+    const rows = await hub.messages.listForProject(scopeOfProject(project), projectId, {
+      clientVisibleOnly: true,
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      projectId: row.projectId,
+      threadId: `project-${row.projectId}`,
+      threadCategory: 'Project',
+      sender: row.author,
+      senderRole: row.authorRole,
+      fromClient: row.authorRole === 'client',
+      message: row.body,
+      sentDate: row.createdAt,
+      clientVisible: true,
+    }));
+  }
+
+  // Fixture projects: the id is not a uuid, so the uuid-keyed table cannot be
+  // asked about them. §6.1's per-project messaging flag still applies here.
   if (!project.allowClientMessaging) return [];
-  return MESSAGES.filter(
-    (m) => m.projectId === project.buildsuiteProjectId && m.clientVisible,
-  ).sort((a, b) => a.sentDate.localeCompare(b.sentDate));
+  return MESSAGES.filter((m) => m.projectId === projectId && m.clientVisible).sort((a, b) =>
+    a.sentDate.localeCompare(b.sentDate),
+  );
 }
 
 /**

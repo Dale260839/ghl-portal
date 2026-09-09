@@ -48,6 +48,10 @@ export type FieldProject = Omit<
   | 'showDetailedPricing'
   | 'showScheduleToClient'
   | 'showAssignedTeam'
+  | 'showDocuments'
+  | 'showPhotos'
+  | 'showDailyUpdates'
+  | 'showChangeOrders'
   | 'allowClientMessaging'
   | 'allowIssueSubmission'
   | 'allowFileUploads'
@@ -73,6 +77,10 @@ export function toFieldProject(project: Project): FieldProject {
     showDetailedPricing: _showPricing,
     showScheduleToClient: _showSchedule,
     showAssignedTeam: _showTeam,
+    showDocuments: _showDocuments,
+    showPhotos: _showPhotos,
+    showDailyUpdates: _showDailyUpdates,
+    showChangeOrders: _showChangeOrders,
     allowClientMessaging: _messaging,
     allowIssueSubmission: _issues,
     allowFileUploads: _uploads,
