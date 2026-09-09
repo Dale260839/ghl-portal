@@ -15,12 +15,26 @@ import { usePathname } from 'next/navigation';
  *
  * The safe-area padding is not decoration — without it the last item sits under
  * the home indicator on an iPhone and cannot be tapped at all.
+ *
+ * ---------------------------------------------------------------------------
+ * SEVEN ITEMS ON A 375px SCREEN
+ *
+ * Four fitted comfortably. Seven do not: at 375px that is 53px each, and 53px
+ * is under the 44px tap target once padding is taken off, with labels that
+ * would have to be truncated to fit.
+ *
+ * So the bar SCROLLS sideways instead of shrinking. Each item keeps a fixed
+ * minimum width wide enough for a gloved thumb and a readable label, and the
+ * row scrolls when they do not all fit. On a wide phone nothing scrolls and it
+ * looks exactly as it did; on a narrow one the last item is reachable rather
+ * than merely present. Snap points stop it settling mid-item.
+ * ---------------------------------------------------------------------------
  */
 
 export interface FieldNavItem {
   href: string;
   label: string;
-  icon: 'today' | 'tasks' | 'update' | 'messages';
+  icon: 'today' | 'tasks' | 'update' | 'docs' | 'issues' | 'punch' | 'messages';
   /** Unseen assignments. The "ding" in D4 §5. */
   badge?: number;
 }
@@ -29,6 +43,9 @@ const ICONS: Record<FieldNavItem['icon'], React.ReactNode> = {
   today: <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />,
   tasks: <path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />,
   update: <path d="M12 5v14M5 12h14" />,
+  docs: <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h5" />,
+  issues: <path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />,
+  punch: <path d="M9 11l3 3 8-8M3 6h6M3 12h4M3 18h8" />,
   messages: <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5A8.4 8.4 0 0 1 4 11.5a8.5 8.5 0 0 1 17 0z" />,
 };
 
@@ -40,11 +57,11 @@ export function FieldNav({ items }: { items: FieldNavItem[] }) {
       className="fixed inset-x-0 bottom-0 z-20 border-t border-navy-100 bg-white pb-[env(safe-area-inset-bottom)]"
       aria-label="Field navigation"
     >
-      <ul className="mx-auto flex max-w-lg">
+      <ul className="mx-auto flex max-w-lg snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {items.map((item) => {
           const active = pathname === item.href;
           return (
-            <li key={item.href} className="flex-1">
+            <li key={item.href} className="min-w-[4.25rem] flex-1 shrink-0 snap-start">
               <Link
                 href={item.href}
                 aria-current={active ? 'page' : undefined}

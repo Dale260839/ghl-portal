@@ -74,8 +74,8 @@ test('§9.3 a client selection has no Actual Cost property at all', () => {
   assert.notEqual(internal.actualCost, internal.allowance);
 });
 
-test('§9.3 a client issue carries no Internal Notes and no assignee', () => {
-  const issues = issuesFor(project);
+test('§9.3 a client issue carries no Internal Notes and no assignee', async () => {
+  const issues = await issuesFor(project);
   assert.ok(issues.length > 0, 'fixtures must provide issues with a client update');
 
   for (const i of issues) {
@@ -84,11 +84,12 @@ test('§9.3 a client issue carries no Internal Notes and no assignee', () => {
   }
 });
 
-test('an issue with no client update is not shown at all', () => {
-  const shown = issuesFor(project).map((i) => i.issueNumber);
+test('an issue with no client update is not shown at all', async () => {
+  const visible = await issuesFor(project);
+  const shown = visible.map((i) => i.issueNumber);
   const withoutUpdate = PROJECTS.length > 0 ? shown : [];
   // Every issue that IS shown must have a non-empty client update.
-  for (const i of issuesFor(project)) {
+  for (const i of visible) {
     assert.notEqual(i.clientUpdate.trim(), '');
   }
   assert.deepEqual(withoutUpdate, shown);
@@ -115,7 +116,7 @@ test('§9.1 a disabled portal returns nothing on every Phase B screen', async ()
   assert.deepEqual(await selectionsFor(closed), []);
   assert.deepEqual(await changeOrdersFor(closed), []);
   assert.deepEqual(budgetFor(closed), []);
-  assert.deepEqual(issuesFor(closed), []);
+  assert.deepEqual(await issuesFor(closed), []);
 });
 
 test('§6.1 the budget switch empties the budget without touching the rest', () => {

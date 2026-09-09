@@ -82,13 +82,13 @@ test('PUNCH_DONE_STATUSES contains exactly the finished states', () => {
 
 // ── The gate ───────────────────────────────────────────────────────────────
 
-test('§9.1 punchListFor returns nothing when the portal is off', () => {
+test('§9.1 punchListFor returns nothing when the portal is off', async () => {
   assert.equal(retail.clientPortalEnabled, false);
-  assert.deepEqual(punchListFor(retail), []);
+  assert.deepEqual(await punchListFor(retail), []);
 });
 
-test('§9.1 punchListFor returns only client-visible items, withholding the rest', () => {
-  const visible = punchListFor(kitchen);
+test('§9.1 punchListFor returns only client-visible items, withholding the rest', async () => {
+  const visible = await punchListFor(kitchen);
   const withheldInFixtures = PUNCH_LIST.filter(
     (p) => p.projectId === kitchen.buildsuiteProjectId && !p.clientVisible,
   );
@@ -102,8 +102,8 @@ test('§9.1 punchListFor returns only client-visible items, withholding the rest
   }
 });
 
-test('§9.3 the client projection drops internalNotes by construction', () => {
-  const serialized = JSON.stringify(punchListFor(kitchen));
+test('§9.3 the client projection drops internalNotes by construction', async () => {
+  const serialized = JSON.stringify(await punchListFor(kitchen));
   assert.ok(!serialized.toLowerCase().includes('"internalnotes"'), 'internalNotes key present');
   for (const p of PUNCH_LIST) {
     if (p.internalNotes === '') continue;
@@ -111,8 +111,8 @@ test('§9.3 the client projection drops internalNotes by construction', () => {
   }
 });
 
-test('the client list is sorted by item number', () => {
-  const nums = punchListFor(kitchen).map((p) => p.itemNumber);
+test('the client list is sorted by item number', async () => {
+  const nums = (await punchListFor(kitchen)).map((p) => p.itemNumber);
   assert.deepEqual(nums, [...nums].sort());
 });
 
@@ -140,12 +140,12 @@ test('at least one fixture item is attributed to the client', () => {
 
 // ── §11 the WF8 wiring ───────────────────────────────────────────────────────
 
-test('§11 the open count includes items the client was never shown', () => {
+test('§11 the open count includes items the client was never shown', async () => {
   // The whole reason WF8 asks for this number: withheld snags are still snags.
   // Counting only client-visible items would let a project close with real work
   // outstanding and no review task raised.
   const all = allPunchItemsFor(kitchen.buildsuiteProjectId);
-  const clientSide = punchListFor(kitchen);
+  const clientSide = await punchListFor(kitchen);
   assert.ok(all.length > clientSide.length, 'fixtures must withhold at least one item');
 
   const withheldOpen = all.filter((p) => !p.clientVisible && !punchItemDone(p));
