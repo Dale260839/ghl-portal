@@ -86,3 +86,71 @@ test('removing a milestone archives rather than deletes', async () => {
   assert.equal(patch.archived_by, 'Ralph');
   assert.equal((calls[0]!.args.filters as Record<string, string>).archived_at, 'is.null');
 });
+
+// ── Milestones: the columns create, read and update must agree on ────────────
+
+test('editing a milestone writes the SAME columns creating one wrote', async () => {
+  // `updateMilestone` wrote `target_date` and `completed_date` — the pair
+  // migration 0001 created — while `createMilestone` writes `planned_start` and
+  // `planned_end`, added by 0003, and `toMilestone` reads that pair.
+  //
+  // So editing a milestone's dates appeared to work and changed nothing on
+  // screen. Worse, an end date landed in `completed_date`, giving a milestone
+  // nobody had finished a completion date that a later report or stage sync
+  // would take at face value.
+  const created = recordingOps();
+  await created.ops.createMilestone(SCOPE, {
+    projectId: 'p1',
+    milestoneName: 'Framing',
+    sequence: 2,
+    plannedStart: '2026-09-01',
+    plannedEnd: '2026-09-14',
+    createdBy: 'Ralph',
+  });
+  const insert = created.calls.find((c) => c.op === 'insert')!.args as {
+    rows: Record<string, unknown>[];
+  };
+  const written = insert.rows[0]!;
+
+  const edited = recordingOps();
+  await edited.ops.updateMilestone(SCOPE, 'm-1', {
+    plannedStart: '2026-09-02',
+    plannedEnd: '2026-09-15',
+  });
+  const patch = (edited.calls.find((c) => c.op === 'update')!.args as { patch: Record<string, unknown> })
+    .patch;
+
+  for (const column of ['planned_start', 'planned_end']) {
+    assert.ok(column in written, `create does not write ${column}`);
+    assert.ok(column in patch, `update does not write ${column}`);
+  }
+  assert.equal(patch.planned_start, '2026-09-02');
+  assert.equal(patch.planned_end, '2026-09-15');
+});
+
+test('editing a milestone never sets a completion date', async () => {
+  // The half of the bug that survives a screen refresh. A milestone is
+  // completed by someone saying so, never as a side effect of moving its dates.
+  const { ops, calls } = recordingOps();
+  await ops.updateMilestone(SCOPE, 'm-1', {
+    plannedStart: '2026-09-02',
+    plannedEnd: '2026-09-15',
+    status: 'In Progress',
+  });
+  const patch = (calls.find((c) => c.op === 'update')!.args as { patch: Record<string, unknown> })
+    .patch;
+
+  assert.equal('completed_date' in patch, false, 'an edit marked the milestone complete');
+  assert.equal('target_date' in patch, false, 'an edit wrote a column nothing reads');
+});
+
+test('a milestone edit touches only the fields it was given', async () => {
+  // A patch that wrote every column would blank a name when the caller meant
+  // to change a status.
+  const { ops, calls } = recordingOps();
+  await ops.updateMilestone(SCOPE, 'm-1', { status: 'Completed' });
+  const patch = (calls.find((c) => c.op === 'update')!.args as { patch: Record<string, unknown> })
+    .patch;
+
+  assert.deepEqual(Object.keys(patch).sort(), ['status', 'updated_at']);
+});

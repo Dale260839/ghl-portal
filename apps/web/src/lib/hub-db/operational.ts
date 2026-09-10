@@ -387,8 +387,20 @@ export class HubOperational {
     if (patch.milestoneName !== undefined) values.milestone_name = patch.milestoneName.trim();
     if (patch.sequence !== undefined) values.sequence = patch.sequence;
     if (patch.status !== undefined) values.status = patch.status;
-    if (patch.plannedStart !== undefined) values.target_date = patch.plannedStart;
-    if (patch.plannedEnd !== undefined) values.completed_date = patch.plannedEnd;
+    // `planned_start` / `planned_end`, THE SAME COLUMNS `createMilestone`
+    // WRITES AND `toMilestone` READS.
+    //
+    // These were `target_date` and `completed_date` — different columns, added
+    // by migration 0001 and superseded by the planned pair in 0003. Two things
+    // followed, and the second is worse than the first:
+    //
+    //   · editing a milestone's dates appeared to work and changed nothing on
+    //     screen, because the read comes from `planned_start`/`planned_end`;
+    //   · an end date was written into `completed_date`, so a milestone nobody
+    //     had finished carried a completion date. Anything that later reads
+    //     that column — a report, a stage sync — would take it as done.
+    if (patch.plannedStart !== undefined) values.planned_start = patch.plannedStart;
+    if (patch.plannedEnd !== undefined) values.planned_end = patch.plannedEnd;
     if (patch.clientVisible !== undefined) values.client_visible = patch.clientVisible;
 
     await this.client.update({
