@@ -40,6 +40,19 @@ function money(value: number | null): string {
   return value === null ? 'not recorded' : currency(value);
 }
 
+/**
+ * A sum over approved or pending rows. Three honest states, not two: the list
+ * could not be read (not recorded), the list is empty (none yet), or there are
+ * rows (a figure). The first version printed $0 for an empty list, which reads
+ * as "changes were approved and they came to nothing" on a project where no
+ * change order has ever been raised.
+ */
+function delta(value: number | null, count: number | null | undefined): string {
+  if (value === null || count === null || count === undefined) return 'not recorded';
+  if (count === 0) return 'none yet';
+  return currency(value);
+}
+
 export default async function ProjectBudgetControl({
   params,
 }: {
@@ -139,7 +152,7 @@ export default async function ProjectBudgetControl({
         <StatTile label="Contract total" value={money(contractTotal)} sub={contractNote} />
         <StatTile
           label="Approved change orders"
-          value={money(approvedCo)}
+          value={delta(approvedCo, approvedOrders?.length)}
           sub={
             approvedOrders === null
               ? 'The Hub database is not connected.'
@@ -149,7 +162,7 @@ export default async function ProjectBudgetControl({
         />
         <StatTile
           label="Pending change orders"
-          value={money(pendingCo)}
+          value={delta(pendingCo, pendingOrders?.length)}
           sub={
             pendingOrders === null
               ? 'The Hub database is not connected.'
@@ -188,7 +201,7 @@ export default async function ProjectBudgetControl({
                 Added cost less credits, plus tax, on change orders the client has approved.
               </td>
               <td className="tabular px-5 py-3 text-right font-medium text-navy-900">
-                {money(approvedCo)}
+                {delta(approvedCo, approvedOrders?.length)}
               </td>
             </tr>
             <tr>
@@ -198,7 +211,7 @@ export default async function ProjectBudgetControl({
                 inside the contract total.
               </td>
               <td className="tabular px-5 py-3 text-right font-medium text-navy-900">
-                {money(selectionDelta)}
+                {delta(selectionDelta, approvedSelections?.length)}
               </td>
             </tr>
             <tr className="bg-navy-50/50">
@@ -217,7 +230,7 @@ export default async function ProjectBudgetControl({
               <td className="px-5 py-3 text-xs text-navy-400">
                 Not in the revised total. The client has not approved these yet.
               </td>
-              <td className="tabular px-5 py-3 text-right text-navy-500">{money(pendingCo)}</td>
+              <td className="tabular px-5 py-3 text-right text-navy-500">{delta(pendingCo, pendingOrders?.length)}</td>
             </tr>
           </tbody>
         </table>
