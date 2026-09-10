@@ -537,19 +537,32 @@ export class HubTeam {
     const email = input.email.trim().toLowerCase();
     const now = new Date().toISOString();
 
-    const [existing] = await this.client.select<MembershipRow>({
+    // EVERY row for this person, not the most recent one.
+    //
+    // `hub_memberships_live_email` is unique only WHERE `revoked_at is null`,
+    // so a revoked row and a live row can coexist — revoke someone, invite them
+    // again, and there are two. Taking `order created_at.desc limit 1` made the
+    // answer depend on which was written last, which is not what decides
+    // whether somebody has access. A live row always wins; a revoked row only
+    // decides the outcome when there is no live row to consider.
+    const rows = await this.client.select<MembershipRow>({
       from: 'hub_memberships',
       filters: { contractor_id: `eq.${input.contractorId}`, email: `eq.${email}` },
       order: 'created_at.desc',
-      limit: 1,
+      limit: 10,
     });
+    const existing = rows.find((r) => r.revoked_at === null);
+
+    if (existing === undefined && rows.length > 0) {
+      // Revoked, and nothing live alongside it. The contract being signed is
+      // not an argument against the contractor having withdrawn access — this
+      // is the one control that overrides the code, and restoring it is the
+      // contractor's decision to make on the Team screen, not a side effect of
+      // the homeowner typing a code that is still correct.
+      return { ok: false, reason: 'revoked' };
+    }
 
     if (existing !== undefined) {
-      // A revoked homeowner stays out. The contract being signed is not an
-      // argument against the contractor having withdrawn access — this is the
-      // one control that overrides the code, and it has to be checked before
-      // anything is written.
-      if (existing.revoked_at !== null) return { ok: false, reason: 'revoked' };
 
       const projectIds = [...new Set([...(existing.project_ids ?? []), input.projectId])];
       const [updated] = await this.client.update<MembershipRow>({

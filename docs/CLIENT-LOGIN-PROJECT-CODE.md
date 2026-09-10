@@ -76,6 +76,10 @@ Two consequences worth knowing before they surprise someone:
   the next sign-in with that code re-adds it, because the signed contract still
   says it is theirs. **Revoke is the control that removes a homeowner**, and it
   is checked before anything is written.
+- A revoked homeowner stays out **even with a correct code**, and only the
+  contractor's *Restore access* button brings them back. Note that a revoked row
+  and a live row can coexist — the unique index covers live rows only — so the
+  lookup picks the LIVE row rather than the most recently written one.
 
 ---
 

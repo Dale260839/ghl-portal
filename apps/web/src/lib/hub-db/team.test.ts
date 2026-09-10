@@ -472,6 +472,44 @@ test('a REVOKED homeowner stays out, and nothing is written', async () => {
   );
 });
 
+test('a LIVE row wins over a revoked one, whichever was written last', async () => {
+  // `hub_memberships_live_email` is unique only where `revoked_at is null`, so
+  // revoking someone and inviting them again leaves two rows. Picking the most
+  // recent one made access depend on write order rather than on whether the
+  // person actually has access.
+  //
+  // Found on 2026-09-10 in live data: a revoked seed row sat under the same
+  // (contractor, email) a real sign-in would land on.
+  for (const order of [
+    [clientRow({ id: 'm-revoked', revoked_at: '2026-09-05T00:00:00Z' }), clientRow({ id: 'm-live' })],
+    [clientRow({ id: 'm-live' }), clientRow({ id: 'm-revoked', revoked_at: '2026-09-05T00:00:00Z' })],
+  ]) {
+    const { team, calls } = fakeTeam([order, [clientRow({ id: 'm-live' })]]);
+    const result = await team.provisionClientFromSignedProject({
+      contractorId: 'c1',
+      email: 'owner@example.com',
+      projectId: 'p2',
+      clientName: 'Owner',
+    });
+
+    assert.equal(result.ok, true, 'a live row must not be shadowed by a revoked one');
+    assert.match(calls.find((c) => c.method === 'PATCH')!.url, /id=eq\.m-live/);
+  }
+});
+
+test('a revoked row with nothing live alongside it still refuses', async () => {
+  const { team, calls } = fakeTeam([[clientRow({ revoked_at: '2026-09-05T00:00:00Z' })]]);
+  const result = await team.provisionClientFromSignedProject({
+    contractorId: 'c1',
+    email: 'owner@example.com',
+    projectId: 'p1',
+    clientName: 'Owner',
+  });
+
+  assert.deepEqual(result, { ok: false, reason: 'revoked' });
+  assert.deepEqual(calls.filter((c) => c.method !== 'GET'), [], 'nothing may be written');
+});
+
 test('the update is filtered by the contractor as well as the row id', async () => {
   // Same rule as `setProjects`: a membership id is guessable in a way a tenant
   // boundary must not depend on.
