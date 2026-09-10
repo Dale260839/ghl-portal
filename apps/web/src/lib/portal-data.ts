@@ -3,6 +3,8 @@ import 'server-only';
 import { PROJECTS } from './data/fixtures.ts';
 import type { Project } from './data/types.ts';
 import { getSession } from './session.ts';
+import { currentAccess } from './access.ts';
+import { clientProjectsFor } from './client-scope.ts';
 import { currentDataSource } from './data/current-source.ts';
 import { projectFor } from './portal-gates.ts';
 import { tenantScopeFor } from './tenant-scope.ts';
@@ -33,8 +35,26 @@ export async function currentPortalProject(params: {
   const session = await getSession();
   const db = await currentDataSource();
 
-  if (session?.role === 'client' && session.contactId !== undefined) {
-    const allProjects = await db.listProjectsForContact(session.contactId);
+  if (session?.role === 'client') {
+    // THROUGH `clientProjectsFor`, WHICH KNOWS ABOUT BOTH KINDS OF CLIENT.
+    //
+    // This used to be `db.listProjectsForContact(session.contactId)` guarded by
+    // `session.contactId !== undefined`, which handled exactly one of the two:
+    // the homeowner already in GoHighLevel. A homeowner who arrived by
+    // invitation — and, since 2026-09-10, EVERY homeowner, because a code
+    // sign-in deliberately mints no contact id — fell straight past the branch
+    // and got `{ project: null }`.
+    //
+    // Eleven of the fourteen portal screens resolve their project here, so the
+    // effect was a homeowner signing in successfully and finding "No project"
+    // on Documents, Photos, Schedule, Budget, Timeline, Updates, Issues,
+    // Messages, Designs, Change Orders and Completion — every screen except the
+    // three that already went through `clientProjectsFor`. Silent, and it looks
+    // like the contractor has shared nothing rather than like a fault.
+    const access = await currentAccess();
+    if (!access.ok) return { project: null, allProjects: [] };
+
+    const allProjects = await clientProjectsFor(access.access, db);
     const chosen =
       allProjects.find((p) => p.buildsuiteProjectId === params.project) ?? allProjects[0] ?? null;
     return { project: chosen, allProjects };

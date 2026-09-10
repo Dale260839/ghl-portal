@@ -45,6 +45,18 @@ const rel = (p: string) => p.slice(SRC.length + 1).replace(/\\/g, '/');
 // does not flip 'in progress → complete' inside the Hub. The Hub reflects
 // completion once GHL marks it."
 
+/**
+ * Source with its comments removed.
+ *
+ * For guardrails that assert a call is or is NOT made. A comment explaining a
+ * past bug names the thing it is explaining, so a plain text search finds it in
+ * the prose and reports a defect that was fixed — which is the failure mode
+ * that gets guardrails deleted.
+ */
+function withoutComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+}
+
 test('D4 §5 — nothing in the Hub assigns a project stage except WF2 applying GHL', () => {
   const writers = FILES.filter((f) => /\.projectStage\s*=/.test(f.text)).map((f) => rel(f.path));
 
@@ -469,6 +481,64 @@ test('§9.1 a client screen never resolves its own projects', () => {
       `${rel(file.path)} resolves client projects itself instead of via clientProjectsFor`,
     );
   }
+});
+
+test('§9.1 every portal screen resolves its project through ONE function', () => {
+  // A homeowner arrives two ways — already a GoHighLevel contact, or through a
+  // membership with no contact id — and since 2026-09-10 the code sign-in mints
+  // NO contact id at all, so the membership path is the normal one.
+  //
+  // `currentPortalProject` resolved only the contact kind: it was guarded by
+  // `session.contactId !== undefined` and everyone else fell past it to
+  // `{ project: null }`. Eleven of the fourteen portal screens resolve there, so
+  // a homeowner signed in successfully and found "No project" on Documents,
+  // Photos, Schedule, Budget, Timeline, Updates, Issues, Messages, Designs,
+  // Change Orders and Completion. Silent, and it reads as "nothing shared yet"
+  // rather than as a fault.
+  //
+  // `clientProjectsFor` is the one place that knows about both kinds. This
+  // pins `currentPortalProject` to it so the two cannot drift apart again.
+  const portalData = FILES.find((f) => rel(f.path) === 'lib/portal-data.ts');
+  assert.ok(portalData);
+
+  const from = portalData.text.indexOf('export async function currentPortalProject');
+  assert.notEqual(from, -1, 'currentPortalProject has moved or been renamed');
+  const rest = portalData.text.slice(from);
+  // Up to the next top-level export, so the contractor branch below it is
+  // not mistaken for part of this one.
+  const nextExport = rest.indexOf('\nexport ');
+  const body = nextExport === -1 ? rest : rest.slice(0, nextExport);
+
+  // The CLIENT branch specifically. A contractor previewing resolves from the
+  // preview id, which is a different question and stays as it is.
+  // Bounded at the CONTRACTOR branch rather than by a character count. A fixed
+  // slice was the first attempt and it failed on a long comment — a guardrail
+  // whose reach depends on how much prose sits above the code is one that
+  // starts passing when somebody edits a comment.
+  const clientStart = body.indexOf("session?.role === 'client'");
+  const contractorStart = body.indexOf("session?.role === 'contractor'");
+  assert.notEqual(clientStart, -1, 'the client branch has moved');
+  const clientBranch = body.slice(
+    clientStart,
+    contractorStart > clientStart ? contractorStart : undefined,
+  );
+
+  // CODE ONLY. The comment inside that branch quotes the old call by name to
+  // explain what went wrong, and the first version of this test matched its own
+  // explanation and failed on correct code. A guardrail that reads prose will
+  // eventually be satisfied — or defeated — by prose.
+  const code = withoutComments(clientBranch);
+
+  assert.match(
+    code,
+    /clientProjectsFor\(/,
+    'the client branch must resolve through clientProjectsFor',
+  );
+  assert.equal(
+    /listProjectsForContact\(/.test(code),
+    false,
+    'resolving a homeowner by contact id alone strands everyone who has none',
+  );
 });
 
 test('§9.4 a field screen never resolves its own projects', () => {
