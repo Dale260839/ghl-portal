@@ -14,6 +14,7 @@
     "rehearse": "node scripts/rehearse-handoff.mjs",
     "hud": "node scripts/build-hud.mjs",
     "hud:maps": "node scripts/mint-cookies.mjs && node scripts/build-wireframes.mjs && node scripts/build-hud.mjs",
-    "check:codes": "node scripts/check-project-codes.mjs"
+    "check:codes": "node scripts/check-project-codes.mjs",
+    "checkin": "node scripts/checkin.mjs"
   }
 }
