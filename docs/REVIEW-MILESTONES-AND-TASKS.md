@@ -25,9 +25,37 @@ Two consequences, and the second is worse:
 **Fixed** in `lib/hub-db/operational.ts`; three tests added, verified by putting
 the old columns back and watching two of them fail.
 
-Nothing needs correcting in the data: `updateMilestone` has never been called
-against a live row, so no `completed_date` was ever wrongly set. Worth
-re-checking after this ships.
+### One live row is affected — corrected 2026-09-10, later the same day
+
+I first wrote here that `updateMilestone` had never been called against a live
+row and no data needed correcting. **That was wrong**, and reading the rows once
+the network came back showed it:
+
+```
+hub_milestones — project 39089861 (BSA-052), created by AFC
+
+  Testing   status = Not Started
+            planned_start  2026-09-01     planned_end    2026-09-02
+            target_date    2026-09-01     completed_date 2026-09-02
+```
+
+Both pairs are populated, which only happens if the row was created and then
+edited — the create wrote the planned pair, the buggy update wrote the other.
+The row therefore carries **`completed_date = 2026-09-02` on a milestone whose
+status is `Not Started`**: precisely the failure this section describes, sitting
+in live data.
+
+Nothing reads `completed_date` today, so nothing is currently wrong on screen.
+It is a landmine rather than a fire — but it is real, and a later reader of that
+column would take it at face value.
+
+**Needs a decision, not a quiet fix:** clearing `target_date` and
+`completed_date` on that row is a write to a live table (D-003 — every write
+gets confirmed first). It is one row and one statement. Flagged in
+`docs/BLOCKERS.md`.
+
+The other six milestone rows are clean: four seeded `[TEST CASE]` rows, and two
+`[HUB WALK]` rows on `BSA-APS-001` with no dates set at all.
 
 ---
 
@@ -128,12 +156,12 @@ exercise the switch, and the switch is the privacy model.
 
 ## 6 · Not reviewed
 
-**The live `hub_milestones` and `hub_tasks` rows.** Both Supabase hosts became
-unreachable from this machine partway through (`UND_ERR_CONNECT_TIMEOUT` on
-BuildSuite and the Hub alike, after both had answered minutes earlier), so the
-seven milestone and task rows were counted but not read.
+**Nothing.** The row-level pass was outstanding when this was first written —
+both Supabase hosts had become unreachable from this machine — and was completed
+later the same day once the link came back (flaky, but fine on retry).
 
-Everything above is from the code, the migrations and the seed script, which is
-where the bug was anyway. The row-level pass is outstanding: re-run
-`node scripts/seed-test-case.mjs --check` or read the tables directly once the
-network is back.
+It found the affected row recorded in §1, which corrected a claim this document
+had made in the other direction. Worth noting as a method point: the review was
+written from the code, the migrations and the seed script, and that was enough
+to find the bug — but not enough to know whether it had bitten. Only the rows
+could say that, and they said the opposite of what I had assumed.

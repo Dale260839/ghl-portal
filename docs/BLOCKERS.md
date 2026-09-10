@@ -26,6 +26,7 @@ for a week becomes impossible to miss, without burying the check-in in a table.
 | 🟡 | **Where client messaging lives** — GHL conversations, or a `hub_messages` table. | Chris | 2026-09-10 | `/portal/messages` renders fixtures and its buttons do nothing. See `MESSAGING-HUB-AND-GHL.md` §6. |
 | 🟡 | **`NotifyClient` only logs.** Needs a `ghlPorts` module and a template per notification. | needs a decision on which notifications email at all | 2026-09-10 | A PM publishes an update and the homeowner is never told. Nothing on screen says so. |
 | 🟡 | **Homeowner login pushback** — Chris raised a concern and it was never answered. | Chris | 2026-09-08 | The code-as-password flow shipped 2026-09-10 without that being closed. |
+| 🟡 | **One live milestone carries a false `completed_date`** — `Testing` on `BSA-052`, status `Not Started`, `completed_date = 2026-09-02`, written by the update bug fixed on 2026-09-10. Clearing it is a one-row write to a live table (D-003). | John, to approve the write | 2026-09-10 | Nothing reads the column today, so it is a landmine rather than a fire — but a later reader would take it at face value. |
 
 ## Data gaps — BuildSuite side, all fail closed
 
