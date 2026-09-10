@@ -16,7 +16,17 @@ import {
   TASK_STATUSES,
   ISSUE_CATEGORIES,
 } from './enums.ts';
-import { assertProjectId, formatProjectId, isProjectId, TEST_PROJECT_ID } from './ids.ts';
+import {
+  assertProjectId,
+  duplicateProjectCodes,
+  formatProjectId,
+  isProjectCode,
+  isProjectId,
+  normalizeProjectCode,
+  projectCodePrefix,
+  projectCodeSeries,
+  TEST_PROJECT_ID,
+} from './ids.ts';
 import {
   INTERNAL_FIELD_DENY_LIST,
   assertNoInternalFields,
@@ -230,4 +240,71 @@ test('§3.6 a payload identified only by name is rejected', () => {
     () => assertHandoffPayload({ ...validHandoff, buildsuite_project_id: undefined }),
     /buildsuite_project_id/,
   );
+});
+
+// ── §5 / C-3 the project-numbering convention ────────────────────────────────
+
+test('C-3 both live series are recognised, and told apart', () => {
+  // Measured 2026-09-10: 54 codes in the Alliance series across seventeen
+  // owning profiles, 2 in one contractor's series. Both are real, both must
+  // work, and code that needs to know which is which must not parse it itself.
+  assert.equal(projectCodeSeries('BSA-052'), 'alliance');
+  assert.equal(projectCodeSeries('BSA-001'), 'alliance');
+  assert.equal(projectCodeSeries('BSA-APS-001'), 'contractor');
+  assert.equal(projectCodeSeries('BSA-ASJF-006'), 'contractor');
+
+  assert.equal(projectCodePrefix('BSA-052'), '');
+  assert.equal(projectCodePrefix('BSA-APS-001'), 'APS');
+});
+
+test('C-3 the NUMBER alone is not an identifier', () => {
+  // `BSA-002` and `BSA-APS-002` both exist in live data and are different
+  // projects. Two independent counters will collide on the suffix forever, so
+  // nothing may key, sort or compare on it.
+  const a = 'BSA-002';
+  const b = 'BSA-APS-002';
+  assert.notEqual(a, b);
+  assert.equal(a.match(/(\d+)$/)![1], b.match(/(\d+)$/)![1], 'the premise of this test');
+  assert.deepEqual(duplicateProjectCodes([a, b]), [], 'full strings must not collide');
+});
+
+test('C-3 a code survives being read down a phone', () => {
+  // Since 2026-09-10 this is a homeowner's password, typed from an email or
+  // dictated by their contractor. Case, spaces and a dropped leading zero are
+  // the person being human, not the credential being wrong.
+  for (const typed of ['bsa-052', ' BSA-052 ', 'BSA-52', 'bsa 052', 'Bsa-52']) {
+    assert.equal(normalizeProjectCode(typed), 'BSA-052', `failed on ${JSON.stringify(typed)}`);
+  }
+  assert.equal(normalizeProjectCode('bsa-aps-001'), 'BSA-APS-001');
+});
+
+test('C-3 padding never widens what is already wide enough', () => {
+  // The Alliance series is at 55 and climbing. `BSA-1000` must pass through
+  // untouched, or the fix for a leading zero becomes the bug at four digits.
+  assert.equal(normalizeProjectCode('BSA-1000'), 'BSA-1000');
+  assert.equal(normalizeProjectCode('BSA-000123'), 'BSA-000123');
+  assert.equal(isProjectCode('BSA-1000'), true);
+  assert.equal(isProjectCode('BSA-APS-1000'), true);
+});
+
+test('C-3 a code with too few digits is refused, not guessed at', () => {
+  // The PATTERN requires three. `normalizeProjectCode` is the one place allowed
+  // to pad, so a raw short code reaching a comparison is a bug rather than a
+  // fourth format quietly entering circulation.
+  assert.equal(isProjectCode('BSA-5'), false);
+  assert.equal(isProjectCode('BSA-52'), false);
+  assert.equal(isProjectCode('BSA-APS-1'), false);
+  // And things that are not codes at all.
+  for (const bad of ['BSA-', 'BSA', 'BSA--001', 'BSA-A-001', 'BSA-TOOLONGX-001', '052', '']) {
+    assert.equal(isProjectCode(bad), false, `accepted ${JSON.stringify(bad)}`);
+  }
+});
+
+test('C-3 duplicates are found regardless of how they were typed', () => {
+  // The check that matters: the whole string is unique. Zero duplicates across
+  // all 56 live codes on 2026-09-10, and this is what re-verifies it.
+  assert.deepEqual(duplicateProjectCodes(['BSA-050', 'BSA-051', 'BSA-APS-001']), []);
+  assert.deepEqual(duplicateProjectCodes(['BSA-050', 'bsa-050']), ['BSA-050']);
+  assert.deepEqual(duplicateProjectCodes(['BSA-52', 'BSA-052']), ['BSA-052']);
+  assert.deepEqual(duplicateProjectCodes(['BSA-001', 'BSA-APS-001']), [], 'different series');
 });

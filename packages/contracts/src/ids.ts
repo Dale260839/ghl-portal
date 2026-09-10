@@ -46,7 +46,107 @@
  * The old pattern rejected every contractor-created code, and would have
  * rejected the feed series itself at BSA-1000.
  */
-export const PROJECT_CODE_PATTERN = /^BSA-(?:\d+|[A-Z]{2,6}-\d+)$/;
+export const PROJECT_CODE_PATTERN = /^BSA-(?:\d{3,}|[A-Z]{2,6}-\d{3,})$/;
+
+/**
+ * ---------------------------------------------------------------------------
+ * THE NUMBERING CONVENTION (established 2026-09-10, from live data)
+ *
+ * There are exactly TWO series, both allocated by a Postgres function inside
+ * BuildSuite at insert time. Measured on 2026-09-10 across 107 live projects,
+ * 56 of which carry a code:
+ *
+ *   ALLIANCE SERIES     `BSA-NNN`         54 codes, numbers 1–55, one gap (49)
+ *     One Alliance-wide counter shared by every contractor — the 54 codes are
+ *     spread across SEVENTEEN owning auth profiles. The number is global, so it
+ *     says nothing about whose project it is.
+ *
+ *   CONTRACTOR SERIES   `BSA-XXX-NNN`     2 codes, prefix `APS`
+ *     A per-contractor counter behind a prefix the contractor picks (2–6
+ *     letters). `BSA-APS-001` and `BSA-APS-002` both belong to one profile.
+ *
+ * THE PROPERTY THAT MATTERS, AND THE ONE THAT DOES NOT:
+ *
+ *   · **The whole string is unique.** Verified: zero duplicates across all 56.
+ *     This is the property everything depends on — §3.6 makes it the only join
+ *     key, and since 2026-09-10 it is also a homeowner's password.
+ *
+ *   · **The NUMBER is not unique.** `BSA-002` and `BSA-APS-002` both exist and
+ *     are different projects; so do `BSA-001` and `BSA-APS-001`. Never key,
+ *     sort, compare or display on the numeric suffix alone. Two counters
+ *     running independently will keep colliding on it forever.
+ *
+ * WHERE A REAL COLLISION COULD STILL COME FROM: the contractor prefix is
+ * chosen, not allocated. Two contractors whose names both shorten to `APS`
+ * would mint the same code from two independent counters. Nothing in BuildSuite
+ * prevents it today. `scripts/check-project-codes.mjs` looks for it, and the
+ * sign-in path fails closed on it — `findSignedProjectForClient` refuses when a
+ * code matches more than one project, because signing somebody into a job that
+ * might not be theirs is worse than refusing.
+ *
+ * WIDTH: three digits everywhere today, and the pattern accepts more so the
+ * Alliance series does not break at `BSA-1000`. It requires at least three, so
+ * a stray `BSA-5` is rejected rather than silently treated as a fourth format.
+ * `normalizeProjectCode` pads a short one instead, because a homeowner reading
+ * a code down a phone should not be defeated by a leading zero.
+ * ---------------------------------------------------------------------------
+ */
+
+/** Which counter minted a code. `null` when it is not a project code at all. */
+export type ProjectCodeSeries = 'alliance' | 'contractor';
+
+export function projectCodeSeries(value: string): ProjectCodeSeries | null {
+  const code = normalizeProjectCode(value);
+  if (!PROJECT_CODE_PATTERN.test(code)) return null;
+  return /^BSA-\d{3,}$/.test(code) ? 'alliance' : 'contractor';
+}
+
+/**
+ * The contractor prefix, or `''` for the Alliance series.
+ *
+ * NOT an identifier. It is chosen by the contractor and is not guaranteed
+ * unique — see the collision note above. Use it for display, never as a key.
+ */
+export function projectCodePrefix(value: string): string {
+  const code = normalizeProjectCode(value);
+  return code.match(/^BSA-([A-Z]{2,6})-\d{3,}$/)?.[1] ?? '';
+}
+
+/**
+ * What a person typed, turned into what the database stores.
+ *
+ * Upper-cases and trims, because a code is read off a phone or a printed
+ * contract. Pads a SHORT numeric suffix to three digits — `BSA-52` becomes
+ * `BSA-052` — since every code in existence is three-wide and dropping the
+ * leading zero is the obvious human slip. Padding cannot create a false match:
+ * a padded code either matches the project it names or matches nothing, and the
+ * email must match too.
+ *
+ * Does NOT pad anything already three or more digits, so `BSA-1000` survives.
+ */
+export function normalizeProjectCode(value: string): string {
+  // Runs of spaces or hyphens collapse to ONE hyphen, so a code dictated as
+  // "BSA 052" or typed as "BSA--052" still resolves. Stripping whitespace
+  // outright turned "bsa 052" into "BSA052" and lost the separator.
+  const code = String(value).trim().toUpperCase().replace(/[\s-]+/g, '-');
+  return code.replace(/(\d+)$/, (digits) => (digits.length < 3 ? digits.padStart(3, '0') : digits));
+}
+
+/**
+ * The duplicates in a set of codes, normalized. Empty is the healthy answer.
+ *
+ * Exported so the same rule can be run against live data by a script and
+ * against a fixture by a test, rather than each writing its own comparison.
+ */
+export function duplicateProjectCodes(codes: readonly string[]): string[] {
+  const seen = new Map<string, number>();
+  for (const raw of codes) {
+    const code = normalizeProjectCode(raw);
+    if (code === '') continue;
+    seen.set(code, (seen.get(code) ?? 0) + 1);
+  }
+  return [...seen].filter(([, n]) => n > 1).map(([code]) => code).sort();
+}
 
 /**
  * `BSP-YYYY-NNNNNN` — e.g. `BSP-2026-000184` (§5 as originally written).

@@ -1,4 +1,4 @@
-import { PROJECT_CODE_PATTERN } from '@buildsuite/contracts';
+import { normalizeProjectCode, PROJECT_CODE_PATTERN } from '@buildsuite/contracts';
 
 import { BuildSuiteClient, readBuildSuiteConfig } from './client.ts';
 import { resolveContractor } from './contractor-identity.ts';
@@ -31,7 +31,11 @@ function clientLoginPair(
   projectCode: string,
   clientEmail: string,
 ): { code: string; email: string } | null {
-  const code = projectCode.trim().toUpperCase();
+  // Normalised by the contract, not here. It handles the ways a code arrives
+  // from a human — lower case, stray spaces, a dictated "BSA 052", a dropped
+  // leading zero — and it is the same function the numbering convention is
+  // tested against, so the door and the contract cannot disagree.
+  const code = normalizeProjectCode(projectCode);
   const email = clientEmail.trim().toLowerCase();
   if (!PROJECT_CODE_PATTERN.test(code)) return null;
   if (!/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(email)) return null;
