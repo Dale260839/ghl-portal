@@ -8,18 +8,21 @@ import type { ProjectSigning } from './signed-work.ts';
  *
  *   > available projects should show when stage = awarded. That's what you
  *   > will show as projects. Also status must be signed, or won
- *   > …
- *   > both active and awarded should go through
+ *
+ * `active` was briefly admitted alongside `awarded` and then removed the same
+ * day: the project it was meant to rescue was missing for a different reason
+ * entirely (see the note on the stage list), and widening the stage was the
+ * wrong fix for it.
  *
  * ---------------------------------------------------------------------------
  * TWO CONDITIONS, AND THEY ARE NOT THE SAME CONDITION
  *
- * **The stage** must be `awarded` or `active` — BuildSuite's own words for a
- * job that has been given to this contractor, and one that is under way. They
- * live in `projects.status` and reach us as `sourceStatus`, deliberately NOT
- * `projectStage`, which is the §7 GHL pipeline (`New Project` … `Warranty`) and
- * contains neither word. The two vocabularies are separate and mapping one onto
- * the other is lossy both ways (see `buildsuite/projects.ts`).
+ * **The stage** must be `awarded` — BuildSuite's word for a job that has been
+ * given to this contractor. It lives in `projects.status` and reaches us as
+ * `sourceStatus`, deliberately NOT `projectStage`, which is the §7 GHL pipeline
+ * (`New Project` … `Warranty`) and contains no `awarded` at all. The two
+ * vocabularies are separate and mapping one onto the other is lossy both ways
+ * (see `buildsuite/projects.ts`).
  *
  * **Signed or won** is the money question: did the homeowner actually agree.
  * `signed` is a signature on the proposal. `won` is the proposal being
@@ -34,23 +37,23 @@ import type { ProjectSigning } from './signed-work.ts';
  * dropping it off their Projects list is exactly the wrong moment to do it.
  *
  * ---------------------------------------------------------------------------
- * THE STAGE HALF IS THE LOOSE ONE. THE MONEY HALF IS WHAT FILTERS.
+ * WHY `active` IS NOT ON THE LIST, THOUGH IT WAS FOR AN HOUR
  *
- * Measured the same day, and worth knowing before anyone widens the stage list
- * again:
+ * A third awarded-and-signed project — `BSA-053` — was missing from the screen
+ * while appearing on the dashboard and opening fine when clicked. Admitting
+ * stage `active` looked like it fixed that, because the one project it let in
+ * happened to be signed. It was the wrong diagnosis.
  *
- *   stage `awarded`   3 projects — all 3 signed
- *   stage `active`   43 projects — **1** signed
+ * `BSA-053` has **`auth_profile_id = null`**. Every BuildSuite project read
+ * filters on that column, so an ownerless row matches nobody's tenant and never
+ * reaches a listing at all — whatever its stage. Its proposal names the owner
+ * instead (`proposals.user_id`), which is why the dashboard, reading proposals,
+ * could see work the projects list could not. The fix is
+ * `listProjectRows` adopting those rows, not a looser stage.
  *
- * So admitting `active` alongside `awarded` adds exactly one project, not
- * forty-three. The other forty-two are held back by the money half, which is
- * doing nearly all of the work. `draft`, `matched`, `new` and `completed` stay
- * out on stage alone.
- *
- * The one it admits is `BSA-052`, Sing's `[HUB TEST]` record — a real signed
- * proposal on a project that never went through the award path. Under the
- * awarded-only rule it vanished from this screen, which is why `active` was
- * added.
+ * Widening the stage would also have been expensive in the wrong direction:
+ * 43 live projects are `active` and exactly one of them is signed, so it
+ * admitted one row and put forty-two more through the money check for nothing.
  *
  * ---------------------------------------------------------------------------
  * THIS IS A DISPLAY RULE, NOT AN ACCESS RULE
@@ -68,10 +71,11 @@ import type { ProjectSigning } from './signed-work.ts';
  * `projects.status`.
  *
  * The full live vocabulary is `matched`, `active`, `draft`, `new`, `awarded`,
- * `completed`. `completed` is deliberately absent: finished work belongs on
- * the archive, not on the list of what a contractor is running today.
+ * `completed`. Only `awarded` shows. A project missing from this screen is far
+ * more likely to be missing for the reason in the note above than to need
+ * another word adding here — check `auth_profile_id` before widening this.
  */
-export const AVAILABLE_SOURCE_STATUSES: readonly string[] = ['awarded', 'active'];
+export const AVAILABLE_SOURCE_STATUSES: readonly string[] = ['awarded'];
 
 /**
  * `proposals.status` values that mean the client said yes.
@@ -117,7 +121,7 @@ export interface AvailableSummary {
   readonly total: number;
   /** What the screen shows. */
   readonly available: number;
-  /** Held back on stage — draft, matched, new, completed. */
+  /** Held back on stage — anything that is not `awarded`. */
   readonly otherStage: number;
   /**
    * At a live stage, but nobody has signed or won it.
@@ -167,7 +171,7 @@ export function availableProjectsBanner(summary: AvailableSummary): string | nul
 
   const shown =
     summary.available === 0
-      ? 'No projects are live and signed yet'
+      ? 'No projects are awarded and signed yet'
       : `Showing ${summary.available} ${
           summary.available === 1 ? 'project' : 'projects'
         } on a signed or won proposal`;

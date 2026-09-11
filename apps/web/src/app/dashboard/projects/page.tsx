@@ -114,10 +114,13 @@ export default async function ProjectsList() {
   const joined: ProjectSigning[] = joinProposalsToProjects(allProjects, proposals);
 
   // THE RULE, from John on 2026-09-12: a project appears here when its stage is
-  // `awarded` OR `active`, AND its proposal is signed or won. Both halves —
-  // see `lib/available-projects.ts`, which also records that the stage half is
-  // the loose one: 43 projects are `active` and exactly one of them is signed,
-  // so the money half does nearly all the filtering.
+  // `awarded` AND its proposal is signed or won. Both halves — see
+  // `lib/available-projects.ts`.
+  //
+  // If a project is missing from this screen, check `projects.auth_profile_id`
+  // before touching this rule. An ownerless row reaches no listing at all, at
+  // any stage, and that — not the stage filter — is what hid `BSA-053` while
+  // the dashboard showed it. `listProjectRows` adopts those rows now.
   //
   // This replaces the `ENABLE_SIGNED_ONLY_FILTER` environment switch, which was
   // off by default and hid only what could be PROVEN unsigned. That was the
@@ -133,8 +136,8 @@ export default async function ProjectsList() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-navy-900">Projects</h1>
         <p className="mt-1 text-sm text-navy-400">
-          {projects.length} {projects.length === 1 ? 'project' : 'projects'} · awarded or
-          active, on a signed or won proposal · every row keyed by its BuildSuite Project ID
+          {projects.length} awarded {projects.length === 1 ? 'project' : 'projects'} on a signed
+          or won proposal · every row keyed by its BuildSuite Project ID
           {archivedCount > 0 && (
             <>
               {' · '}

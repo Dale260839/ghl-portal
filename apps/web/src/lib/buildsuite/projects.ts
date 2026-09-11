@@ -345,10 +345,99 @@ export class SupabaseReader implements BuildSuiteReader {
   }
 
   async listProjectRows(scope: TenantScope, limit = 200): Promise<BuildSuiteProjectRow[]> {
-    return await this.client.select<BuildSuiteProjectRow>({
+    const owned = await this.client.select<BuildSuiteProjectRow>({
       from: 'projects',
       columns: PROJECT_COLUMNS,
       filters: this.tenantFilter(scope, 'project rows'),
+      order: 'updated_at.desc',
+      limit,
+    });
+
+    const adopted = await this.adoptedProjectRows(scope, limit);
+    if (adopted.length === 0) return owned;
+
+    // Dedupe by id. A row can only be in both lists if `auth_profile_id` stops
+    // being null between the two reads, which is a race rather than a state,
+    // but a duplicate project on screen is worse than the cost of a Set.
+    const seen = new Set(owned.map((row) => row.id));
+    return [...owned, ...adopted.filter((row) => !seen.has(row.id))];
+  }
+
+  /**
+   * Projects this tenant signed but does not own a row for.
+   *
+   * ---------------------------------------------------------------------------
+   * THE BUG THIS EXISTS TO FIX (found 2026-09-12)
+   *
+   * `BSA-053` is `awarded`, has a SIGNED proposal, and never appeared on the
+   * Projects screen. It appeared on the dashboard and opened fine when clicked,
+   * which is the shape of the problem: **its `projects.auth_profile_id` is
+   * null.**
+   *
+   * Every project read filters on that column, so an ownerless row matches
+   * nobody's tenant and reaches no listing, whatever its stage. The dashboard
+   * reads PROPOSALS, which carry their own ownership, so it could see work the
+   * projects list structurally could not. Two screens disagreeing about which
+   * jobs exist is the worst version of this — a contractor cannot tell which
+   * one is lying.
+   *
+   * The proposal names the owner that the project row is missing:
+   * `proposals.user_id` is the auth profile that authored it. For `BSA-053`
+   * that is `81daa865…`, Alliance Pro Services — exactly whose screen it was
+   * missing from.
+   *
+   * ---------------------------------------------------------------------------
+   * THREE CONSTRAINTS, AND EACH OF THEM IS LOAD-BEARING
+   *
+   * 1. **Only rows with a NULL `auth_profile_id`.** This never overrides an
+   *    existing owner. It matters: six live proposals name an author who is NOT
+   *    the project's owner (all on `BSA-001`), and without this constraint that
+   *    project would be served to the wrong contractor. Adoption fills a gap;
+   *    it does not arbitrate a dispute.
+   *
+   * 2. **Only through a SIGNED proposal.** An unsigned quote is not a claim of
+   *    ownership — several contractors may quote the same job, and an ownerless
+   *    project with two draft proposals would otherwise land on both screens.
+   *
+   * 3. **Matched on `user_id`, a dedicated id field** (§3.6, D4 §6). Never a
+   *    name, an email or a title.
+   *
+   * Measured 2026-09-12: exactly ONE live project meets all three. The rule is
+   * narrow by construction, not by luck.
+   * ---------------------------------------------------------------------------
+   */
+  private async adoptedProjectRows(
+    scope: TenantScope,
+    limit: number,
+  ): Promise<BuildSuiteProjectRow[]> {
+    const safe = assertScope(scope, 'adopted project rows');
+
+    const authored = await this.client.select<{ project_id: string | null }>({
+      from: 'proposals',
+      columns: ['project_id'],
+      filters: {
+        user_id: `in.(${safe.authProfileIds.join(',')})`,
+        signature_status: `eq.${SIGNED_SIGNATURE_STATUS}`,
+        signature_signed_at: 'not.is.null',
+        deleted_at: 'is.null',
+      },
+      limit,
+    });
+
+    const projectIds = [...new Set(authored.map((r) => r.project_id).filter(
+      (id): id is string => typeof id === 'string' && id.trim() !== '',
+    ))];
+    if (projectIds.length === 0) return [];
+
+    return await this.client.select<BuildSuiteProjectRow>({
+      from: 'projects',
+      columns: PROJECT_COLUMNS,
+      filters: {
+        id: `in.(${projectIds.join(',')})`,
+        // Constraint 1. Without it this would repoint an owned project.
+        auth_profile_id: 'is.null',
+        deleted_at: 'is.null',
+      },
       order: 'updated_at.desc',
       limit,
     });
