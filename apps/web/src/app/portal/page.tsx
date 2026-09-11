@@ -211,7 +211,14 @@ export default async function ClientPortal({
           <div>
             <dt className="text-xs tracking-wide text-navy-400 uppercase">Up next</dt>
             <dd className="mt-1 text-sm font-medium text-navy-900">
-              {view.nextMilestone !== '' ? view.nextMilestone : 'Not scheduled yet'}
+              {/* BuildSuite records no "next milestone", so for a live project
+                  the first released milestone that is not complete is the
+                  honest answer. Only when there is none does it say so. */}
+              {view.nextMilestone !== ''
+                ? view.nextMilestone
+                : upcoming[0] !== undefined
+                  ? `${upcoming[0].milestoneName}${upcoming[0].plannedStart ? `, ${shortDate(upcoming[0].plannedStart)}` : ''}`
+                  : 'Not scheduled yet'}
             </dd>
           </div>
           <div>
