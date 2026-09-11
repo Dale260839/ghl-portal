@@ -164,6 +164,10 @@ export async function photosFor(project: Project): Promise<ClientFile[]> {
 
 async function filesFor(project: Project, kind: 'document' | 'photo'): Promise<ClientFile[]> {
   if (!portalOpen(project)) return [];
+  // The per-section switch, set on the Visibility screen. Off means the whole
+  // section is withheld, whatever the individual rows say.
+  if (kind === 'document' && !project.showDocuments) return [];
+  if (kind === 'photo' && !project.showPhotos) return [];
 
   const hub = getHubMedia();
   if (!hub.available) return [];
@@ -389,6 +393,7 @@ export async function selectionsFor(project: Project) {
  */
 export async function changeOrdersFor(project: Project) {
   if (!portalOpen(project)) return [];
+  if (!project.showChangeOrders) return [];
 
   const hub = getHubSelections();
   if (!hub.available) return [];

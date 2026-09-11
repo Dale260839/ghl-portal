@@ -128,6 +128,8 @@ export function toClientProject(project: Project, requester: Contact): ProjectPr
  * `Client Summary` is published. `Internal Notes` is never read here at all.
  */
 export function toClientUpdates(updates: DailyUpdate[], project: Project): ClientUpdateView[] {
+  // Show Daily Updates on the Visibility screen withholds the whole section.
+  if (!project.showDailyUpdates) return [];
   const views = updates
     .filter(
       (u) =>

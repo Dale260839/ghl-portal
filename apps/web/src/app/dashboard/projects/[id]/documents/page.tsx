@@ -35,9 +35,9 @@ export default async function ProjectDocumentsControl({
 
   const hub = getHubMedia();
   const items = hub.available ? await hub.media.listForProject(scope, 'document', id) : [];
-  // No per-type switch exists for documents — the portal master is the only
-  // project-level gate, and the row's own flag is the other half.
-  const released = project.clientPortalEnabled;
+  // Three gates: the portal master switch, Show Documents on the project, and
+  // the row's own release flag.
+  const released = project.clientPortalEnabled && project.showDocuments;
 
   return (
     <div className="space-y-6">
@@ -53,6 +53,17 @@ export default async function ProjectDocumentsControl({
         Field folders are for the crew and subcontractors, one per trade, and are never shared with
         the homeowner.
       </ControlNote>
+
+      {(project.scopeOfWorkUrl ?? null) !== null && (
+        <ControlNote>
+          The signed scope of work from BuildSuite is{' '}
+          <a href={project.scopeOfWorkUrl ?? '#'} target="_blank" rel="noreferrer" className="font-medium text-navy-800 underline underline-offset-2">
+            here (PDF)
+          </a>
+          . The crew see the same link under Docs. To hand the homeowner a copy, link it into the
+          Client folder below and release it.
+        </ControlNote>
+      )}
 
       <MediaManager
         kind="document"
