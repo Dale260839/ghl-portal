@@ -437,5 +437,68 @@ export function draftsForProposal(
   proposal: { sections?: unknown; content?: string | null },
   contractTotal: number | null,
 ): InvoiceDraft[] {
-  return scheduleFor(proposal).map((line) => draftInvoiceFor(line, contractTotal));
+  return balanceComputedDrafts(
+    scheduleFor(proposal).map((line) => draftInvoiceFor(line, contractTotal)),
+    contractTotal,
+  );
+}
+
+/**
+ * Make percent-computed stages add up to the contract total EXACTLY.
+ *
+ * ---------------------------------------------------------------------------
+ * THE PENNY
+ *
+ * Each stage is rounded to cents on its own, so stages computed from percents
+ * can sum to a cent more or less than the contract: $7,591.10 at 30/25/25/20%
+ * rounds to $7,591.11. A homeowner holding the signed contract would see the
+ * schedule claim a cent it never said, and a contractor invoicing every stage
+ * would bill a cent over.
+ *
+ * NOT TO BE CONFUSED WITH BSA-053, which shows the same cent for a different
+ * reason (diagnosed wrongly at first, 2026-09-12). Its proposal STATES its
+ * stage amounts — $2,277.33 + $1,897.78 + $1,897.78 + $1,518.22 — and they
+ * already sum to $7,591.11 against a $7,591.10 total. BuildSuite's generator
+ * rounded each stage before writing it. That cent is in the signed contract,
+ * and the rule below leaves stated figures alone precisely so this code never
+ * rewrites what a homeowner signed. It is BuildSuite's to fix at source.
+ *
+ * The last stage absorbs the difference, which is the usual convention: every
+ * earlier stage is exactly what its percent says, and the final one closes the
+ * contract to the cent.
+ *
+ * ---------------------------------------------------------------------------
+ * ONLY WHEN IT IS UNAMBIGUOUS
+ *
+ * Every stage must be `computed` from a percent, and the percents must sum to
+ * 100. A stated amount anywhere means the proposal wrote real figures, and this
+ * does not second-guess them. Percents that do not total 100 mean the schedule
+ * is not the whole contract, so there is nothing to close to.
+ *
+ * Used by BOTH the contractor's drafts and the homeowner's schedule, so the two
+ * can never show different figures for the same stage.
+ * ---------------------------------------------------------------------------
+ */
+export function balanceComputedDrafts(
+  drafts: readonly InvoiceDraft[],
+  contractTotal: number | null,
+): InvoiceDraft[] {
+  const out = [...drafts];
+  if (contractTotal === null || contractTotal <= 0 || out.length < 2) return out;
+  if (!out.every((d) => d.amountSource === 'computed' && d.amount !== null)) return out;
+
+  const percentSum = out.reduce((sum, d) => sum + (d.line.percent ?? 0), 0);
+  if (Math.abs(percentSum - 100) > 0.001) return out;
+
+  // Cents as integers, so the subtraction cannot reintroduce the drift it fixes.
+  const cents = (n: number) => Math.round(n * 100);
+  const ordered = out
+    .map((d, index) => ({ d, index }))
+    .sort((a, b) => a.d.line.order - b.d.line.order);
+  const last = ordered[ordered.length - 1]!;
+  const earlier = ordered.slice(0, -1).reduce((sum, { d }) => sum + cents(d.amount!), 0);
+  const closing = (cents(contractTotal) - earlier) / 100;
+
+  if (closing !== last.d.amount) out[last.index] = { ...last.d, amount: closing };
+  return out;
 }

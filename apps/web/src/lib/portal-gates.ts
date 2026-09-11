@@ -35,7 +35,17 @@ import {
   type HubIssue,
 } from './hub-db/operational.ts';
 import { clientSelection, getHubSelections } from './hub-db/selections.ts';
-import { hubScopeOfProject } from './tenant-scope.ts';
+import { hubScopeOfProject, scopeOfProject } from './tenant-scope.ts';
+import { getProposalsReader, pickCurrentProposal } from './buildsuite/proposals.ts';
+// Aliased: this module already has a `scheduleFor` — the WORK schedule.
+import { scheduleFor as paymentLinesFor } from './payment-schedule.ts';
+import { getHubInvoiceDrafts } from './hub-db/invoice-drafts.ts';
+import {
+  clientPaymentSchedule,
+  type ClientScheduleLine,
+  type DraftLink,
+  type IssuedInvoiceRef,
+} from './client-payment-schedule.ts';
 import { clientCanSeeDocument } from './document-folders.ts';
 import type {
   BudgetLine,
@@ -487,6 +497,94 @@ export function budgetFor(project: Project): BudgetLine[] {
  * The type carries no cost or margin field, so this cannot leak an internal
  * figure even if a fixture tried to.
  */
+/**
+ * The homeowner's live payment schedule — from the contract they signed.
+ *
+ * `paymentsFor` below reads the `PAYMENT_SCHEDULE` fixture and nothing calls
+ * it; this is the live version of the same design, and follows its recorded
+ * decision exactly: gated by the portal master switch, and NO separate money
+ * switch, because "payments are inherently the client's to see — they have to
+ * know what they owe".
+ *
+ * ---------------------------------------------------------------------------
+ * ONLY A CONTRACT SOMEBODY AGREED TO
+ *
+ * The schedule comes from the project's current proposal, and only when it is
+ * signed or won (`accepted`) — the same bar the Projects list uses. A quoted
+ * proposal's schedule is a number nobody agreed to, and showing it to a
+ * homeowner as "what you will pay" is the argument the invoice rule exists to
+ * prevent.
+ *
+ * ---------------------------------------------------------------------------
+ * EVERY FAILURE DEGRADES TO "NO SCHEDULE", NEVER TO AN ERROR PAGE
+ *
+ * BuildSuite unreachable, the Hub offline (as it is until the Hub key is swapped
+ * for the secret one), a contractor that cannot be resolved — each returns fewer
+ * facts, not a crash. Without the Hub the schedule still shows, it just cannot
+ * mark which lines have been billed, so every line reads as upcoming. That is
+ * honest: nothing has been proven billed.
+ * ---------------------------------------------------------------------------
+ */
+export async function paymentScheduleForClient(
+  project: Project,
+  /** This homeowner's ISSUED invoices only — drafts and voids already removed. */
+  issuedInvoices: readonly IssuedInvoiceRef[],
+): Promise<{ lines: ClientScheduleLine[]; contractTotal: number | null }> {
+  const none = { lines: [], contractTotal: null };
+  if (!portalOpen(project)) return none;
+
+  const reader = getProposalsReader();
+  if (!reader.available) return none;
+
+  let scope;
+  try {
+    scope = scopeOfProject(project);
+    const proposals = await reader.listForProjects(scope, [project.buildsuiteProjectId]);
+    const current = pickCurrentProposal(proposals);
+    // Signed, or won. Anything short of that is a quote.
+    if (current === null || !(current.signed || current.status === 'accepted')) return none;
+
+    const source = await reader.readSchedule(scope, project.buildsuiteProjectId, current.id);
+    const lines = paymentLinesFor(source);
+    if (lines.length === 0) return none;
+
+    // Which lines became invoices. Optional: without it every line is upcoming.
+    let links: DraftLink[] = [];
+    const drafts = getHubInvoiceDrafts();
+    if (drafts.available) {
+      try {
+        const hubScope = await hubScopeOfProject(project);
+        if (hubScope !== null) {
+          links = (await drafts.drafts.listForProposal(hubScope, current.id)).map((d) => ({
+            lineOrder: d.lineOrder,
+            externalId: d.externalId,
+          }));
+        }
+      } catch (err) {
+        console.warn(`[portal] invoice links unavailable for ${project.buildsuiteProjectId}:`, (err as Error).message);
+        links = [];
+      }
+    }
+
+    return {
+      lines: clientPaymentSchedule({
+        lines,
+        contractTotal: current.amount,
+        links,
+        invoices: issuedInvoices,
+      }),
+      contractTotal: current.amount,
+    };
+  } catch (err) {
+    // Degrade, but never silently. A homeowner sees no schedule rather than an
+    // error page; the operator sees why. Swallowing this without a word is how a
+    // real bug — found while testing this, a TypeError — would pass for "this
+    // project has no schedule".
+    console.warn(`[portal] payment schedule unavailable for ${project.buildsuiteProjectId}:`, (err as Error).message);
+    return none;
+  }
+}
+
 export function paymentsFor(project: Project): ClientPaymentLine[] {
   if (!portalOpen(project)) return [];
   return PAYMENT_SCHEDULE.filter(
