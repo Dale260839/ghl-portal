@@ -196,7 +196,18 @@ export default async function ProjectsList() {
                     )}
                   </div>
                   <div className="mt-0.5 text-xs text-navy-400">
-                    {p.clientName} · {p.buildsuiteProjectId}
+                    {/* The project CODE, not the UUID (John, 2026-09-12). The code
+                        is what a contractor reads down the phone and what the
+                        homeowner signs in with; the UUID is a database key nobody
+                        can say out loud. When a project has no code yet, it says
+                        so — a truncated UUID in its place would look like a code
+                        and be read out as one. */}
+                    {p.clientName} ·{' '}
+                    {p.projectCode !== null && p.projectCode.trim() !== '' ? (
+                      <span className="font-medium tracking-wide text-navy-500">{p.projectCode}</span>
+                    ) : (
+                      <span className="italic">No project code yet</span>
+                    )}
                   </div>
                 </td>
                 <td className="px-5 py-3.5 text-sm text-navy-600">{stageLabel(p)}</td>
