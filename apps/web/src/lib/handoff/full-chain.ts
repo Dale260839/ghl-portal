@@ -92,8 +92,9 @@ export function rehearseFullChain(input: FullChainInput): FullChainResult {
     owner: 'Hub',
     status: 'ok',
     detail:
-      `${projectName} joins the projects list. With ENABLE_SIGNED_ONLY_FILTER on it survives ` +
-      'the filter, because its deal is signed — which is the first time that filter shows anything.',
+      `${projectName} joins the projects list once its stage reaches awarded and its ` +
+      'proposal is signed or won — both halves, per lib/available-projects.ts. A signed ' +
+      'proposal on a project still at an earlier stage does not appear here.',
   });
 
   // ── 7 · A crew member submits an update ──────────────────────────────────

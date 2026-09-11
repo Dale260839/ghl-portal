@@ -288,7 +288,7 @@ does it; the constraint was never enforceable across a network boundary.
 | `GHL_PROJECT_OBJECT_KEY` | **empty** — blocks all GoHighLevel reads |
 | `GHL_WEBHOOK_SECRET` | **placeholder, not a real secret** |
 | `CRON_SECRET` | empty |
-| `ENABLE_SIGNED_ONLY_FILTER` | unset → **off**, deliberately |
+| `ENABLE_SIGNED_ONLY_FILTER` | **no longer read by any screen** (2026-09-12). The Projects list filters on stage `awarded` + signed-or-won instead — `lib/available-projects.ts`. Setting this does nothing. |
 | `DISABLE_VIEW_AS` | unset → view-as available |
 
 ---

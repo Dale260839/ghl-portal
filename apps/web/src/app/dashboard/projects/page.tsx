@@ -7,14 +7,15 @@ import { currentDataSource } from '@/lib/data/current-source';
 import { getProposalsReader } from '@/lib/buildsuite/proposals';
 import { getHubRecords } from '@/lib/hub-db/records';
 import {
-  applySignedOnly,
   joinProposalsToProjects,
-  signedOnlyFilterEnabled,
-  signedWorkBanner,
-  summarizeSignedWork,
   type ProjectSigning,
   type SignedStatus,
 } from '@/lib/signed-work';
+import {
+  availableProjects,
+  availableProjectsBanner,
+  summarizeAvailable,
+} from '@/lib/available-projects';
 
 /** How each signing state reads on a row. `unknown` says so rather than guessing. */
 const SIGNING: Record<SignedStatus, { label: string; tone: 'good' | 'warn' | 'neutral' } | null> = {
@@ -111,10 +112,19 @@ export default async function ProjectsList() {
     : [];
 
   const joined: ProjectSigning[] = joinProposalsToProjects(allProjects, proposals);
-  const summary = summarizeSignedWork(joined);
-  const filterOn = signedOnlyFilterEnabled();
-  const rows = applySignedOnly(joined, filterOn);
-  const banner = signedWorkBanner(summary, filterOn);
+
+  // THE RULE, from John on 2026-09-12: a project appears here when its stage is
+  // `awarded` AND its proposal is signed or won. Both halves, and neither alone
+  // — see `lib/available-projects.ts` for why each is wrong on its own against
+  // the live data.
+  //
+  // This replaces the `ENABLE_SIGNED_ONLY_FILTER` environment switch, which was
+  // off by default and hid only what could be PROVEN unsigned. That was the
+  // right shape when nothing in the database was signed; it is the wrong shape
+  // now that the question has an answer.
+  const summary = summarizeAvailable(joined);
+  const rows = availableProjects(joined);
+  const banner = availableProjectsBanner(summary);
   const projects = rows.map((r) => r.project);
 
   return (
@@ -122,7 +132,8 @@ export default async function ProjectsList() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-navy-900">Projects</h1>
         <p className="mt-1 text-sm text-navy-400">
-          {projects.length} projects · every row keyed by its BuildSuite Project ID
+          {projects.length} awarded {projects.length === 1 ? 'project' : 'projects'} · every row
+          keyed by its BuildSuite Project ID
           {archivedCount > 0 && (
             <>
               {' · '}
@@ -145,7 +156,8 @@ export default async function ProjectsList() {
               someone find two screens disagreeing and trust neither. */}
           <span className="mt-1 block text-xs text-navy-400">
             Counts cover projects visible to this account. Work whose project record is
-            restricted still appears under Active Work.
+            restricted still appears under Active Work. Hiding a project here does not
+            revoke anyone&rsquo;s access to it.
           </span>
         </div>
       )}

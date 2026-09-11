@@ -116,7 +116,19 @@ export function summarizeSignedWork(rows: ProjectSigning[]): SignedWorkSummary {
   };
 }
 
-/** Hides only what we can prove is unsigned. See the rule at the top. */
+/**
+ * SUPERSEDED 2026-09-12 — no screen calls this any more.
+ *
+ * The Projects list now uses `lib/available-projects.ts`: stage `awarded` AND
+ * a proposal that is signed or won. This function's rule was the opposite
+ * posture — show everything, hide only what can be PROVEN unsigned — which was
+ * right when nothing in the database was signed and is wrong now that the
+ * question has an answer.
+ *
+ * Kept, with its tests, because the reasoning at the top of this file about
+ * `unknown` never being treated as unsigned still governs the new rule. Delete
+ * once nothing references it at all.
+ */
 export function applySignedOnly(rows: ProjectSigning[], on: boolean): ProjectSigning[] {
   return on ? rows.filter((r) => r.status !== 'unsigned') : rows;
 }
@@ -134,6 +146,9 @@ export function applySignedOnly(rows: ProjectSigning[], on: boolean): ProjectSig
  * asked for. It does not ship on.
  */
 export function signedOnlyFilterEnabled(): boolean {
+  // NOTHING READS THIS ANY MORE. Left returning the flag rather than `false`
+  // so the function still means what its name says; the Projects screen simply
+  // stopped asking on 2026-09-12. See the note on `applySignedOnly`.
   return process.env.ENABLE_SIGNED_ONLY_FILTER === 'true';
 }
 
