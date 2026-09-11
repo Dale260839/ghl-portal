@@ -158,33 +158,46 @@ portal's own feed is sufficient notice for some of them.
 
 ---
 
-## 6 · Client messaging in the portal is not wired either
+## 6 · Client messaging — built on `hub_messages`, 2026-09-11
 
-`/portal/messages` renders `MESSAGES` from `portal-fixtures.ts` and its Send and
-Reply controls are `<button type="button">` with no handler. There is **no
-`hub_messages` table** and no write path anywhere.
+**This section said the opposite yesterday, and was wrong in two ways.**
 
-Two switches already govern it and both work: `clientPortalEnabled`, and §6.1's
-`allowClientMessaging`, which lets a contractor turn client messaging off
-entirely (`messagesFor()` returns `[]` for either).
+It claimed *"there is no `hub_messages` table and no write path anywhere."* The
+second half was true. **The first half was not** — `hub_messages` has existed
+since migration 0001, with `project_id`, `contractor_id`, `author`,
+`author_role`, `body` and `client_visible`, and a comment already spelling out
+the rule it exists to keep:
 
-So the gate is real and the transport does not exist. This is the same shape as
-the six screens fixed on 2026-09-09 — Schedule, Milestones, Designs &
-Selections, Change Orders, Documents, Photos — which existed as screens with no
-CRUD behind them until they were built out.
+> Internal by default. A crew↔PM thread must never surface to a homeowner, and
+> a homeowner's message must never surface to the crew unless a PM says.
 
-**If messaging is wanted, the open question is where it lives**, and it is a
-genuine decision rather than an implementation detail:
+The table was there from the start; only the module was missing. Recorded
+plainly because a document that says a thing does not exist is how a second one
+gets built beside it.
 
-- **In GoHighLevel** — the contractor's replies land in the conversation thread
-  they already use, and D4 §5 says GHL owns operational records after handoff.
-  But then the Hub is rendering a mirror, and needs the conversations read
-  scope.
-- **In a `hub_messages` table** — simpler, fully ours, works today. But it
-  splits the conversation across two systems, which is the thing the invitation
-  email was routed through GHL specifically to avoid.
+### And the decision this section posed has been made
 
-This is §16 territory. **Not decided here.**
+It framed *where messaging lives* as an open §16 question — GoHighLevel
+conversations, or a Hub table — and declined to answer it. **The other side
+answered it on 2026-09-11 (`028cb5b`): a Hub table.** `lib/hub-db/messages.ts`
+wires all three screens to read and write it.
+
+That is the option this document listed second, and the trade-off it named still
+holds: the conversation now lives in two systems, which is the thing the
+invitation email was routed through GHL specifically to avoid. Worth revisiting
+if homeowners start replying to Hub notifications by email — not worth
+re-opening now.
+
+### The shape of it
+
+`HubMessages` follows the same pattern as every other Hub repository:
+`listForProject`, `post`, `release`, `archive`, each asserting the contractor
+and filtering on it, archiving rather than deleting.
+
+The two switches that governed the read still govern it: `clientPortalEnabled`,
+and §6.1's `allowClientMessaging`, which lets a contractor turn client messaging
+off entirely. `client_visible` defaults to **false** on the column, so a crew
+thread is internal unless someone releases it.
 
 ---
 
@@ -198,5 +211,5 @@ This is §16 territory. **Not decided here.**
 | Webhook verification + routing | GHL -> Hub | Works. **No real event received yet**; names are inferred. |
 | Webhook -> planner execution | GHL -> Hub | **Not wired.** Stops at the seam by design. |
 | `NotifyClient` and friends | Hub -> person | **Logs only.** Nothing is sent. |
-| Client portal messaging | both | **Not built.** Gates work, transport does not exist. |
+| Client portal messaging | both | **Built 2026-09-11** on `hub_messages` — see §6. Stays inside the Hub; it is not mirrored to GHL conversations. |
 | Homeowner's project code email | BuildSuite -> homeowner | Works — **outside this repo**. |
