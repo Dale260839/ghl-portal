@@ -1,7 +1,9 @@
 'use client';
 
 import Link, { useLinkStatus } from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
+
+import { portalHref } from '@/lib/portal-link';
 import type { ReactNode } from 'react';
 
 /**
@@ -60,6 +62,8 @@ function LinkPending() {
 
 export function SidebarNav({ nav }: { nav: NavItem[] }) {
   const pathname = usePathname();
+  // Keeps the portal on the project being shown — see `lib/portal-link.ts`.
+  const search = useSearchParams();
 
   return (
     <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
@@ -68,7 +72,7 @@ export function SidebarNav({ nav }: { nav: NavItem[] }) {
         return (
           <Link
             key={`${item.href}::${item.label}`}
-            href={item.href}
+            href={portalHref(item.href, search)}
             aria-current={active ? 'page' : undefined}
             className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-[background-color,color,transform] duration-150 ${
               active
@@ -104,6 +108,8 @@ export function SidebarNav({ nav }: { nav: NavItem[] }) {
 /** The sidebar's job on a phone. */
 export function MobileNav({ nav }: { nav: NavItem[] }) {
   const pathname = usePathname();
+  // Keeps the portal on the project being shown — see `lib/portal-link.ts`.
+  const search = useSearchParams();
 
   return (
     <nav className="flex gap-1 overflow-x-auto border-b border-navy-100 bg-white px-3 py-2 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
@@ -112,7 +118,7 @@ export function MobileNav({ nav }: { nav: NavItem[] }) {
         return (
           <Link
             key={`${item.href}::${item.label}`}
-            href={item.href}
+            href={portalHref(item.href, search)}
             aria-current={active ? 'page' : undefined}
             className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition ${
               active ? 'bg-navy-900 text-white' : 'text-navy-600 hover:bg-navy-50'

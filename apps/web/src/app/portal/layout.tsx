@@ -2,12 +2,12 @@ import { redirect } from 'next/navigation';
 import { clientProjectsFor } from '@/lib/client-scope';
 import { requireAccess } from '@/lib/access';
 
-import Link from 'next/link';
 
 import { AppShell, type NavItem } from '@/components/app-shell';
 import { ViewSwitcher, ViewingAsBanner } from '@/components/view-switcher';
 import { isViewingAs, viewAsEnabled } from '@/lib/view-as';
 import { DataModeBanner } from '@/components/ui';
+import { PortalLink, PreviewExitLink } from '@/components/portal-link';
 import { getHubClient } from '@/lib/hub-db/client';
 import { changeOrdersFor } from '@/lib/portal-data';
 import { resolveContractorName } from '@/lib/buildsuite/contractor-identity';
@@ -134,7 +134,9 @@ export default async function PortalLayout({ children }: { children: React.React
       userName={session.name}
       headerExtra={
         <>
-          <Link
+          {/* PortalLink, not Link: a bare href here dropped `?preview=` and sent a
+              previewing contractor to their FIRST project's change orders. */}
+          <PortalLink
             href="/portal/change-orders"
             aria-label={`Change orders${waitingChangeOrders > 0 ? `, ${waitingChangeOrders} waiting on you` : ''}`}
             className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-navy-100 text-navy-500 transition hover:bg-navy-50 hover:text-navy-900"
@@ -158,7 +160,7 @@ export default async function PortalLayout({ children }: { children: React.React
                 {waitingChangeOrders}
               </span>
             )}
-          </Link>
+          </PortalLink>
           {(session.role === 'contractor' || viewing) && viewAsEnabled() ? (
             <ViewSwitcher current={session.role} viewing={viewing} />
           ) : null}
@@ -175,13 +177,9 @@ export default async function PortalLayout({ children }: { children: React.React
                 gate.
               </span>
               {/* The sidebar here is the homeowner's, so without this the only
-                  way out of a preview was Sign out. */}
-              <Link
-                href="/dashboard"
-                className="rounded-full border border-navy-600 px-2.5 py-0.5 font-medium text-white transition hover:bg-navy-800"
-              >
-                ← Back to dashboard
-              </Link>
+                  way out of a preview was Sign out. It returns to the project
+                  being previewed, not the top of the dashboard. */}
+              <PreviewExitLink className="rounded-full border border-navy-600 px-2.5 py-0.5 font-medium text-white transition hover:bg-navy-800" />
             </div>
           )}
         </>

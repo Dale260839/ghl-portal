@@ -131,7 +131,7 @@ async function fetchPage(path, as) {
  */
 function warnUnlistedNavHrefs(html, navCount) {
   const unlisted = new Set();
-  for (const m of html.matchAll(/<a[^>]*href="(\/(?:dashboard|portal|field)[^"]*)"/g)) {
+  for (const m of html.matchAll(/<a\b[^>]*href="(\/(?:dashboard|portal|field)[^"]*)"/g)) {
     const href = m[1];
     // Detail routes are content, not nav — two segments deep or more.
     if (href.split('/').filter(Boolean).length > 2) continue;

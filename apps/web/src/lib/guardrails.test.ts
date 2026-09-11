@@ -23,7 +23,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SRC = dirname(fileURLToPath(import.meta.url)).replace(/[\\/]lib$/, '');
@@ -692,4 +692,69 @@ test('no form submits through a button that stays live during the round trip', (
     [],
     'use <SubmitButton>, which disables itself while the form is in flight',
   );
+});
+
+test('§1.4 portal navigation stays on the project being shown', () => {
+  // Chris, huddle 2026-09-10: "keep the preview mode seamless". Every portal
+  // page picks its project from `?preview=` or `?project=`, and the nav dropped
+  // both — so the portal fell back to the FIRST project on the next click. A
+  // contractor previewing job B was shown job A's client view; a homeowner with
+  // two jobs was put back on the first. `portalHref` carries them; this checks
+  // every nav link in both components still goes through it.
+  const nav = FILES.find((f) => rel(f.path) === 'components/sidebar-nav.tsx');
+  assert.ok(nav, 'sidebar-nav.tsx has moved');
+
+  const code = withoutComments(nav.text);
+  const bare = code.match(/href=\{item\.href\}/g) ?? [];
+  assert.deepEqual(bare, [], 'a nav link uses the bare href and will drop the portal project');
+
+  const carried = code.match(/href=\{portalHref\(item\.href, search\)\}/g) ?? [];
+  assert.equal(carried.length, 2, 'SidebarNav and MobileNav must both carry the portal project');
+
+  // And every portal link the LAYOUT renders itself. The change-order bell was
+  // still a bare <Link href="/portal/change-orders"> after the nav was fixed.
+  const layout = FILES.find((f) => rel(f.path) === 'app/portal/layout.tsx');
+  assert.ok(layout, 'app/portal/layout.tsx has moved');
+  const bareInLayout = withoutComments(layout.text).match(/<Link\b[^>]*href=["'`{]+\/portal/g) ?? [];
+  assert.deepEqual(bareInLayout, [], 'a portal link in the layout drops the project — use <PortalLink>');
+});
+
+test('no source file carries an invisible control character', () => {
+  // The bug that keeps coming back. Writing `\b` through a shell has, three
+  // times now, landed a literal BACKSPACE (0x08) in a regex instead of a word
+  // boundary. The file still parses, the regex still compiles, and it silently
+  // never matches:
+  //
+  //   · 2026-09-0x — a guardrail that could never fail;
+  //   · 2026-09-12 — the portal-link guardrail above, caught only because the
+  //     bug it guards was reintroduced and nothing went red;
+  //   · 2026-08-29 — scripts/build-wireframes.mjs, whose nav-coverage warning
+  //     had never once fired.
+  //
+  // Nothing about the file looks wrong in an editor. This is the only check
+  // that sees it. Tab, newline and carriage return are allowed; nothing else
+  // below 0x20 has any business in source.
+  const root = resolve(SRC, '../../..');
+  const dirs = ['apps/web/src', 'packages/contracts/src', 'scripts', 'supabase'];
+  const exts = new Set(['.ts', '.tsx', '.mjs', '.js', '.sql']);
+  const control = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
+
+  const offenders: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === '.next') continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (exts.has(extname(entry.name))) {
+        readFileSync(full, 'utf8')
+          .split('\n')
+          .forEach((line, i) => {
+            if (control.test(line)) offenders.push(`${relative(root, full).replace(/\\/g, '/')}:${i + 1}`);
+          });
+      }
+    }
+  };
+  for (const dir of dirs) walk(join(root, dir));
+
+  assert.deepEqual(offenders, [], 'an invisible control character — almost certainly a shell-mangled \\b');
 });
