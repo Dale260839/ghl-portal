@@ -1,9 +1,10 @@
 /**
  * The Hub's own database — the write path.
  *
- * RLS is currently OFF on that database (owner's decision, so policy-writing
- * does not block the build). That makes two things below load-bearing rather
- * than belt-and-braces:
+ * RLS has been ON since migration 0010 (2026-09-12), with every privilege
+ * revoked from `anon` and no policies, so the app reaches the Hub with its
+ * SECRET key — which bypasses RLS entirely. That keeps two things below
+ * load-bearing rather than belt-and-braces:
  *
  *   · the key never reaches a browser
  *   · every write carries a tenant, and an unfiltered update is impossible
@@ -20,7 +21,13 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { HubClient, HubWriteError, readHubConfig } from './client.ts';
+import {
+  HUB_ANON_KEY_REASON,
+  HubClient,
+  HubWriteError,
+  hubKeyRole,
+  readHubConfig,
+} from './client.ts';
 import { HubRecords, ARCHIVABLE_TABLES, TABLE_LABELS } from './records.ts';
 import { TenancyError, type TenantScope } from '../tenancy.ts';
 
@@ -257,6 +264,103 @@ test('missing configuration is reported by name, not as a crash', () => {
 
   assert.equal(result.configured, false);
   assert.deepEqual(result.missing, ['HUB_SUPABASE_URL', 'HUB_SUPABASE_KEY']);
+});
+
+// ── The key must be the secret one (since migration 0010) ────────────────────
+
+/** A legacy Supabase JWT with the given role claim. Unsigned — only the claim is read. */
+function legacyKey(role: string): string {
+  const part = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  return `${part({ alg: 'HS256', typ: 'JWT' })}.${part({ iss: 'supabase', role })}.signature`;
+}
+
+test('the key role is read from the key itself, in both formats', () => {
+  assert.equal(hubKeyRole('sb_secret_abc123'), 'service');
+  assert.equal(hubKeyRole('sb_publishable_abc123'), 'anon');
+  assert.equal(hubKeyRole(legacyKey('service_role')), 'service');
+  assert.equal(hubKeyRole(legacyKey('anon')), 'anon');
+  // Pasted with a trailing newline, as keys copied from a dashboard often are.
+  assert.equal(hubKeyRole('  sb_publishable_abc123\n'), 'anon');
+});
+
+test('a key that cannot be classified is allowed through, not refused', () => {
+  // Only a key POSITIVELY identified as anon is turned away. A format Supabase
+  // introduces later must not lock the Hub out because this did not recognise it.
+  for (const key of ['k', 'some-future-format', 'a.b.c', legacyKey('authenticated')]) {
+    assert.equal(hubKeyRole(key), 'unknown', `classified ${key}`);
+    assert.equal(
+      readHubConfig({ ...process.env, HUB_SUPABASE_URL: 'https://hub.example', HUB_SUPABASE_KEY: key })
+        .configured,
+      true,
+      `refused an unclassifiable key: ${key}`,
+    );
+  }
+});
+
+test('the publishable key reports the Hub unavailable, naming the fix', () => {
+  // Found 2026-09-12: 0010 revoked anon from every Hub table while the deployment
+  // still held the publishable key, and the dashboard LAYOUT read `hub_issues`
+  // unguarded — the first page after sign-in was a bare "Application error".
+  //
+  // Reported here as unavailable, every screen shows its existing "Hub not
+  // connected" state instead, and the reason says what to change.
+  for (const key of ['sb_publishable_live', legacyKey('anon')]) {
+    const result = readHubConfig({
+      ...process.env,
+      HUB_SUPABASE_URL: 'https://hub.example',
+      HUB_SUPABASE_KEY: key,
+    });
+
+    assert.equal(result.configured, false, `accepted an anon key: ${key.slice(0, 20)}`);
+    assert.deepEqual(!result.configured && result.missing, [HUB_ANON_KEY_REASON]);
+  }
+  assert.match(HUB_ANON_KEY_REASON, /secret key/);
+  assert.match(HUB_ANON_KEY_REASON, /0010/);
+});
+
+test('the secret key is accepted', () => {
+  for (const key of ['sb_secret_live', legacyKey('service_role')]) {
+    const result = readHubConfig({
+      ...process.env,
+      HUB_SUPABASE_URL: 'https://hub.example',
+      HUB_SUPABASE_KEY: key,
+    });
+    assert.equal(result.configured, true);
+    assert.equal(result.configured && result.config.key, key);
+  }
+});
+
+test('refusing the anon key never happens by fetching anything', () => {
+  // A network probe would make an outage look like a wrong key, and would cost
+  // a round trip on every cold start. The key says which it is.
+  const originalFetch = globalThis.fetch;
+  let fetched = false;
+  globalThis.fetch = (async () => {
+    fetched = true;
+    throw new Error('no network in this test');
+  }) as typeof fetch;
+  try {
+    readHubConfig({ ...process.env, HUB_SUPABASE_URL: 'https://hub.example', HUB_SUPABASE_KEY: 'sb_publishable_x' });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(fetched, false);
+});
+
+test('the fix is never to grant anon back', () => {
+  // 0010's whole purpose. A later migration that re-grants `anon` on a Hub table
+  // reopens every contractor's rows to a key that is, by design, not a secret.
+  const dir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../supabase/hub');
+  const offenders = readdirSync(dir)
+    .filter((f) => extname(f) === '.sql')
+    .filter((f) => {
+      const code = readFileSync(join(dir, f), 'utf8')
+        .split('\n')
+        .filter((line) => !/^\s*--/.test(line))
+        .join('\n');
+      return /\bgrant\b[\s\S]*?\bto\s+anon\b/i.test(code);
+    });
+  assert.deepEqual(offenders, [], 'a migration grants privileges to anon');
 });
 
 test('a trailing slash on the URL does not produce a double slash', () => {

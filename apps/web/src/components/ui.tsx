@@ -151,6 +151,7 @@ export function shortDate(iso: string): string {
 export function DataModeBanner({
   kind,
   hubConnected,
+  hubProblem,
 }: {
   kind: 'fixture' | 'buildsuite' | 'ghl';
   /**
@@ -166,6 +167,19 @@ export function DataModeBanner({
    * guessing. `undefined` keeps the old wording.
    */
   hubConnected?: boolean;
+  /**
+   * Why the Hub is not connected, when the caller knows — e.g. the key is the
+   * publishable one, which migration 0010 locked out.
+   *
+   * "Not reachable" was the only wording, and on 2026-09-12 it was wrong: the
+   * database was reachable and refusing the key. That sends someone looking at
+   * the network for a problem that is one environment variable.
+   *
+   * CONTRACTOR SCREENS ONLY. The portal and field layouts deliberately do not
+   * pass this: an environment variable name is operator detail, and it has no
+   * business on a homeowner's screen.
+   */
+  hubProblem?: string;
 }) {
   if (kind === 'ghl') return null;
 
@@ -178,8 +192,17 @@ export function DataModeBanner({
           <>Schedule, field updates and invoices are saving to the Hub database.</>
         ) : hubConnected === false ? (
           <span className="text-amber-700">
-            The Hub database is not reachable, so schedule, field updates and invoices cannot be
-            saved.
+            {hubProblem !== undefined && hubProblem !== '' ? (
+              <>
+                The Hub database is not connected (missing {hubProblem}), so schedule, field
+                updates and invoices cannot be saved.
+              </>
+            ) : (
+              <>
+                The Hub database is not reachable, so schedule, field updates and invoices cannot
+                be saved.
+              </>
+            )}
           </span>
         ) : (
           <>

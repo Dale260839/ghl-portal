@@ -1,0 +1,36 @@
+-- 0012 · Selections and change orders: RLS back on, like every other Hub table.
+--
+-- WHY THIS EXISTS
+--
+-- 0010 enabled RLS on every Hub table and revoked anon. 0011 then DISABLED it on
+-- these two, to undo 0009 enabling it while the app still held the anon key.
+-- Both were run on 2026-09-12, 0010 first — so these two tables ended up the
+-- only Hub tables with RLS off.
+--
+-- Not an exposure today: 0010's `revoke all ... from anon` still covers them, so
+-- the publishable key cannot read them either way. But it leaves them one
+-- careless `grant ... to anon` away from being readable by anyone, which is the
+-- exact door 0010 exists to close, and the only two tables where RLS would not
+-- catch it.
+--
+-- ─────────────────────────────────────────────────────────────────────────────
+-- RUN THIS ONLY AFTER HUB_SUPABASE_KEY IS THE SECRET KEY.
+--
+-- 0011's reason still holds for as long as the app holds the anon key: RLS on
+-- these two tables with no policy blanks both screens and refuses every write,
+-- silently. With the secret key RLS does not apply to the app at all, and this
+-- file changes nothing it can see.
+--
+-- Order:
+--   1. HUB_SUPABASE_KEY = the secret key (sb_secret_…), in Vercel AND .env.local.
+--   2. Redeploy. Open a project's Change Orders tab and add one. It must save.
+--   3. Run this file.
+--   4. Add another. It must still save.
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+-- No policies, on purpose, matching 0010: the only client of these tables is
+-- the server, holding the service role. A permissive policy for anon would
+-- reopen what 0010 closed.
+
+alter table public.hub_selections    enable row level security;
+alter table public.hub_change_orders enable row level security;

@@ -14,10 +14,19 @@ renders on top of BuildSuite's row.
 Migrations for the Hub live in `supabase/hub/`. `supabase/migrations/0001_hub_tables.sql`
 is **SUPERSEDED and must not be run** — it targets BuildSuite's database.
 
-**RLS is currently OFF on the Hub database** (owner's decision, so policy-writing
-did not block the build). Two things are therefore load-bearing and tested:
-`HUB_SUPABASE_KEY` is server-only and never `NEXT_PUBLIC_`, and exactly one
-module reads it. Re-enable statements: `supabase/hub/0002_rls_development.sql`.
+**RLS is ON on the Hub database since migration 0010 (run 2026-09-12)**, with
+every privilege revoked from `anon` and no policies. So **`HUB_SUPABASE_KEY` must
+be the Hub's SECRET key** (`sb_secret_…`, or a legacy `service_role` JWT). The
+publishable key can no longer read a single row — `readHubConfig` recognises it
+and reports the Hub unavailable rather than letting every screen fail with `42501`.
+
+**Never "fix" a `42501 permission denied` by granting `anon`.** That reopens every
+contractor's rows to a key that is not a secret; a test fails on any migration
+that does it. The fix is always the key.
+
+The secret key bypasses RLS entirely, so where it lives is the whole defence, and
+both of these stay load-bearing and tested: `HUB_SUPABASE_KEY` is server-only and
+never `NEXT_PUBLIC_`, and exactly one module reads it.
 
 ### Tenancy has two keys
 

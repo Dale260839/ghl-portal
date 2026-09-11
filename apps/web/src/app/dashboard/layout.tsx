@@ -57,6 +57,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // names the business in full. Falls back to Alliance only when the session is
   // not linked to a contractor record.
   const tenantName = businessName ?? 'Alliance Pro Services';
+  const hub = getHubClient();
   const pendingReview = updates.filter((u) => u.managerApprovalStatus === 'Pending').length;
   const openIssues = issues.filter(
     (i) => i.status !== 'Resolved' && i.status !== 'Closed',
@@ -127,7 +128,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
           {viewAsEnabled() && <ViewSwitcher current="contractor" viewing={false} />}
         </>
       }
-      banner={<DataModeBanner kind={await currentSourceKind()} hubConnected={getHubClient().available} />}
+      banner={
+        <DataModeBanner
+          kind={await currentSourceKind()}
+          hubConnected={hub.available}
+          // Contractor screens only — see `hubProblem` on DataModeBanner.
+          hubProblem={hub.available ? undefined : hub.missing.join(', ')}
+        />
+      }
     >
       {children}
     </AppShell>
