@@ -4,7 +4,13 @@ import { currentDataSource } from '@/lib/data/current-source';
 import { getProposalsReader } from '@/lib/buildsuite/proposals';
 import { getBuildSuiteReader } from '@/lib/buildsuite/projects';
 import { resolveContractor, resolveContractorProfile } from '@/lib/buildsuite/contractor-identity';
-import { DEFAULT_DUE_IN_DAYS } from '@/lib/invoicing/ghl-rail';
+import { getHubInvoiceTemplates } from '@/lib/hub-db/invoice-templates';
+import {
+  dueDaysFor,
+  previewLetterhead,
+  termsFor,
+  type InvoiceTemplate,
+} from '@/lib/invoicing/template';
 import { InvoicePreview } from '@/components/invoice-preview';
 import { getHubInvoiceDrafts } from '@/lib/hub-db/invoice-drafts';
 import { joinProposalsToProjects } from '@/lib/signed-work';
@@ -56,6 +62,13 @@ export default async function Invoices() {
           >
             See how the review step works on sample data
           </Link>
+          {' · '}
+          <Link
+            href="/dashboard/invoices/template"
+            className="font-medium text-navy-700 underline underline-offset-2"
+          >
+            Your invoice template
+          </Link>
         </p>
       </div>
       {children}
@@ -83,14 +96,28 @@ export default async function Invoices() {
   // The contractor's own letterhead, read once for the whole screen. Null when
   // their record carries nothing, in which case the preview says so rather than
   // showing a blank header that looks like a rendering fault.
-  const business = await resolveContractorProfile(scope);
+  const profile = await resolveContractorProfile(scope);
+
+  // The account's invoice template, merged over that profile exactly as
+  // `createInvoiceOnRail` merges it — so the preview below still shows what
+  // GoHighLevel will receive once a template overrides the logo or the terms.
+  let template: InvoiceTemplate | null = null;
+  const templates = getHubInvoiceTemplates();
+  if (templates.available) {
+    try {
+      template = await templates.templates.getForContractor(scope);
+    } catch {
+      template = null;
+    }
+  }
+  const business = previewLetterhead(profile, template);
 
   // The dates the rail will stamp, computed here so the preview and the invoice
   // agree. `createDraft` issues on the day it runs, which for a contractor
   // reviewing and then clicking is today.
   const issue = new Date();
   const due = new Date(issue);
-  due.setDate(due.getDate() + DEFAULT_DUE_IN_DAYS);
+  due.setDate(due.getDate() + dueDaysFor(template));
   const issueDate = issue.toISOString().slice(0, 10);
   const dueDate = due.toISOString().slice(0, 10);
 
@@ -338,7 +365,7 @@ export default async function Invoices() {
                         clientName={row.project.clientName}
                         clientEmail={emailByProject.get(row.project.buildsuiteProjectId) ?? null}
                         title={title ?? ''}
-                        terms={saved?.description ?? draft.line.description}
+                        terms={termsFor(saved?.description ?? draft.line.description, template)}
                         amount={amount}
                         issueDate={issueDate}
                         dueDate={dueDate}

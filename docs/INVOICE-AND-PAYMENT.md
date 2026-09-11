@@ -33,10 +33,13 @@ same invoice from the Payments screen in their portal.
 
 **Templates.** Two different things share the word:
 
-- **The look of the invoice** — logo, business name, footer, payment terms.
-  The contractor's letterhead already appears on invoices the Hub creates. A
-  saved per-account template that a contractor sets up once and reuses (your
-  suggestion) is being added; see section 7.
+- **The look of the invoice** — logo, business name, contact details, standing
+  payment terms and days until due. Your suggestion is built (2026-09-12):
+  **Invoices → Your invoice template**. A contractor sets it once and every
+  invoice uses it. Any box left empty uses what their BuildSuite record has, so
+  an empty template changes nothing. Before this, the letterhead came only from
+  BuildSuite, which the Hub cannot edit — so a contractor had no way to change
+  their own invoice logo from here at all.
 - **What is on the invoice** — the stages and amounts. That is not a template
   at all: it comes from the signed contract, so every job bills exactly what
   that homeowner agreed to.
@@ -269,6 +272,10 @@ it by accident.
 ---
 
 ## 7 · What is NOT built
+
+**Several named templates per account.** One template per account today. A
+choice of templates at invoice time needs a decision about which is the
+default; the table can grow a `name` column without changing what it holds.
 
 **No automatic trigger.** Chris's flow begins *"signed contract comes back → a
 draft invoice is created automatically"*. Nothing watches for a signature today.

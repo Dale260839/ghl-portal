@@ -758,3 +758,28 @@ test('no source file carries an invisible control character', () => {
 
   assert.deepEqual(offenders, [], 'an invisible control character — almost certainly a shell-mangled \\b');
 });
+
+test('every invoice preview shows the letterhead the invoice will actually carry', () => {
+  // The review screen promises "what a contractor reads here is what GoHighLevel
+  // receives". Since invoice templates (2026-09-12) can override the logo and
+  // details, a preview fed the raw BuildSuite profile would show one logo while
+  // the invoice carried another — silently. Every screen rendering
+  // <InvoicePreview> must build its letterhead with `previewLetterhead`, the
+  // same merge `createInvoiceOnRail` sends.
+  const offenders = FILES.filter((f) => {
+    const code = withoutComments(f.text);
+    return /<InvoicePreview\b/.test(code) && !/previewLetterhead\(/.test(code);
+  })
+    .map((f) => rel(f.path))
+    // The component's own file defines it; the sample page renders fixed demo data.
+    .filter((path) => path !== 'components/invoice-preview.tsx' && !path.includes('/sample/'));
+
+  assert.deepEqual(offenders, [], 'an invoice preview bypasses the template merge');
+
+  // And the action that sends the invoice uses the same merge.
+  const actions = FILES.find((f) => rel(f.path) === 'lib/actions.ts');
+  assert.ok(actions);
+  const send = actions.text.match(/export async function createInvoiceOnRail\([\s\S]*?\n\}/);
+  assert.ok(send, 'createInvoiceOnRail has moved or been renamed');
+  assert.match(send[0], /mergeLetterhead\(/, 'the invoice sent must use the same merge as the preview');
+});

@@ -34,6 +34,11 @@ export function resolveInvoiceRail(
    * knows. Ignored when it is not a real GHL id.
    */
   sessionLocationId?: string | null,
+  /**
+   * From the account's invoice template (huddle 2026-09-10). Both optional:
+   * absent means the rail's defaults, exactly as before templates existed.
+   */
+  template?: { dueInDays?: number; standingTerms?: string | null },
 ): InvoiceRail {
   const config = readGhlConfig(env);
   if (!config.configured) return unconfiguredRail;
@@ -46,6 +51,8 @@ export function resolveInvoiceRail(
     apiBase: config.config.baseUrl,
     apiVersion: config.config.apiVersion,
     ...(business !== undefined ? { business } : {}),
+    ...(template?.dueInDays !== undefined ? { dueInDays: template.dueInDays } : {}),
+    ...(template?.standingTerms ? { standingTerms: template.standingTerms } : {}),
   });
 }
 

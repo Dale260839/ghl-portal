@@ -38,6 +38,13 @@ import { hubScopeOfProject } from './tenant-scope.ts';
 import { getHubStorage } from './hub-db/storage.ts';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
+import { getHubInvoiceTemplates } from './hub-db/invoice-templates.ts';
+import {
+  dueDaysFor,
+  mergeLetterhead,
+  validateTemplateInput,
+  type InvoiceTemplate,
+} from './invoicing/template.ts';
 import { resolveInvoiceRail, draftFromStored } from './invoicing/rail.ts';
 import { resolveContractorProfile } from './buildsuite/contractor-identity.ts';
 import { getProposalsReader } from './buildsuite/proposals';
@@ -972,6 +979,45 @@ export async function signInWithCode(
  * update's filter, plus a unique index) because a double-submit races.
  * ---------------------------------------------------------------------------
  */
+/**
+ * Save this account's invoice template (Chris, huddle 2026-09-10).
+ *
+ * The look of every invoice — logo, business name, contact details, standing
+ * terms, days until due. Never its contents: stages and amounts come from each
+ * job's signed contract. See `invoicing/template.ts` for how it merges over the
+ * BuildSuite profile.
+ *
+ * Returns field errors rather than throwing, so the form can say which box is
+ * wrong. The contractor id comes from the scope, never from the form.
+ */
+export async function saveInvoiceTemplate(
+  _prev: { saved?: boolean; errors?: Record<string, string>; message?: string } | undefined,
+  formData: FormData,
+): Promise<{ saved?: boolean; errors?: Record<string, string>; message?: string }> {
+  const session = await getSession();
+  if (session === null) throw new Error('not signed in');
+  // The look of an invoice is part of invoicing, which §12.1 gives to the
+  // contractor alone.
+  assertCan(session.role, 'update', 'invoice');
+
+  const scope = await actionTenantScope(session);
+  if (scope.contractorId === undefined) {
+    return { message: 'This account is not linked to a contractor record, so it has no invoices to style.' };
+  }
+  const hub = getHubInvoiceTemplates();
+  if (!hub.available) {
+    return { message: `The Hub database is not connected (missing ${hub.missing.join(', ')}), so the template cannot be saved.` };
+  }
+
+  const checked = validateTemplateInput(Object.fromEntries(formData.entries()));
+  if (!checked.ok) return { errors: checked.errors as Record<string, string> };
+
+  await hub.templates.save(scope, checked.template, { name: session.name });
+  revalidatePath('/dashboard/invoices');
+  revalidatePath('/dashboard/invoices/template');
+  return { saved: true };
+}
+
 export async function createInvoiceOnRail(formData: FormData) {
   const session = await getSession();
   if (session === null) throw new Error('not signed in');
@@ -1015,18 +1061,23 @@ export async function createInvoiceOnRail(formData: FormData) {
   // session is not linked to a contractor record; the rail then sends no
   // business block at all rather than somebody else's name.
   const profile = await resolveContractorProfile(scope);
+  // The account's invoice template, filled-in fields overriding BuildSuite's
+  // (huddle 2026-09-10). Optional: a template that cannot be read leaves the
+  // invoice exactly as it was before templates existed, never blocked.
+  let template: InvoiceTemplate | null = null;
+  const templates = getHubInvoiceTemplates();
+  if (templates.available) {
+    try {
+      template = await templates.templates.getForContractor(scope);
+    } catch (err) {
+      console.warn('[invoice] template unavailable, using the BuildSuite profile:', (err as Error).message);
+    }
+  }
   const rail = resolveInvoiceRail(
     process.env,
-    profile === null || profile.businessName === null
-      ? undefined
-      : {
-          name: profile.businessName,
-          logoUrl: profile.logoUrl,
-          phone: profile.phone,
-          website: profile.website,
-          address: profile.address,
-        },
+    mergeLetterhead(profile, template),
     scope.locationId,
+    { dueInDays: dueDaysFor(template), standingTerms: template?.standingTerms ?? null },
   );
   // The homeowner's email, read once for this purpose. Without it the rail
   // refuses (an invoice with nobody to send it to), which is what happened

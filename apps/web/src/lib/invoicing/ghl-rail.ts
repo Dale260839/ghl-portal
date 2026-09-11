@@ -65,6 +65,26 @@ export interface GhlRailConfig {
   readonly business?: InvoiceBusinessDetails;
   /** Days until due, from the issue date. */
   readonly dueInDays?: number;
+  /**
+   * The contractor's standing payment terms, from their invoice template.
+   * Printed after the stage's own terms, never instead of them.
+   */
+  readonly standingTerms?: string | null;
+}
+
+/**
+ * The terms printed on an invoice.
+ *
+ * The stage's own terms from the signed contract first, then the contractor's
+ * standing terms. Neither replaces the other: the first is what the homeowner
+ * signed, the second is the contractor's house rules. The ONE implementation —
+ * `invoicing/template.ts` calls this rather than keeping its own copy.
+ */
+export function combineTerms(stageTerms: string, standingTerms: string | null | undefined): string {
+  return [stageTerms, standingTerms ?? '']
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+    .join('\n\n');
 }
 
 const DEFAULT_BASE = 'https://services.leadconnectorhq.com';
@@ -163,6 +183,7 @@ export function buildGhlInvoicePayload(
     business?: InvoiceBusinessDetails;
     issue: Date;
     dueInDays: number;
+    standingTerms?: string | null;
   },
 ): GhlInvoicePayload {
   const due = new Date(opts.issue);
@@ -197,7 +218,9 @@ export function buildGhlInvoicePayload(
     ],
     issueDate: dateOnly(opts.issue),
     dueDate: dateOnly(due),
-    termsNotes: invoice.terms,
+    // The line item keeps the stage's terms alone; the invoice's notes carry
+    // the contractor's standing terms after them.
+    termsNotes: combineTerms(invoice.terms, opts.standingTerms),
     liveMode: true,
     automaticTaxesEnabled: false,
     sentTo: {
@@ -241,6 +264,7 @@ export function createGhlInvoiceRail(config: GhlRailConfig): InvoiceRail {
         business,
         issue: new Date(),
         dueInDays,
+        standingTerms: config.standingTerms,
       });
 
       let response: Response;
