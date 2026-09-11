@@ -412,9 +412,9 @@ export class SupabaseReader implements BuildSuiteReader {
   ): Promise<BuildSuiteProjectRow[]> {
     const safe = assertScope(scope, 'adopted project rows');
 
-    const authored = await this.client.select<{ project_id: string | null }>({
+    const authored = await this.client.select<{ project_id: string | null; user_id: string | null }>({
       from: 'proposals',
-      columns: ['project_id'],
+      columns: ['project_id', 'user_id'],
       filters: {
         user_id: `in.(${safe.authProfileIds.join(',')})`,
         signature_status: `eq.${SIGNED_SIGNATURE_STATUS}`,
@@ -424,12 +424,18 @@ export class SupabaseReader implements BuildSuiteReader {
       limit,
     });
 
-    const projectIds = [...new Set(authored.map((r) => r.project_id).filter(
-      (id): id is string => typeof id === 'string' && id.trim() !== '',
-    ))];
+    // Which of this tenant's profiles signed each project. The query already
+    // filtered `user_id` to the tenant, so every value here is one of ours.
+    const authorOf = new Map<string, string>();
+    for (const row of authored) {
+      const id = row.project_id?.trim() ?? '';
+      const author = row.user_id?.trim() ?? '';
+      if (id !== '' && author !== '' && !authorOf.has(id)) authorOf.set(id, author);
+    }
+    const projectIds = [...authorOf.keys()];
     if (projectIds.length === 0) return [];
 
-    return await this.client.select<BuildSuiteProjectRow>({
+    const rows = await this.client.select<BuildSuiteProjectRow>({
       from: 'projects',
       columns: PROJECT_COLUMNS,
       filters: {
@@ -441,6 +447,32 @@ export class SupabaseReader implements BuildSuiteReader {
       order: 'updated_at.desc',
       limit,
     });
+
+    // ---------------------------------------------------------------------------
+    // STAMP THE OWNER THE ROW IS MISSING — in memory only.
+    //
+    // Listing an ownerless project was not enough on its own. Everything
+    // downstream scopes a project by its owner (`scopeOfProject` names
+    // `ownerAuthProfileId`), and an adopted row's owner was `''` — which
+    // `assertScope` rightly refuses. So previewing BSA-053 threw
+    // `TenancyError: refusing an unscoped read of milestones` underneath a page
+    // that still rendered, found 2026-09-12 while building the client payment
+    // schedule.
+    //
+    // The owner used is the profile that SIGNED it, which is the exact fact
+    // adoption already trusts, and it is one of the tenant's own profiles by
+    // construction. The row now behaves like any owned project for every read,
+    // instead of every read needing its own exception for adopted ones.
+    //
+    // BuildSuite is not written. This is the Hub's copy of the row, and
+    // `projects.auth_profile_id` is still null there — which is the data gap
+    // worth fixing at source.
+    // ---------------------------------------------------------------------------
+    return rows.map((row) =>
+      row.auth_profile_id === null || row.auth_profile_id === undefined || row.auth_profile_id === ''
+        ? { ...row, auth_profile_id: authorOf.get(row.id) ?? row.auth_profile_id }
+        : row,
+    );
   }
 
   async listProjectRowsForContact(
