@@ -438,7 +438,98 @@ export class SupabaseProposalsReader implements BuildSuiteProposalsReader {
       order: 'updated_at.desc',
       limit,
     });
-    return rows.map(normalizeProposal).filter(isLiveEngagement);
+    const live = rows.map(normalizeProposal).filter(isLiveEngagement);
+    if (live.length === 0) return live;
+
+    const lost = await this.projectsWonByAnother(scope, contractorId, live);
+    return lost.size === 0 ? live : live.filter((p) => !lost.has(p.projectId));
+  }
+
+  /**
+   * Projects where ANOTHER contractor's proposal has been signed.
+   *
+   * ---------------------------------------------------------------------------
+   * THE GAP (Chris, huddle 2026-09-10)
+   *
+   *   > when multiple contractors bid on a project, only the awarded contractor
+   *   > should retain access while others are blocked
+   *
+   * The project itself was already closed to a losing bidder: project reads
+   * filter on the owner, and adopting an ownerless project needs a SIGNED
+   * proposal of your own. But `listLive` reads proposals by `contractor_id`
+   * and status alone, so a losing bidder's quote stayed "live" — on their
+   * Engagements screen, and on Invoices, where it can seed an invoice draft for
+   * a job somebody else won.
+   *
+   * Live on 2026-09-12: one project (`87a42c43…`) carries quotes from two
+   * contractors. `5dd312bd` signed four; `ff4a29d8` still had two `submitted`
+   * quotes showing as live work.
+   *
+   * ---------------------------------------------------------------------------
+   * "SOMEONE ELSE" HAS TO BE PROVEN, NOT ASSUMED
+   *
+   * `contractor_id` is null on 13 of 48 proposals, including one signed one.
+   * So a signed proposal is MINE when either key says so — its `contractor_id`
+   * is this contractor, or its `user_id` is one of this tenant's own auth
+   * profiles (`BSA-APS-001`'s signed proposal has no contractor id and is
+   * Alliance Pro Services' by `user_id`).
+   *
+   * A signed proposal carrying NEITHER key cannot be attributed, and is not
+   * treated as anyone else's win. Hiding a contractor's own signed job because
+   * its row is half-written is the worse failure: they would lose the job from
+   * their own screens, while a stale quote staying visible to a loser is the
+   * behaviour this replaces, not a new harm.
+   * ---------------------------------------------------------------------------
+   */
+  private async projectsWonByAnother(
+    scope: TenantScope,
+    contractorId: string,
+    live: Proposal[],
+  ): Promise<Set<string>> {
+    const safe = assertScope(scope, 'lost bids');
+    const projectIds = [...new Set(live.map((p) => p.projectId).filter((id) => id.trim() !== ''))];
+    if (projectIds.length === 0) return new Set();
+
+    const signed = await this.client.select<{
+      project_id: string | null;
+      contractor_id: string | null;
+      user_id: string | null;
+    }>({
+      from: 'proposals',
+      // Narrow on purpose: whose, and on which project. Nothing about the
+      // other contractor's price or document reaches this process.
+      columns: ['project_id', 'contractor_id', 'user_id'],
+      filters: {
+        project_id: `in.(${projectIds.join(',')})`,
+        signature_status: 'eq.SIGNED',
+        signature_signed_at: 'not.is.null',
+        deleted_at: 'is.null',
+      },
+      limit: 500,
+    });
+
+    // ONE definition of "mine". It was written twice — once to find wins by
+    // others and again to rescue projects I had also signed — and breaking the
+    // first copy was invisible, because the second quietly put it right. Two
+    // copies of a rule is how they come to disagree.
+    const has = (v: string | null): v is string => v !== null && v.trim() !== '';
+    const mine = (row: { contractor_id: string | null; user_id: string | null }) =>
+      row.contractor_id === contractorId ||
+      (has(row.user_id) && safe.authProfileIds.includes(row.user_id));
+
+    const wonByMe = new Set<string>();
+    const wonByOther = new Set<string>();
+    for (const row of signed) {
+      if (!has(row.project_id)) continue;
+      // Unattributable: neither key set. Never "someone else" — see above.
+      if (!has(row.contractor_id) && !has(row.user_id)) continue;
+      (mine(row) ? wonByMe : wonByOther).add(row.project_id);
+    }
+
+    // A project I have ALSO signed stays mine, whatever else is on it. Two
+    // signed proposals from two contractors is a data fault BuildSuite should
+    // never produce, and hiding the job from both is not ours to decide.
+    return new Set([...wonByOther].filter((id) => !wonByMe.has(id)));
   }
 }
 

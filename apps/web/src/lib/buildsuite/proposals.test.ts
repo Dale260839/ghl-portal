@@ -71,6 +71,99 @@ test('an empty contractor id is refused, not defaulted', async () => {
   assert.deepEqual(urls, [], 'nothing may reach the network without a contractor');
 });
 
+// ── Lost bids: only the awarded contractor keeps the job ────────────────────
+//
+// Chris, huddle 2026-09-10: "when multiple contractors bid on a project, only
+// the awarded contractor should retain access while others are blocked." Live
+// on 2026-09-12: project 87a42c43 — `5dd312bd` signed, `ff4a29d8` still had two
+// submitted quotes showing as live work on Engagements and Invoices.
+
+const LOSER = 'ff4a29d8-contractor';
+const LOSER_PROFILE = '8b9e1b41-profile';
+const WINNER = '5dd312bd-contractor';
+const WINNER_PROFILE = '7726102a-profile';
+
+function quote(id: string, projectId: string, over: Record<string, unknown> = {}) {
+  return { id, project_id: projectId, contractor_id: LOSER, status: 'submitted', ...over };
+}
+
+const loserScope: TenantScope = { locationId: 'loc-1', authProfileIds: [LOSER_PROFILE] };
+
+test('a quote on a project another contractor signed is no longer live', async () => {
+  const { reader, urls } = fake([
+    [quote('q1', 'p-contested'), quote('q2', 'p-open')],
+    [{ project_id: 'p-contested', contractor_id: WINNER, user_id: WINNER_PROFILE }],
+  ]);
+
+  const live = await reader.listLive(loserScope, LOSER);
+
+  assert.deepEqual(live.map((p) => p.projectId), ['p-open']);
+  // The second read asks only whose, and on which project — nothing about the
+  // other contractor's price or document reaches this process.
+  assert.match(decodeURIComponent(urls[1]!), /select=project_id,contractor_id,user_id(&|$)/);
+  assert.match(decodeURIComponent(urls[1]!), /signature_status=eq\.SIGNED/);
+  assert.match(decodeURIComponent(urls[1]!), /project_id=in\.\(p-contested,p-open\)/);
+});
+
+test('the winner keeps their own signed job', async () => {
+  // Same project, seen from the side that won it.
+  const { reader } = fake([
+    [quote('w1', 'p-contested', { contractor_id: WINNER, status: 'accepted', signature_status: 'SIGNED' })],
+    [{ project_id: 'p-contested', contractor_id: WINNER, user_id: WINNER_PROFILE }],
+  ]);
+  const winnerScope: TenantScope = { locationId: 'loc-1', authProfileIds: [WINNER_PROFILE] };
+
+  const live = await reader.listLive(winnerScope, WINNER);
+  assert.deepEqual(live.map((p) => p.projectId), ['p-contested']);
+});
+
+test('a signed proposal with no contractor id is still recognised as mine', async () => {
+  // `contractor_id` is null on 13 of 48 proposals, including one signed one.
+  // BSA-APS-001's is Alliance Pro Services' by `user_id` alone. Reading only
+  // `contractor_id` would call their own win somebody else's and hide it.
+  const { reader } = fake([
+    [quote('q1', 'p-mine')],
+    [{ project_id: 'p-mine', contractor_id: null, user_id: LOSER_PROFILE }],
+  ]);
+
+  const live = await reader.listLive(loserScope, LOSER);
+  assert.deepEqual(live.map((p) => p.projectId), ['p-mine']);
+});
+
+test('a signed proposal nobody can be attributed to hides nothing', async () => {
+  // Neither key set. Hiding a contractor's own job because its row is
+  // half-written is the worse failure, so an unattributable signature is never
+  // treated as someone else's win.
+  const { reader } = fake([
+    [quote('q1', 'p-unknown')],
+    [{ project_id: 'p-unknown', contractor_id: null, user_id: null }],
+  ]);
+
+  const live = await reader.listLive(loserScope, LOSER);
+  assert.deepEqual(live.map((p) => p.projectId), ['p-unknown']);
+});
+
+test('a project I also signed stays mine, whoever else signed it', async () => {
+  // Two contractors both signed — a data fault BuildSuite should never make.
+  // Resolving it by hiding the job from both is not this reader's call.
+  const { reader } = fake([
+    [quote('q1', 'p-both', { status: 'accepted', signature_status: 'SIGNED' })],
+    [
+      { project_id: 'p-both', contractor_id: WINNER, user_id: WINNER_PROFILE },
+      { project_id: 'p-both', contractor_id: LOSER, user_id: LOSER_PROFILE },
+    ],
+  ]);
+
+  const live = await reader.listLive(loserScope, LOSER);
+  assert.deepEqual(live.map((p) => p.projectId), ['p-both']);
+});
+
+test('no live quotes means no second read', async () => {
+  const { reader, urls } = fake([[]]);
+  assert.deepEqual(await reader.listLive(loserScope, LOSER), []);
+  assert.equal(urls.length, 1, 'the lost-bid check must not run on nothing');
+});
+
 test('a live read still refuses without a scope', async () => {
   const { reader, urls } = fake();
 
