@@ -6,7 +6,12 @@ import {
   availableProjectsBanner,
   isAvailableProject,
   isAvailableStage,
+  isDraftStage,
   isSignedOrWon,
+  parseProjectView,
+  PROJECT_VIEWS,
+  projectsForView,
+  projectViewCounts,
   summarizeAvailable,
 } from './available-projects.ts';
 import type { ProjectSigning } from './signed-work.ts';
@@ -209,4 +214,98 @@ test('singular reads as singular', () => {
   const banner = availableProjectsBanner({ total: 2, available: 1, otherStage: 0, notAgreed: 1 });
   assert.match(banner!, /Showing 1 project on a signed or won proposal/);
   assert.match(banner!, /1 not signed or won/);
+});
+
+// ── The pills: Awarded · Draft · All ─────────────────────────────────────────
+
+test('the view comes from the URL and falls back to Awarded', () => {
+  assert.equal(parseProjectView(undefined), 'awarded');
+  assert.equal(parseProjectView('draft'), 'draft');
+  assert.equal(parseProjectView('all'), 'all');
+  assert.equal(parseProjectView('awarded'), 'awarded');
+  // An old link, a typo, a pasted value — land on the default, never on an
+  // empty table that looks like data loss.
+  for (const junk of ['', 'drafts', 'signed', 'active', '<script>', 'ALL ']) {
+    const parsed = parseProjectView(junk);
+    assert.ok(PROJECT_VIEWS.includes(parsed), `${junk} produced ${parsed}`);
+  }
+  assert.equal(parseProjectView('ALL '), 'all');
+  assert.equal(parseProjectView('Draft'), 'draft');
+  // `?view=draft&view=all` arrives as an array. The first one wins.
+  assert.equal(parseProjectView(['draft', 'all']), 'draft');
+});
+
+test('Awarded is exactly the rule the screen already had', () => {
+  // "This table is good now" was said about this view. The pills add views;
+  // they must not change this one.
+  const rows = [
+    row({ code: 'A', sourceStatus: 'awarded', signed: true }),
+    row({ code: 'B', sourceStatus: 'awarded', signed: false }),
+    row({ code: 'C', sourceStatus: 'draft', noProposal: true }),
+  ];
+  assert.deepEqual(
+    projectsForView(rows, 'awarded').map((r) => r.project.buildsuiteProjectId),
+    availableProjects(rows).map((r) => r.project.buildsuiteProjectId),
+  );
+});
+
+test('Draft is the draft stage, with no signature test', () => {
+  // A draft has nobody's agreement on it by definition. Requiring one would
+  // make this pill permanently empty.
+  const rows = [
+    row({ code: 'BSA-APS-005', sourceStatus: 'draft', noProposal: true }),
+    row({ code: 'D2', sourceStatus: ' Draft ', signed: false }),
+    row({ code: 'AW', sourceStatus: 'awarded', signed: true }),
+    row({ code: 'AC', sourceStatus: 'active', noProposal: true }),
+  ];
+  assert.deepEqual(
+    projectsForView(rows, 'draft').map((r) => r.project.buildsuiteProjectId),
+    ['BSA-APS-005', 'D2'],
+  );
+  assert.equal(isDraftStage({ sourceStatus: 'draft' }), true);
+  assert.equal(isDraftStage({ sourceStatus: 'awarded' }), false);
+  assert.equal(isDraftStage({ sourceStatus: undefined }), false);
+});
+
+test('All is everything, including what Awarded holds back', () => {
+  // The awarded-but-unsigned job is the one worth chasing, and All is the one
+  // place it is visible. Nothing is filtered here — not stage, not signature.
+  const rows = [
+    row({ code: 'A', sourceStatus: 'awarded', signed: true }),
+    row({ code: 'B', sourceStatus: 'awarded', signed: false }),
+    row({ code: 'C', sourceStatus: 'draft', noProposal: true }),
+    row({ code: 'D', sourceStatus: 'completed', signed: true }),
+    row({ code: 'E', sourceStatus: undefined, noProposal: true }),
+  ];
+  assert.deepEqual(
+    projectsForView(rows, 'all').map((r) => r.project.buildsuiteProjectId),
+    ['A', 'B', 'C', 'D', 'E'],
+  );
+});
+
+test('each pill count is the length of its own view', () => {
+  // The number on a pill and the rows behind it must never disagree — that is
+  // the one thing that makes a count worth showing.
+  const rows = [
+    row({ sourceStatus: 'awarded', signed: true }),
+    row({ sourceStatus: 'awarded', signed: true }),
+    row({ sourceStatus: 'awarded', signed: true }),
+    row({ sourceStatus: 'draft', noProposal: true }),
+  ];
+  const counts = projectViewCounts(rows);
+  // Alliance Pro Services, 2026-09-12: Awarded 3 · Draft 1 · All 4.
+  assert.deepEqual(counts, { awarded: 3, draft: 1, all: 4 });
+  for (const view of PROJECT_VIEWS) {
+    assert.equal(counts[view], projectsForView(rows, view).length, `${view} count disagrees`);
+  }
+});
+
+test('All is never smaller than Awarded or Draft', () => {
+  const rows = [
+    row({ sourceStatus: 'awarded', signed: true }),
+    row({ sourceStatus: 'draft', noProposal: true }),
+    row({ sourceStatus: 'new', noProposal: true }),
+  ];
+  const counts = projectViewCounts(rows);
+  assert.ok(counts.all >= counts.awarded && counts.all >= counts.draft);
 });

@@ -12,10 +12,72 @@ import {
   type SignedStatus,
 } from '@/lib/signed-work';
 import {
-  availableProjects,
   availableProjectsBanner,
+  parseProjectView,
+  PROJECT_VIEW_LABELS,
+  PROJECT_VIEWS,
+  projectsForView,
+  projectViewCounts,
   summarizeAvailable,
+  DEFAULT_PROJECT_VIEW,
+  type ProjectView,
 } from '@/lib/available-projects';
+
+/**
+ * Awarded · Draft · All.
+ *
+ * Plain links, not a client component: the view is in the URL, so switching is
+ * a navigation, a filtered list can be bookmarked or sent to someone, and the
+ * browser's back button undoes a filter the way people expect it to.
+ *
+ * Each pill carries its count, so nobody has to click one to discover it empty.
+ * The default view links to the bare path rather than `?view=awarded`, so there
+ * is one URL for the screen people land on.
+ */
+function ProjectViewPills({
+  current,
+  counts,
+}: {
+  current: ProjectView;
+  counts: Record<ProjectView, number>;
+}) {
+  return (
+    <nav aria-label="Filter projects" className="flex flex-wrap gap-2">
+      {PROJECT_VIEWS.map((view) => {
+        const active = view === current;
+        return (
+          <Link
+            key={view}
+            href={view === DEFAULT_PROJECT_VIEW ? '/dashboard/projects' : `/dashboard/projects?view=${view}`}
+            aria-current={active ? 'page' : undefined}
+            className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${
+              active
+                ? 'border-navy-900 bg-navy-900 text-white'
+                : 'border-navy-200 bg-white text-navy-600 hover:border-navy-300 hover:bg-navy-50'
+            }`}
+          >
+            {PROJECT_VIEW_LABELS[view]}
+            <span
+              className={`rounded-full px-1.5 text-xs tabular-nums ${
+                active ? 'bg-white/20 text-white' : 'bg-navy-100 text-navy-500'
+              }`}
+            >
+              {counts[view]}
+            </span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** What an empty view says. Each one names why, rather than one "nothing here". */
+const EMPTY_VIEW: Record<ProjectView, string> = {
+  awarded:
+    'No awarded projects on a signed or won proposal yet. Drafts and other stages are under All.',
+  draft: 'No draft projects.',
+  all: 'This account has no projects yet.',
+};
 
 /** How each signing state reads on a row. `unknown` says so rather than guessing. */
 const SIGNING: Record<SignedStatus, { label: string; tone: 'good' | 'warn' | 'neutral' } | null> = {
@@ -82,7 +144,12 @@ function SignedPdfCell({ url }: { url: string | null }) {
   );
 }
 
-export default async function ProjectsList() {
+export default async function ProjectsList({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string | string[] }>;
+}) {
+  const view = parseProjectView((await searchParams).view);
   const scope = await requireTenantScope();
   const everyProject = await (await currentDataSource(scope)).listProjects(scope);
 
@@ -126,18 +193,31 @@ export default async function ProjectsList() {
   // off by default and hid only what could be PROVEN unsigned. That was the
   // right shape when nothing in the database was signed; it is the wrong shape
   // now that the question has an answer.
+  //
+  // The pills (2026-09-12) choose between that rule, the `draft` stage, and
+  // everything. Awarded stays the default — see PROJECT_VIEWS.
   const summary = summarizeAvailable(joined);
-  const rows = availableProjects(joined);
-  const banner = availableProjectsBanner(summary);
+  const counts = projectViewCounts(joined);
+  const rows = projectsForView(joined, view);
+  // The held-back banner explains the AWARDED rule. On Draft or All nothing is
+  // being held back by it, so repeating it there would describe a filter that
+  // is not applied.
+  const banner = view === 'awarded' ? availableProjectsBanner(summary) : null;
   const projects = rows.map((r) => r.project);
+  const noun = projects.length === 1 ? 'project' : 'projects';
+  const subtitle =
+    view === 'awarded'
+      ? `${projects.length} awarded ${noun} on a signed or won proposal`
+      : view === 'draft'
+        ? `${projects.length} draft ${noun}`
+        : `${projects.length} ${noun} at every stage`;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-navy-900">Projects</h1>
         <p className="mt-1 text-sm text-navy-400">
-          {projects.length} awarded {projects.length === 1 ? 'project' : 'projects'} on a signed
-          or won proposal · every row keyed by its BuildSuite Project ID
+          {subtitle}
           {archivedCount > 0 && (
             <>
               {' · '}
@@ -148,6 +228,8 @@ export default async function ProjectsList() {
           )}
         </p>
       </div>
+
+      <ProjectViewPills current={view} counts={counts} />
 
       {banner !== null && (
         <div className="rounded-lg border border-navy-200 bg-navy-50 px-4 py-3 text-sm text-navy-600">
@@ -166,6 +248,9 @@ export default async function ProjectsList() {
         </div>
       )}
 
+      {rows.length === 0 ? (
+        <Card className="px-5 py-10 text-center text-sm text-navy-500">{EMPTY_VIEW[view]}</Card>
+      ) : (
       <Card className="overflow-hidden">
         {/* Desktop table */}
         <table className="hidden w-full text-left md:table">
@@ -290,6 +375,7 @@ export default async function ProjectsList() {
           ))}
         </ul>
       </Card>
+      )}
     </div>
   );
 }

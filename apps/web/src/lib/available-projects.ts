@@ -178,3 +178,78 @@ export function availableProjectsBanner(summary: AvailableSummary): string | nul
 
   return `${shown} — ${parts.join(', ')}.`;
 }
+
+// ── The three views: Awarded · Draft · All ───────────────────────────────────
+
+/**
+ * The pills above the Projects table (John, 2026-09-12):
+ *
+ *   > In the project navigation add "Draft" "Awarded" "All" pill separation or
+ *   > filter. You will also get the drafted projects.
+ *
+ * **Awarded** is the default and is exactly the rule above — awarded AND signed
+ * or won. It was the whole screen until now, and "this table is good now" was
+ * said about it, so it is what a contractor lands on.
+ *
+ * **Draft** is BuildSuite's `draft` stage, with no signature test. A draft has
+ * nobody's agreement on it by definition — requiring one would make the pill
+ * permanently empty.
+ *
+ * **All** is every project this account can list, at every stage. Nothing is
+ * filtered, including the awarded-but-unsigned jobs the Awarded view holds back.
+ * That is the one place those are visible, which is part of the point of it.
+ *
+ * The view lives in the URL (`?view=draft`), not in client state, so a filtered
+ * list can be linked, bookmarked and reloaded, and the page stays a server
+ * component with no JavaScript needed to switch.
+ */
+export const PROJECT_VIEWS = ['awarded', 'draft', 'all'] as const;
+export type ProjectView = (typeof PROJECT_VIEWS)[number];
+export const DEFAULT_PROJECT_VIEW: ProjectView = 'awarded';
+
+export const PROJECT_VIEW_LABELS: Record<ProjectView, string> = {
+  awarded: 'Awarded',
+  draft: 'Draft',
+  all: 'All',
+};
+
+/**
+ * Read `?view=` into a known view, falling back to Awarded.
+ *
+ * Anything unrecognised — a typo, an old link, a value somebody pasted in —
+ * lands on the default rather than on an empty table that looks like data loss.
+ */
+export function parseProjectView(value: string | string[] | undefined): ProjectView {
+  const raw = (Array.isArray(value) ? value[0] : value)?.trim().toLowerCase() ?? '';
+  return (PROJECT_VIEWS as readonly string[]).includes(raw)
+    ? (raw as ProjectView)
+    : DEFAULT_PROJECT_VIEW;
+}
+
+/** BuildSuite's `draft` stage, compared the same forgiving way as `awarded`. */
+export function isDraftStage(project: Pick<Project, 'sourceStatus'>): boolean {
+  return (project.sourceStatus ?? '').trim().toLowerCase() === 'draft';
+}
+
+export function projectsForView(
+  rows: readonly ProjectSigning[],
+  view: ProjectView,
+): ProjectSigning[] {
+  switch (view) {
+    case 'awarded':
+      return availableProjects(rows);
+    case 'draft':
+      return rows.filter((row) => isDraftStage(row.project));
+    case 'all':
+      return [...rows];
+  }
+}
+
+/** The number on each pill, so nobody has to click one to find it empty. */
+export function projectViewCounts(rows: readonly ProjectSigning[]): Record<ProjectView, number> {
+  return {
+    awarded: projectsForView(rows, 'awarded').length,
+    draft: projectsForView(rows, 'draft').length,
+    all: rows.length,
+  };
+}
