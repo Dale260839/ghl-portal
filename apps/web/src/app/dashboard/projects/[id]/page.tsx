@@ -55,15 +55,27 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
                 <div className="text-xs tracking-wide text-navy-400 uppercase">Stage</div>
                 <div className="mt-1 text-sm font-medium text-navy-900">{stageLabel(project)}</div>
               </div>
+              {/* BuildSuite has no current or next milestone, so for a live
+                  project these come from the Hub milestones the contractor
+                  set: the one in progress, then the first not yet started.
+                  Chris added two on 11 Sep and saw both boxes empty. */}
               <div>
                 <div className="text-xs tracking-wide text-navy-400 uppercase">Current</div>
                 <div className="mt-1 text-sm font-medium text-navy-900">
-                  {project.currentMilestone}
+                  {project.currentMilestone !== ''
+                    ? project.currentMilestone
+                    : (milestones.find((m) => m.status === 'In Progress')?.milestoneName ??
+                      <span className="font-normal text-navy-400">None in progress</span>)}
                 </div>
               </div>
               <div>
                 <div className="text-xs tracking-wide text-navy-400 uppercase">Next</div>
-                <div className="mt-1 text-sm font-medium text-navy-900">{project.nextMilestone}</div>
+                <div className="mt-1 text-sm font-medium text-navy-900">
+                  {project.nextMilestone !== ''
+                    ? project.nextMilestone
+                    : (milestones.find((m) => m.status === 'Not Started')?.milestoneName ??
+                      <span className="font-normal text-navy-400">Not set</span>)}
+                </div>
               </div>
             </div>
             {hasOperationalDetail(project) && (
@@ -188,8 +200,9 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
                   </>
                 )}
                 <p className="mt-3 text-xs leading-relaxed">
-                  Change orders, invoicing and margin arrive with the Hub tables. Nothing here is
-                  estimated from the band — an invented figure on this screen is worse than an
+                  Approved change orders and selections move this figure on the Budget tab, and
+                  invoices are drafted from it under Invoices &amp; Payments. Nothing here is
+                  estimated from the band. An invented figure on this screen is worse than an
                   absent one.
                 </p>
               </div>
