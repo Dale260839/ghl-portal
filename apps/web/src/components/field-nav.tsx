@@ -34,7 +34,7 @@ import { usePathname } from 'next/navigation';
 export interface FieldNavItem {
   href: string;
   label: string;
-  icon: 'today' | 'tasks' | 'update' | 'docs' | 'issues' | 'punch' | 'messages';
+  icon: 'today' | 'tasks' | 'update' | 'docs' | 'photos' | 'issues' | 'punch' | 'messages';
   /** Unseen assignments. The "ding" in D4 §5. */
   badge?: number;
 }
@@ -44,6 +44,7 @@ const ICONS: Record<FieldNavItem['icon'], React.ReactNode> = {
   tasks: <path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />,
   update: <path d="M12 5v14M5 12h14" />,
   docs: <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h5" />,
+  photos: <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />,
   issues: <path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />,
   punch: <path d="M9 11l3 3 8-8M3 6h6M3 12h4M3 18h8" />,
   messages: <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5A8.4 8.4 0 0 1 4 11.5a8.5 8.5 0 0 1 17 0z" />,

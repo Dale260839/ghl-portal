@@ -609,7 +609,8 @@ export async function inviteTeamMember(formData: FormData) {
   // Send it. GoHighLevel rather than a new provider: it already holds the
   // contact, and a reply lands in the thread the contractor already uses.
   let delivery = 'none';
-  const mail = getGhlEmail();
+  // Addressed to the contractor's own sub-account, not the deployment's.
+  const mail = getGhlEmail(scope.locationId);
   if (mail.available) {
     const { subject, html } = invitationEmail({
       inviterName: actor.name,
@@ -1025,6 +1026,7 @@ export async function createInvoiceOnRail(formData: FormData) {
           website: profile.website,
           address: profile.address,
         },
+    scope.locationId,
   );
   // The homeowner's email, read once for this purpose. Without it the rail
   // refuses (an invoice with nobody to send it to), which is what happened

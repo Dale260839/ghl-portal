@@ -1,3 +1,5 @@
+import { resolveContractorName } from '@/lib/buildsuite/contractor-identity';
+import { scopeOfProject } from '@/lib/tenant-scope';
 import { SubmitButton } from '@/components/submit-button';
 import { currentPortalProject, messagesFor } from '@/lib/portal-data';
 import { postClientMessage } from '@/lib/actions/messages';
@@ -28,6 +30,9 @@ export default async function PortalMessages({
   const session = await getSession();
   const readOnly = session?.role !== 'client';
   const messages = await messagesFor(project);
+  // The company name, so the header does not read "(PM)" with nobody in front
+  // of it: BuildSuite records no project manager.
+  const contractorName = await resolveContractorName(scopeOfProject(project));
 
   // The master switch. A contractor who closes the portal closes the thread
   // with it, and there is no separate messaging column to consult.
@@ -50,7 +55,9 @@ export default async function PortalMessages({
           <div>
             <div className="text-sm font-semibold text-navy-900">Project Team</div>
             <div className="text-xs text-navy-400">
-              {project.projectManager} (PM){project.showAssignedTeam ? `, ${project.superintendent} (Site)` : ''}
+              {contractorName ?? 'Your contractor'}
+              {project.projectManager !== '' ? ` · ${project.projectManager} (PM)` : ''}
+              {project.showAssignedTeam && project.superintendent !== '' ? `, ${project.superintendent} (Site)` : ''}
             </div>
           </div>
         </div>

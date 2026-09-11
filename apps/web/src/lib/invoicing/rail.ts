@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { readGhlConfig } from '../ghl/config.ts';
+import { readGhlConfig, withLocation } from '../ghl/config.ts';
 import { createGhlInvoiceRail, type InvoiceBusinessDetails } from './ghl-rail.ts';
 import { unconfiguredRail, type DraftInvoice, type InvoiceRail } from './invoice.ts';
 import type { StoredInvoiceDraft } from '../hub-db/invoice-drafts.ts';
@@ -27,14 +27,22 @@ export function resolveInvoiceRail(
    * which case the invoice carries no business block rather than a guess.
    */
   business?: InvoiceBusinessDetails,
+  /**
+   * The signed-in contractor's GoHighLevel sub-account. Preferred over the
+   * env var, so one deployment can raise invoices for more than one
+   * contractor and the pilot does not wait on a setting the session already
+   * knows. Ignored when it is not a real GHL id.
+   */
+  sessionLocationId?: string | null,
 ): InvoiceRail {
   const config = readGhlConfig(env);
   if (!config.configured) return unconfiguredRail;
-  if (config.config.locationId.trim() === '') return unconfiguredRail;
+  const located = withLocation(config.config, sessionLocationId);
+  if (located.locationId.trim() === '') return unconfiguredRail;
 
   return createGhlInvoiceRail({
-    token: config.config.token,
-    locationId: config.config.locationId,
+    token: located.token,
+    locationId: located.locationId,
     apiBase: config.config.baseUrl,
     apiVersion: config.config.apiVersion,
     ...(business !== undefined ? { business } : {}),

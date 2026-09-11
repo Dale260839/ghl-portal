@@ -102,7 +102,7 @@ export default async function ProjectPaymentsControl({
   // Read defensively. GHL being unconfigured or briefly unreachable is not a
   // failure of this screen: the drafts above are still worth showing, so a
   // calm note beats an error page over a section that is one of two.
-  const ghl = getInvoices();
+  const ghl = getInvoices(scope.locationId);
   let issued: Invoice[] = [];
   let ghlNote: string | null = null;
 

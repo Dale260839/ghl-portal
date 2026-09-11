@@ -60,6 +60,31 @@ export function readGhlConfig(env: NodeJS.ProcessEnv = process.env): ConfigResul
  * Whether custom-object reads are possible. Separate from `configured` because
  * the answer is "not yet" long after GHL itself is reachable.
  */
+/**
+ * A GoHighLevel sub-account id: the alphanumeric ids GHL mints, never a fixture
+ * label like `loc_alliance_pro` or the Hub's own `buildsuite:location-unknown`
+ * placeholder. Only a real one may be sent to the API.
+ */
+export function isGhlLocationId(value: string | null | undefined): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9]{15,40}$/.test(value.trim());
+}
+
+/**
+ * The location the API calls should address.
+ *
+ * The env var names one sub-account for the whole deployment, which is right
+ * for a dev box and wrong for a product with more than one contractor. The
+ * signed-in contractor already carries their sub-account (their BuildSuite
+ * profile's `location_id`, or the GHL menu link they arrived through), so that
+ * is preferred; the env var is the fallback for sessions that carry none.
+ * Chris's pilot on 11 Sep stalled on the env var being unset while the session
+ * knew the location all along.
+ */
+export function withLocation(config: GhlConfig, sessionLocationId?: string | null): GhlConfig {
+  if (isGhlLocationId(sessionLocationId)) return { ...config, locationId: sessionLocationId.trim() };
+  return config;
+}
+
 export function canReadProjectObject(config: GhlConfig): boolean {
   return config.projectObjectKey !== '' && config.locationId !== '';
 }

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { readGhlConfig, type GhlConfig } from './config.ts';
+import { readGhlConfig, withLocation, type GhlConfig  } from './config.ts';
 
 /**
  * Sending email through GoHighLevel.
@@ -198,11 +198,12 @@ export type EmailResult =
   | { available: true; email: GhlEmail }
   | { available: false; missing: string[] };
 
-export function getGhlEmail(): EmailResult {
+export function getGhlEmail(sessionLocationId?: string | null): EmailResult {
   const result = readGhlConfig();
   if (!result.configured) return { available: false, missing: result.missing };
-  if (result.config.locationId.trim() === '') {
+  const config = withLocation(result.config, sessionLocationId);
+  if (config.locationId.trim() === '') {
     return { available: false, missing: ['GHL_LOCATION_ID'] };
   }
-  return { available: true, email: new GhlEmail(result.config) };
+  return { available: true, email: new GhlEmail(config) };
 }

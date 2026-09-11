@@ -1,3 +1,4 @@
+import { locationForAuthProfiles } from '@/lib/buildsuite/profile-location';
 import { requireAccess } from '@/lib/access';
 import { clientProjectsFor } from '@/lib/client-scope';
 import { currentDataSource } from '@/lib/data/current-source';
@@ -57,7 +58,12 @@ export default async function Payments() {
     </div>
   );
 
-  const reader = getInvoices();
+  // The homeowner's session carries no sub-account; the project's owner does.
+  const db0 = await currentDataSource();
+  const owned = await clientProjectsFor(access, db0);
+  const ownerLocation =
+    owned[0] !== undefined ? await locationForAuthProfiles([owned[0].ownerAuthProfileId]) : null;
+  const reader = getInvoices(ownerLocation);
   if (!reader.available) {
     return shell(
       <PortalEmpty
