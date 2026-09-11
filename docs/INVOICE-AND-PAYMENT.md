@@ -1,7 +1,55 @@
 # How invoicing and payment work
 
-**Updated 2026-09-08.** What is built, what it deliberately does not do, and
-where it stops today.
+**Updated 2026-09-12.** What is built, what it deliberately does not do, and
+where it stops today. Section 0 is the plain-English version, written for Chris.
+
+---
+
+## 0 · For Chris: how templates, Stripe and paying by phone fit together
+
+Asked in the 2026-09-10 huddle. No code here — just how the pieces relate.
+
+**There are three layers, and each one does one job.**
+
+| Layer | Its job | Who touches it |
+|---|---|---|
+| **Project Hub** | Works out *what* to bill and *when*, from the signed contract's payment schedule. Shows the homeowner their schedule and their invoices. | The contractor, reviewing each stage |
+| **GoHighLevel** | Holds the actual invoice, sends it, and records whether it was paid. | The contractor clicks **send** |
+| **The payment processor** | Moves the money from the homeowner's card to the contractor's account. | Nobody, day to day — it is connected once |
+
+**Where Stripe fits.** We chose GoHighLevel over Stripe on 9/1 — but that was
+a choice about *where invoices live*, not a choice against Stripe. GoHighLevel
+does not move money itself; it hands payment to a processor the contractor
+connects in their GoHighLevel payment settings, and Stripe is the usual one.
+So in practice it is **GoHighLevel on top, Stripe underneath**. The Hub never
+sees a card number and never touches money, which keeps it out of payment
+compliance entirely.
+
+**Paying by phone.** Every invoice GoHighLevel sends carries a **pay link**.
+It opens a secure payment page that works on a phone, with no app and no
+account to create. Card always works; Apple Pay and Google Pay appear where the
+contractor's processor has them turned on. The homeowner can also reach the
+same invoice from the Payments screen in their portal.
+
+**Templates.** Two different things share the word:
+
+- **The look of the invoice** — logo, business name, footer, payment terms.
+  The contractor's letterhead already appears on invoices the Hub creates. A
+  saved per-account template that a contractor sets up once and reuses (your
+  suggestion) is being added; see section 7.
+- **What is on the invoice** — the stages and amounts. That is not a template
+  at all: it comes from the signed contract, so every job bills exactly what
+  that homeowner agreed to.
+
+**What the homeowner sees, as of 2026-09-12.** Their payment schedule from the
+signed contract — every stage, its amount, and whether it is Upcoming, Invoiced
+or Paid — plus the next payment and the total still to come. Then the invoices
+actually issued to them. They never see a figure the contractor is still
+deciding on.
+
+**The one thing the contractor always does by hand:** clicking *send* in
+GoHighLevel. That is deliberate — your rule — so they can add a note before a
+homeowner is asked for money.
 
 ---
 
@@ -170,7 +218,21 @@ homeowners cannot create, read, update or delete one.
 
 ## 5 · The homeowner's side
 
-`/portal/payments` — their invoices, and what they owe.
+`/portal/payments` — their payment schedule, their invoices, and what they owe.
+
+**The payment schedule (added 2026-09-12).** Every stage of the signed
+contract, with its amount and whether it is Upcoming, Invoiced or Paid, plus
+the next payment and the total still to come. Each figure comes from exactly
+one of two places: the contract they signed, or an invoice actually issued to
+them — never the contractor's draft. A stage is marked billed only through an
+id chain (schedule line → draft → GoHighLevel invoice id), never by matching a
+title or an amount. See `lib/client-payment-schedule.ts`.
+
+Stages computed from percents close to the contract total to the cent, using
+the same arithmetic as the contractor's drafts, so the two sides never show
+different figures. Stated figures are never rewritten — BSA-053's proposal
+states stages that sum to a cent over its total, and that is shown exactly as
+signed.
 
 Two rules govern it:
 
