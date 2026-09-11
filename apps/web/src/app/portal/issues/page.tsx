@@ -34,7 +34,7 @@ export default async function PortalIssues({
     return <PortalEmpty title="No project" body="Nothing is shared with this account yet." />;
   }
 
-  const issues = issuesFor(project);
+  const issues = await issuesFor(project);
   const open = issues.filter((i) => i.status !== 'Resolved' && i.status !== 'Closed');
 
   return (

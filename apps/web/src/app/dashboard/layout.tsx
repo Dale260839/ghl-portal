@@ -77,7 +77,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: proj('schedule'), label: 'Schedule', icon: IconSchedule },
     { href: '/dashboard/engagements', label: 'Tasks', icon: IconTasks },
     { href: '/dashboard/updates', label: 'Field Updates', icon: IconUpdates, badge: pendingReview },
-    { href: '/dashboard/team', label: 'Clients', icon: IconTeam },
+    // The screen invites crew and homeowners and lists them. Chris looked for
+    // "Team" on the 10 Sep call and did not find it under "Clients".
+    { href: '/dashboard/team', label: 'Team', icon: IconTeam },
     { href: proj('designs'), label: 'Designs & Selections', icon: IconDesigns },
     { href: proj('budget'), label: 'Estimates & Budget', icon: IconBudget },
     { href: proj('change-orders'), label: 'Change Orders', icon: IconChangeOrders },

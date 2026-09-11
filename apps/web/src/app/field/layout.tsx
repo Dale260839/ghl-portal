@@ -5,6 +5,7 @@ import { requireAccess } from '@/lib/access';
 import { activeSourceKind } from '@/lib/data/source';
 import { currentDataSource } from '@/lib/data/current-source';
 import { requireTenantScope } from '@/lib/scope';
+import { getHubClient } from '@/lib/hub-db/client';
 import { DataModeBanner } from '@/components/ui';
 import { ViewSwitcher, ViewingAsBanner } from '@/components/view-switcher';
 import { FieldNav, type FieldNavItem } from '@/components/field-nav';
@@ -47,13 +48,16 @@ export default async function FieldLayout({ children }: { children: React.ReactN
     { href: '/field', label: 'Today', icon: 'today' },
     { href: '/field/tasks', label: 'Tasks', icon: 'tasks', badge: unseen },
     { href: '/field/update', label: 'Update', icon: 'update' },
+    { href: '/field/documents', label: 'Docs', icon: 'docs' },
+    { href: '/field/issues', label: 'Issues', icon: 'issues' },
+    { href: '/field/punch', label: 'Punch', icon: 'punch' },
     { href: '/field/messages', label: 'Messages', icon: 'messages' },
   ];
 
   return (
     <div className="min-h-dvh bg-navy-50">
       {viewing && <ViewingAsBanner persona={session.name} role={session.role} />}
-      <DataModeBanner kind={activeSourceKind()} />
+      <DataModeBanner kind={activeSourceKind()} hubConnected={getHubClient().available} />
 
       <header className="sticky top-0 z-10 border-b border-navy-100 bg-white">
         <div className="mx-auto flex max-w-lg items-center justify-between gap-3 px-4 py-3">

@@ -58,14 +58,35 @@ test('every switch has a label and help text', () => {
   }
 });
 
+/**
+ * §6.1 names five of these switches and none of the four section switches, which
+ * come from `hub_visibility_settings` instead. Listing the exceptions rather
+ * than dropping the check keeps the original five pinned to the schema: rename
+ * one of those and this still fails.
+ */
+const NOT_IN_SECTION_6_1 = new Set([
+  'showDocuments',
+  'showPhotos',
+  'showDailyUpdates',
+  'showChangeOrders',
+]);
+
 test('switch labels match the §6.1 field names verbatim', () => {
   const schemaNames = new Set(PROJECT_FIELDS.map((f) => f.name));
   for (const key of VISIBILITY_SWITCHES) {
+    if (NOT_IN_SECTION_6_1.has(key)) continue;
     assert.ok(
       schemaNames.has(VISIBILITY_LABELS[key].label),
       `"${VISIBILITY_LABELS[key].label}" is not a §6.1 field name`,
     );
   }
+});
+
+test('the switches §6.1 does not name are the four the Hub table adds', () => {
+  // Guards the exception list above: a new switch cannot quietly join it.
+  const schemaNames = new Set(PROJECT_FIELDS.map((f) => f.name));
+  const unnamed = VISIBILITY_SWITCHES.filter((k) => !schemaNames.has(VISIBILITY_LABELS[k].label));
+  assert.deepEqual([...unnamed].sort(), [...NOT_IN_SECTION_6_1].sort());
 });
 
 // ── Effect ───────────────────────────────────────────────────────────────────

@@ -48,8 +48,10 @@ export default async function ProjectDocumentsControl({
       />
 
       <ControlNote>
-        Contracts, permits, plans, warranties, and change orders live here. Only files you mark
-        client-visible show up in the homeowner&rsquo;s Documents screen.
+        Every file sits in a folder. The Client folder is the only one the homeowner can see into,
+        and a document there still has to be released before it shows up on their Documents screen.
+        Field folders are for the crew and subcontractors, one per trade, and are never shared with
+        the homeowner.
       </ControlNote>
 
       <MediaManager

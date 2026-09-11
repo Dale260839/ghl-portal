@@ -68,6 +68,9 @@ function readerOf(rows: BuildSuiteProjectRow[]): BuildSuiteReader {
     async listProjectRowsForContact(contactId) {
       return contactId.trim() === '' ? [] : rows.filter((r) => r.ghl_contact_id === contactId);
     },
+    async clientEmailForProject() {
+      return null;
+    },
     async findProjectForClientLogin(projectCode: string, clientEmail: string) {
       const p = rows.find(
         (r) => r.project_code === projectCode && clientEmail === 'client@example.com',
@@ -149,6 +152,10 @@ test('every client-visibility switch is off', async () => {
     'showDetailedPricing',
     'showScheduleToClient',
     'showAssignedTeam',
+    'showDocuments',
+    'showPhotos',
+    'showDailyUpdates',
+    'showChangeOrders',
     'allowClientMessaging',
     'allowIssueSubmission',
     'allowFileUploads',

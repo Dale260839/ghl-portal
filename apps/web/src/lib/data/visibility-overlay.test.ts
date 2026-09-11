@@ -12,6 +12,11 @@ const off = {
   showBudgetToClient: false,
   showDetailedPricing: false,
   showAssignedTeam: false,
+  showDocuments: false,
+  showPhotos: false,
+  showDailyUpdates: false,
+  showChangeOrders: false,
+  allowClientMessaging: false,
 };
 
 test('a stored row turns on exactly the switches it stores', () => {
@@ -20,14 +25,55 @@ test('a stored row turns on exactly the switches it stores', () => {
     client_portal_enabled: true,
     show_schedule: true,
     show_budget: false,
+    show_documents: true,
+    show_photos: false,
+    show_daily_updates: true,
+    show_change_orders: false,
   });
   const [out] = applyVisibility([off], new Map([[off.buildsuiteProjectId, overlay]]));
   assert.equal(out!.clientPortalEnabled, true);
   assert.equal(out!.showScheduleToClient, true);
   assert.equal(out!.showBudgetToClient, false);
+  assert.equal(out!.showDocuments, true);
+  assert.equal(out!.showPhotos, false);
+  assert.equal(out!.showDailyUpdates, true);
+  assert.equal(out!.showChangeOrders, false);
   // No column exists for these; the overlay must not touch them.
   assert.equal(out!.showDetailedPricing, false);
   assert.equal(out!.showAssignedTeam, false);
+});
+
+test('a column the row does not carry reads as off, never as on', () => {
+  // A deployment whose table predates the four section columns must fail
+  // closed, not open.
+  const overlay = overlayFromRow({
+    project_id: off.buildsuiteProjectId,
+    client_portal_enabled: true,
+    show_schedule: false,
+    show_budget: false,
+  });
+  const [out] = applyVisibility([off], new Map([[off.buildsuiteProjectId, overlay]]));
+  assert.equal(out!.showDocuments, false);
+  assert.equal(out!.showPhotos, false);
+  assert.equal(out!.showDailyUpdates, false);
+  assert.equal(out!.showChangeOrders, false);
+});
+
+test('client messaging follows the master switch, because no column stores it', () => {
+  const on = overlayFromRow({
+    project_id: off.buildsuiteProjectId,
+    client_portal_enabled: true,
+    show_schedule: false,
+    show_budget: false,
+  });
+  const closed = overlayFromRow({
+    project_id: off.buildsuiteProjectId,
+    client_portal_enabled: false,
+    show_schedule: false,
+    show_budget: false,
+  });
+  assert.equal(on.allowClientMessaging, true);
+  assert.equal(closed.allowClientMessaging, false);
 });
 
 test('a project with no row is returned untouched, so nothing turns on by omission', () => {

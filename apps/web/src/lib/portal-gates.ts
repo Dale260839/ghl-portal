@@ -26,8 +26,17 @@ import {
 import { ISSUES, PROJECTS } from './data/fixtures.ts';
 import { getHubSchedule } from './hub-db/schedule.ts';
 import { getHubMedia } from './hub-db/media.ts';
+import { getHubMessages } from './hub-db/messages.ts';
+import { isUuid } from './data/visibility-overlay.ts';
+import {
+  getHubOperational,
+  isPunchItem,
+  punchItemFromIssue,
+  type HubIssue,
+} from './hub-db/operational.ts';
 import { clientSelection, getHubSelections } from './hub-db/selections.ts';
-import { scopeOfProject } from './tenant-scope.ts';
+import { hubScopeOfProject } from './tenant-scope.ts';
+import { clientCanSeeDocument } from './document-folders.ts';
 import type {
   BudgetLine,
   ClientPaymentLine,
@@ -113,8 +122,11 @@ export async function scheduleFor(project: Project): Promise<ClientScheduleItem[
   const hub = getHubSchedule();
   if (!hub.available) return [];
 
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) return [];
+
   const items = await hub.schedule.listForProject(
-    scopeOfProject(project),
+    scope,
     project.buildsuiteProjectId,
   );
 
@@ -156,14 +168,26 @@ async function filesFor(project: Project, kind: 'document' | 'photo'): Promise<C
   const hub = getHubMedia();
   if (!hub.available) return [];
 
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) return [];
+
   const items = await hub.media.listForProject(
-    scopeOfProject(project),
+    scope,
     kind,
     project.buildsuiteProjectId,
   );
 
+  // Documents carry a second gate: the folder. The release switch alone is not
+  // enough, because a row released before folders existed still sits in a
+  // legacy category, and one released and later moved into a trade folder
+  // would otherwise keep showing. Photos have no folders, so the switch is all
+  // there is on that side.
   return items
-    .filter((item) => item.clientVisible)
+    .filter((item) =>
+      kind === 'document'
+        ? clientCanSeeDocument({ category: item.category, clientVisible: item.clientVisible })
+        : item.clientVisible,
+    )
     .map((item) => ({
       id: item.id,
       label: item.label,
@@ -178,13 +202,57 @@ async function filesFor(project: Project, kind: 'document' | 'photo'): Promise<C
 
 
 
-export function messagesFor(project: Project): Message[] {
+/**
+ * The messages a homeowner sees.
+ *
+ * ---------------------------------------------------------------------------
+ * READS THE HUB, NOT FIXTURES (2026-09-10)
+ *
+ * Same story as the schedule. Every message screen rendered the same in-memory
+ * array, so nothing anyone typed survived the request and the three sides of
+ * the conversation never met. This reads `hub_messages`.
+ *
+ * The gate is the master switch, `clientPortalEnabled`. It used to be
+ * `allowClientMessaging`, which BuildSuite never sets and the Hub has no column
+ * for, so on every live project it was false and the homeowner's thread was
+ * permanently shut. Portal on means they have a thread; the fixture projects
+ * keep their own flag so the demo data reads the way it always has.
+ *
+ * `clientVisibleOnly` is passed down to the QUERY. An internal note is never
+ * fetched here, so no screen can leak one by forgetting to filter.
+ * ---------------------------------------------------------------------------
+ */
+export async function messagesFor(project: Project): Promise<Message[]> {
   if (!portalOpen(project)) return [];
-  // §6.1 — a contractor can switch client messaging off entirely.
+
+  const projectId = project.buildsuiteProjectId;
+  const hub = getHubMessages();
+  if (hub.available && isUuid(projectId)) {
+    const scope = await hubScopeOfProject(project);
+    if (scope === null) return [];
+    const rows = await hub.messages.listForProject(scope, projectId, {
+      clientVisibleOnly: true,
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      projectId: row.projectId,
+      threadId: `project-${row.projectId}`,
+      threadCategory: 'Project',
+      sender: row.author,
+      senderRole: row.authorRole,
+      fromClient: row.authorRole === 'client',
+      message: row.body,
+      sentDate: row.createdAt,
+      clientVisible: true,
+    }));
+  }
+
+  // Fixture projects: the id is not a uuid, so the uuid-keyed table cannot be
+  // asked about them. §6.1's per-project messaging flag still applies here.
   if (!project.allowClientMessaging) return [];
-  return MESSAGES.filter(
-    (m) => m.projectId === project.buildsuiteProjectId && m.clientVisible,
-  ).sort((a, b) => a.sentDate.localeCompare(b.sentDate));
+  return MESSAGES.filter((m) => m.projectId === projectId && m.clientVisible).sort((a, b) =>
+    a.sentDate.localeCompare(b.sentDate),
+  );
 }
 
 /**
@@ -200,23 +268,76 @@ export function messagesFor(project: Project): Message[] {
  */
 export type ClientIssue = Omit<Issue, 'internalNotes' | 'assignedTo'>;
 
-function toClientIssue(i: Issue): ClientIssue {
-  const { internalNotes: _notes, assignedTo: _assignee, ...safe } = i;
+/**
+ * Takes the Hub shape as well as the fixture one, so the extra columns a stored
+ * row carries are destructured away here rather than riding along on an object
+ * spread. `clientVisible` and `raisedByRole` are not secrets, but a client
+ * response should carry what the client needs and nothing else.
+ */
+function toClientIssue(i: Issue | HubIssue): ClientIssue {
+  const {
+    internalNotes: _notes,
+    assignedTo: _assignee,
+    ...rest
+  } = i as HubIssue;
+  const {
+    clientVisible: _visible,
+    raisedByRole: _role,
+    resolvedAt: _resolved,
+    ...safe
+  } = rest;
   return safe;
 }
 
 /**
  * Issues the client may see.
  *
- * §6.1 has no per-issue client-visible switch, so the rule is the portal master
- * switch plus a published `clientUpdate`: an issue nobody has written a client
- * line for is one nobody has decided to tell them about.
+ * ---------------------------------------------------------------------------
+ * READS THE HUB, NOT FIXTURES (2026-09-10)
+ *
+ * The contractor's Issues screen and the crew's phones both write `hub_issues`.
+ * This read stayed on the `ISSUES` fixture, so releasing an issue did nothing a
+ * homeowner could see — the switch was decorative on this side, exactly as the
+ * schedule's was before it.
+ *
+ * Converted the way `changeOrdersFor` was: fixture projects keep their fixture
+ * data so the demo and the gate tests still have something to prove a rule
+ * against, and a real project reads the database.
+ *
+ * The gate is now BOTH halves rather than a proxy for one of them. It used to
+ * be "has a client update", because `Issue` had no per-row switch to read; the
+ * stored row has `client_visible`, so the rule is the portal master switch plus
+ * that flag plus a client line actually written. An issue released with nothing
+ * written for the homeowner would show them a bare title and no answer.
+ *
+ * Punch list items live in the same table under their own category. They belong
+ * to `punchListFor` and are excluded here, or a snag would appear twice.
+ * ---------------------------------------------------------------------------
  */
-export function issuesFor(project: Project): ClientIssue[] {
+export async function issuesFor(project: Project): Promise<ClientIssue[]> {
   if (!portalOpen(project)) return [];
-  return ISSUES.filter(
-    (i) => i.projectId === project.buildsuiteProjectId && i.clientUpdate.trim() !== '',
-  )
+
+  if (projectFor(project.buildsuiteProjectId) !== null) {
+    return ISSUES.filter(
+      (i) => i.projectId === project.buildsuiteProjectId && i.clientUpdate.trim() !== '',
+    )
+      .map(toClientIssue)
+      .sort((a, b) => b.submittedDate.localeCompare(a.submittedDate));
+  }
+
+  const hub = getHubOperational();
+  if (!hub.available) return [];
+
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) return [];
+
+  const rows = await hub.ops.listIssues(
+    scope,
+    project.buildsuiteProjectId,
+  );
+
+  return rows
+    .filter((i) => !isPunchItem(i) && i.clientVisible && i.clientUpdate.trim() !== '')
     .map(toClientIssue)
     .sort((a, b) => b.submittedDate.localeCompare(a.submittedDate));
 }
@@ -248,8 +369,11 @@ export async function selectionsFor(project: Project) {
   const hub = getHubSelections();
   if (!hub.available) return [];
 
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) return [];
+
   const rows = await hub.selections.listSelections(
-    scopeOfProject(project),
+    scope,
     project.buildsuiteProjectId,
   );
   return rows.filter((r) => r.clientVisible).map(clientSelection);
@@ -269,8 +393,11 @@ export async function changeOrdersFor(project: Project) {
   const hub = getHubSelections();
   if (!hub.available) return [];
 
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) return [];
+
   const rows = await hub.selections.listChangeOrders(
-    scopeOfProject(project),
+    scope,
     project.buildsuiteProjectId,
   );
   return rows.filter((r) => r.clientVisible);
@@ -297,10 +424,36 @@ function toClientPunchItem(p: PunchListItem): ClientPunchItem {
  * A closeout item is a task inside the contract, not a priced change, so the
  * gate is the portal master switch plus the per-item publish flag — no budget
  * switch. Oldest number first, so the list reads as a sequence.
+ *
+ * Hub-backed since 2026-09-10, the same way `issuesFor` is, and for the same
+ * reason: the contractor's Completion screen and the crew's phones write these
+ * rows, and a release that nothing read was a switch connected to nothing. A
+ * stored punch item is a `hub_issues` row in the `Punch List` category —
+ * `punchItemFromIssue` is the one place that translation lives.
  */
-export function punchListFor(project: Project): ClientPunchItem[] {
+export async function punchListFor(project: Project): Promise<ClientPunchItem[]> {
   if (!portalOpen(project)) return [];
-  return PUNCH_LIST.filter((p) => p.projectId === project.buildsuiteProjectId && p.clientVisible)
+
+  if (projectFor(project.buildsuiteProjectId) !== null) {
+    return PUNCH_LIST.filter((p) => p.projectId === project.buildsuiteProjectId && p.clientVisible)
+      .map(toClientPunchItem)
+      .sort((a, b) => a.itemNumber.localeCompare(b.itemNumber));
+  }
+
+  const hub = getHubOperational();
+  if (!hub.available) return [];
+
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) return [];
+
+  const rows = await hub.ops.listIssues(
+    scope,
+    project.buildsuiteProjectId,
+  );
+
+  return rows
+    .filter((i) => isPunchItem(i) && i.clientVisible)
+    .map(punchItemFromIssue)
     .map(toClientPunchItem)
     .sort((a, b) => a.itemNumber.localeCompare(b.itemNumber));
 }

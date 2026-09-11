@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 
 import { parseSectionsSchedule } from '../payment-schedule.ts';
 import { composeFirstInvoice, type InvoiceContext, type InvoiceRecipient } from './invoice.ts';
-import { buildGhlInvoicePayload, createGhlInvoiceRail } from './ghl-rail.ts';
+import {
+  buildGhlInvoicePayload,
+  businessDetailsFor,
+  createGhlInvoiceRail,
+  type InvoiceBusinessDetails,
+} from './ghl-rail.ts';
 
 const SCHEDULE = parseSectionsSchedule({
   payment_schedule: [
@@ -22,12 +27,19 @@ const RECIPIENT: InvoiceRecipient = {
   email: 'dana@example.com',
 };
 const ISSUE = new Date('2026-09-05T00:00:00Z');
+const BUSINESS: InvoiceBusinessDetails = {
+  name: 'Example Builders',
+  logoUrl: 'https://cdn.example/logo.png',
+  phone: '+1 555 0100',
+  website: 'https://example.test',
+  address: '12 Mill Road, Austin, TX, 78701',
+};
 
 test('the payload matches the real GHL shape, with an ad-hoc line item', () => {
   const draft = composeFirstInvoice(SCHEDULE, CTX)!;
   const p = buildGhlInvoicePayload(draft, RECIPIENT, {
     locationId: 'IifYfP2B2NUaoDPdsTTa',
-    businessName: 'Alliance For Contractors',
+    business: BUSINESS,
     issue: ISSUE,
     dueInDays: 5,
   });
@@ -45,10 +57,43 @@ test('the payload matches the real GHL shape, with an ad-hoc line item', () => {
   assert.match(p.termsNotes, /Due upon signed contract/);
 });
 
+test('the business block carries the contractor logo and contact, on GHL keys', () => {
+  const draft = composeFirstInvoice(SCHEDULE, CTX)!;
+  const p = buildGhlInvoicePayload(draft, RECIPIENT, {
+    locationId: 'L', business: BUSINESS, issue: ISSUE, dueInDays: 5,
+  });
+
+  assert.deepEqual(p.businessDetails, {
+    name: 'Example Builders',
+    address: '12 Mill Road, Austin, TX, 78701',
+    phoneNo: '+1 555 0100',
+    website: 'https://example.test',
+    logoUrl: 'https://cdn.example/logo.png',
+  });
+});
+
+test('a blank business field is omitted, not sent as an empty string', () => {
+  // GoHighLevel prints what it is given. An empty website is a blank line on a
+  // document a homeowner reads, so the key never travels.
+  const details = businessDetailsFor({ name: '  Example Builders  ', website: '', phone: null });
+  assert.deepEqual(details, { name: 'Example Builders' });
+});
+
+test('with no business name there is no business block at all', () => {
+  // Never a hardcoded company name: GHL falls back to the location settings.
+  const draft = composeFirstInvoice(SCHEDULE, CTX)!;
+  const p = buildGhlInvoicePayload(draft, RECIPIENT, {
+    locationId: 'L', issue: ISSUE, dueInDays: 5,
+  });
+  assert.equal(p.businessDetails, undefined);
+  assert.ok(!Object.prototype.hasOwnProperty.call(p, 'businessDetails'));
+  assert.equal(businessDetailsFor({ name: '   ' }), undefined);
+});
+
 test('the due date is offset from the issue date', () => {
   const draft = composeFirstInvoice(SCHEDULE, CTX)!;
   const p = buildGhlInvoicePayload(draft, RECIPIENT, {
-    locationId: 'L', businessName: 'B', issue: ISSUE, dueInDays: 5,
+    locationId: 'L', business: BUSINESS, issue: ISSUE, dueInDays: 5,
   });
   assert.equal(p.issueDate, '2026-09-05');
   assert.equal(p.dueDate, '2026-09-10');
@@ -57,7 +102,7 @@ test('the due date is offset from the issue date', () => {
 test('sentTo carries the recipient email, ready for a person to send from GHL', () => {
   const draft = composeFirstInvoice(SCHEDULE, CTX)!;
   const p = buildGhlInvoicePayload(draft, RECIPIENT, {
-    locationId: 'L', businessName: 'B', issue: ISSUE, dueInDays: 5,
+    locationId: 'L', business: BUSINESS, issue: ISSUE, dueInDays: 5,
   });
   assert.deepEqual(p.sentTo.email, ['dana@example.com']);
 });

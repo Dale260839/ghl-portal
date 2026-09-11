@@ -27,16 +27,19 @@ import { getHubVisibility } from './hub-db/visibility';
 import { isUuid } from './data/visibility-overlay.ts';
 import { getHubRecords, ARCHIVABLE_TABLES, type ArchivableTable } from './hub-db/records';
 import { getHubSchedule } from './hub-db/schedule.ts';
+import { getHubMessages } from './hub-db/messages.ts';
 import { getHubOperational } from './hub-db/operational.ts';
 import { getHubMedia } from './hub-db/media.ts';
+import { CLIENT_FOLDER, DEFAULT_FOLDER, isFieldFolder } from './document-folders.ts';
 import { getHubSelections } from './hub-db/selections.ts';
 import { requireAccess } from './access.ts';
 import { clientProjectsFor } from './client-scope.ts';
-import { scopeOfProject } from './tenant-scope.ts';
+import { hubScopeOfProject } from './tenant-scope.ts';
 import { getHubStorage } from './hub-db/storage.ts';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
 import { resolveInvoiceRail, draftFromStored } from './invoicing/rail.ts';
+import { resolveContractorProfile } from './buildsuite/contractor-identity.ts';
 import { getProposalsReader } from './buildsuite/proposals';
 import { paymentScheduleDrafts } from './payment-schedule';
 import { GRANTABLE_RESOURCES } from './permissions';
@@ -390,6 +393,22 @@ export async function sendFieldMessage(formData: FormData) {
   const projectId = String(formData.get('projectId') ?? '');
   const body = String(formData.get('body') ?? '').trim();
   if (projectId === '' || body === '') return;
+
+  // Written to the Hub where there is one, so the note survives the request and
+  // the contractor sees it on their side. Internal, and stored with the field
+  // role so the contractor screen can say where it came from and offer no
+  // release control for it.
+  const hub = getHubMessages();
+  if (hub.available) {
+    await hub.messages.post(
+      await actionTenantScope(session),
+      { projectId, body, clientVisible: false },
+      { name: session.name, role: 'field' },
+    );
+    revalidatePath('/field/messages');
+    revalidatePath(`/dashboard/projects/${projectId}/messages`);
+    redirect('/field/messages?sent=1');
+  }
 
   MESSAGES.push({
     id: `msg-field-${MESSAGES.length + 1}`,
@@ -987,7 +1006,31 @@ export async function createInvoiceOnRail(formData: FormData) {
   const project = await db.getProject(scope, draft.projectId);
   if (project === null) throw new Error('that project is not readable');
 
-  const rail = resolveInvoiceRail();
+  // The contractor's own logo and contact details, so the invoice GHL receives
+  // is theirs rather than a bare line item (Chris, 10 Sep). Null when the
+  // session is not linked to a contractor record; the rail then sends no
+  // business block at all rather than somebody else's name.
+  const profile = await resolveContractorProfile(scope);
+  const rail = resolveInvoiceRail(
+    process.env,
+    profile === null || profile.businessName === null
+      ? undefined
+      : {
+          name: profile.businessName,
+          logoUrl: profile.logoUrl,
+          phone: profile.phone,
+          website: profile.website,
+          address: profile.address,
+        },
+  );
+  // The homeowner's email, read once for this purpose. Without it the rail
+  // refuses (an invoice with nobody to send it to), which is what happened
+  // on every attempt until 10 Sep: the recipient was built with email ''.
+  const buildsuiteForEmail = getBuildSuiteReader();
+  const clientEmail = buildsuiteForEmail.available
+    ? await buildsuiteForEmail.clientEmailForProject(scope, draft.projectId)
+    : null;
+
   const invoice = draftFromStored(draft, project);
   const result = await rail.createDraft(invoice, {
     ghlContactId: project.primaryContactId,
@@ -995,7 +1038,7 @@ export async function createInvoiceOnRail(formData: FormData) {
     // The address is not ours to supply — the rail attaches to the contact,
     // which already holds it. Passing one here would be a second source of
     // truth for where an invoice goes.
-    email: '',
+    email: clientEmail ?? '',
   });
 
   if (!result.created) {
@@ -1277,7 +1320,13 @@ export async function attachProjectFile(formData: FormData) {
       // A photo with no caption is fine; a document with no title is not, and
       // the repository enforces that rather than this form.
       label: label || (file instanceof File ? file.name : ''),
-      category: String(formData.get('category') ?? ''),
+      // Documents are filed into a folder. A form that somehow sends none
+      // lands in the general field folder rather than nowhere, so the file is
+      // never invisible to the crew and never accidentally client-side.
+      category:
+        kind === 'document'
+          ? String(formData.get('category') ?? '').trim() || DEFAULT_FOLDER
+          : String(formData.get('category') ?? ''),
       storagePath,
       externalUrl: externalUrl || null,
       clientVisible: false,
@@ -1299,10 +1348,27 @@ export async function updateProjectFile(formData: FormData) {
   const projectId = String(formData.get('projectId') ?? '');
   if (itemId === '') throw new Error('itemId is required');
 
+  const requestedFolder = String(formData.get('category') ?? '').trim();
+  let clientVisible = formData.get('clientVisible') !== null;
+  let category = requestedFolder;
+
+  if (kind === 'document') {
+    // The two folder rules, enforced here and not only in the form. A hand
+    // rolled POST is the case that matters: the UI hides the release switch on
+    // a field folder, and this makes hiding it more than a suggestion.
+    if (isFieldFolder(requestedFolder)) clientVisible = false;
+    // Releasing a document IS filing it under Client. Leaving it where it was
+    // would mean a released row sitting in a trade folder, which the homeowner
+    // gate refuses anyway — the file would simply never appear.
+    if (clientVisible) category = CLIENT_FOLDER;
+  }
+
   await media.update(scope, kind, itemId, {
     label: String(formData.get('label') ?? ''),
-    category: String(formData.get('category') ?? ''),
-    clientVisible: formData.get('clientVisible') !== null,
+    // An empty folder means "leave it where it is" — the Unsorted rows offer a
+    // placeholder option, and choosing nothing must not blank the category.
+    ...(category === '' ? {} : { category }),
+    clientVisible,
   });
 
   revalidatePath(`/dashboard/projects/${projectId}/${kind === 'document' ? 'documents' : 'photos'}`);
@@ -1509,7 +1575,13 @@ export async function recordClientDecision(formData: FormData) {
   const project = mine.find((p) => p.buildsuiteProjectId === projectId);
   if (project === undefined) throw new Error('that project is not one of yours');
 
-  await hub.selections.recordClientDecision(scopeOfProject(project), kind, itemId, {
+  // Filed under the project's contractor: the repository asserts one, and the
+  // owner profile alone is not it.
+  const decisionScope = await hubScopeOfProject(project);
+  if (decisionScope === null) {
+    throw new Error('this project is not linked to a contractor, so nothing can be filed under it');
+  }
+  await hub.selections.recordClientDecision(decisionScope, kind, itemId, {
     accepted: String(formData.get('decision') ?? '') === 'approve',
     comments: String(formData.get('comments') ?? ''),
   });

@@ -25,7 +25,8 @@ import {
  *
  * Write: an upsert keyed on `project_id`, filed under the resolved contractor
  * (`assertContractor` — the id `proposals` and the Hub's tables use, never an
- * auth profile). Only the three switches the table stores are written.
+ * auth profile). Only the seven switches the table stores are written: the
+ * master switch, schedule, budget, and the four section switches.
  *
  * Fails closed. If the Hub is unreachable the read returns nothing, every
  * switch stays off, and the homeowner sees nothing — the safe direction.
@@ -45,7 +46,16 @@ export class HubVisibility implements VisibilityOverlaySource {
     try {
       return await this.client.select<VisibilityRow>({
         from: 'hub_visibility_settings',
-        columns: ['project_id', 'client_portal_enabled', 'show_schedule', 'show_budget'],
+        columns: [
+          'project_id',
+          'client_portal_enabled',
+          'show_schedule',
+          'show_budget',
+          'show_documents',
+          'show_photos',
+          'show_daily_updates',
+          'show_change_orders',
+        ],
         filters: { project_id: `in.(${idsKey})` },
         limit: 500,
       });
@@ -79,6 +89,10 @@ export class HubVisibility implements VisibilityOverlaySource {
       client_portal_enabled: switches.clientPortalEnabled,
       show_schedule: switches.showScheduleToClient,
       show_budget: switches.showBudgetToClient,
+      show_documents: switches.showDocuments,
+      show_photos: switches.showPhotos,
+      show_daily_updates: switches.showDailyUpdates,
+      show_change_orders: switches.showChangeOrders,
       updated_at: new Date().toISOString(),
       updated_by: actor.name,
     };

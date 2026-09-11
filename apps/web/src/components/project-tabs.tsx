@@ -42,8 +42,12 @@ export function ProjectTabs({ id }: { id: string }) {
   const pathname = usePathname();
   const base = `/dashboard/projects/${id}`;
 
+  // Wraps onto a second row rather than scrolling sideways. The strip used to
+  // hide its scrollbar, so on a laptop the last tabs (Issues, Payments,
+  // Completion, Visibility) were simply not there as far as the person looking
+  // could tell. Chris circled the cut-off "Messages" on 11 Sep.
   return (
-    <nav className="-mb-px flex gap-1 overflow-x-auto border-b border-navy-100 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <nav className="-mb-px flex flex-wrap gap-x-1 gap-y-0 border-b border-navy-100">
       {TABS.map((tab) => {
         const href = tab.seg === '' ? base : `${base}/${tab.seg}`;
         const active = tab.seg === '' ? pathname === base : pathname === href;

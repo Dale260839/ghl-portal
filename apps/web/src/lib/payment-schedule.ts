@@ -360,8 +360,31 @@ function lineFromJson(raw: unknown, order: number): ScheduleLine | null {
     percent: percent !== null && percent > 0 && percent <= 100 ? percent : null,
     amount,
     description: terms,
-    raw: JSON.stringify(row),
+    // The review screen shows this as "what the proposal said". For a structured
+    // line the proposal said a milestone, a percent, an amount and a trigger, so
+    // print those the way the markdown shape reads, not the JSON the row is
+    // stored as. A contractor checking a parse should not have to read braces.
+    raw: describeStructuredLine({ milestone, percent, amount, terms }),
   };
+}
+
+function describeStructuredLine(line: {
+  milestone: string;
+  percent: number | null;
+  amount: number | null;
+  terms: string;
+}): string {
+  const figures: string[] = [];
+  if (line.percent !== null) figures.push(`${line.percent}%`);
+  if (line.amount !== null) {
+    figures.push(
+      `$${line.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    );
+  }
+  const head = line.milestone === '' ? 'Payment' : line.milestone;
+  const bracket = figures.length > 0 ? ` (${figures.join(', ')})` : '';
+  const tail = line.terms === '' ? '' : ` · ${line.terms}`;
+  return `${head}${bracket}${tail}`;
 }
 
 /**

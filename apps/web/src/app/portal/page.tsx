@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { getSession } from '@/lib/session';
 
 import { scopeOfProject } from '@/lib/scope';
+import { hubScopeOfProject } from '@/lib/tenant-scope';
 import { toClientMilestones, toClientProject, toClientUpdates } from '@/lib/client-view';
 import { Badge, Card, CardHeader, ProgressBar, currency, shortDate } from '@/components/ui';
 import { hasFinancials, hasOperationalDetail, type Contact, type Project } from '@/lib/data/types';
@@ -82,17 +83,50 @@ export default async function ClientPortal({
     return (
       <Card className="px-6 py-12 text-center">
         <p className="text-sm font-medium text-navy-900">This project isn&apos;t available yet.</p>
-        <p className="mt-1.5 text-xs text-navy-400">
-          Your contractor hasn&apos;t enabled portal access for it.
-        </p>
+        {session?.role === 'contractor' ? (
+          <>
+            {/* A previewing contractor is the one person who can change this,
+                so tell them where, rather than leaving them on a dead end
+                whose only exit is Sign out. */}
+            <p className="mt-1.5 text-xs text-navy-400">
+              The client portal is switched off for this project, so the homeowner sees exactly
+              this. Turn on <span className="font-medium text-navy-700">Client Portal Enabled</span>{' '}
+              under Visibility to release it.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href={`/dashboard/projects/${project.buildsuiteProjectId}/visibility`}
+                className="press rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
+              >
+                Open Visibility settings
+              </Link>
+              <Link
+                href="/dashboard"
+                className="rounded-lg border border-navy-200 px-4 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50"
+              >
+                Back to dashboard
+              </Link>
+            </div>
+          </>
+        ) : (
+          <p className="mt-1.5 text-xs text-navy-400">
+            Your contractor hasn&apos;t enabled portal access for it.
+          </p>
+        )}
       </Card>
     );
   }
 
   const view = gated.view;
+  // Updates and milestones live in the Hub, filed under the project's
+  // contractor. Read them through a source that knows that contractor, or the
+  // homeowner sees an empty list for work that was released to them.
+  const hubScope = await hubScopeOfProject(project);
+  const childScope = hubScope ?? scopeOfProject(project);
+  const opsDb = hubScope === null ? db : await currentDataSource(hubScope);
   const [allUpdates, allMilestones] = await Promise.all([
-    db.listDailyUpdates(scopeOfProject(project), project.buildsuiteProjectId),
-    db.listMilestones(scopeOfProject(project), project.buildsuiteProjectId),
+    opsDb.listDailyUpdates(childScope, project.buildsuiteProjectId),
+    opsDb.listMilestones(childScope, project.buildsuiteProjectId),
   ]);
   const updates = toClientUpdates(allUpdates, project);
   const milestones = toClientMilestones(allMilestones, project);
@@ -177,7 +211,14 @@ export default async function ClientPortal({
           <div>
             <dt className="text-xs tracking-wide text-navy-400 uppercase">Up next</dt>
             <dd className="mt-1 text-sm font-medium text-navy-900">
-              {view.nextMilestone !== '' ? view.nextMilestone : 'Not scheduled yet'}
+              {/* BuildSuite records no "next milestone", so for a live project
+                  the first released milestone that is not complete is the
+                  honest answer. Only when there is none does it say so. */}
+              {view.nextMilestone !== ''
+                ? view.nextMilestone
+                : upcoming[0] !== undefined
+                  ? `${upcoming[0].milestoneName}${upcoming[0].plannedStart ? `, ${shortDate(upcoming[0].plannedStart)}` : ''}`
+                  : 'Not scheduled yet'}
             </dd>
           </div>
           <div>

@@ -2,7 +2,7 @@ import 'server-only';
 
 import { getHubClient, type HubClient } from './client.ts';
 import { assertContractor, type TenantScope } from '../tenancy.ts';
-import type { DailyUpdate, Issue, Milestone, Task } from '../data/types.ts';
+import type { DailyUpdate, Issue, Milestone, PunchListItem, Task } from '../data/types.ts';
 
 /**
  * The operational records — milestones, tasks, daily updates, issues.
@@ -81,6 +81,7 @@ interface IssueRow {
   project_area: string | null;
   priority: string;
   raised_by: string | null;
+  raised_by_role: string | null;
   assigned_to: string | null;
   created_at: string;
   target_resolution_date: string | null;
@@ -90,7 +91,112 @@ interface IssueRow {
   resolution: string | null;
   client_confirmation: boolean;
   client_visible: boolean;
+  resolved_at: string | null;
   archived_at: string | null;
+}
+
+/**
+ * An issue as the Hub stores it: `Issue` plus the three columns the shared view
+ * model has no room for.
+ *
+ * `clientVisible` in particular has to travel. `Issue` predates the per-row
+ * release switch and carries only `clientUpdate`, so a screen asking "can the
+ * homeowner see this row" had nothing to read. Extending rather than widening
+ * `Issue` keeps every existing consumer working unchanged.
+ */
+export interface HubIssue extends Issue {
+  /** §9.1 — the contractor's per-row release switch. */
+  clientVisible: boolean;
+  /** 'contractor', 'field' or 'client'. Drives "client raised" on the punch list. */
+  raisedByRole: string;
+  resolvedAt: string | null;
+}
+
+/**
+ * A punch list item is an issue in the `Punch List` category.
+ *
+ * There is no `hub_punch_list` table and there should not be one: a snag is an
+ * issue with a narrower vocabulary. One table means one tenant filter, one
+ * archive path and one release switch rather than two of each drifting apart.
+ */
+export const PUNCH_CATEGORY = 'Punch List';
+
+/**
+ * Whether a stored row is a punch item.
+ *
+ * A function rather than `i.category === PUNCH_CATEGORY` at each call site, and
+ * the reason is a type: `Issue['category']` is `IssueCategory` from the
+ * contracts package, and `Punch List` is not one of its eleven values. Comparing
+ * them directly is a compile error even though the comparison is exactly right
+ * at runtime. Taking a plain `string` states the honest thing — the column holds
+ * a category name, and this is the one that means closeout.
+ *
+ * Widening `IssueCategory` itself would be the alternative, and it would be
+ * wrong: `Punch List` is not a kind of problem a person reports, it is which
+ * list the row belongs to.
+ */
+export function isPunchItem(issue: { category: string }): boolean {
+  return issue.category === PUNCH_CATEGORY;
+}
+
+/** The statuses an issue may hold. Kept in one place so a select cannot invent one. */
+export const ISSUE_STATUSES: readonly Issue['status'][] = [
+  'Open',
+  'Assigned',
+  'In Progress',
+  'Resolved',
+  'Closed',
+];
+
+/**
+ * Punch list vocabulary over the issue statuses.
+ *
+ * The closeout list says Open / Scheduled / Completed / Verified because that is
+ * what a site manager calls those four states. The stored value is still an
+ * issue status, so nothing needs a second status column and a punch item that
+ * gets re-categorised keeps a meaningful state.
+ */
+export const PUNCH_STATUSES: readonly PunchListItem['status'][] = [
+  'Open',
+  'Scheduled',
+  'Completed',
+  'Verified',
+];
+
+export const ISSUE_STATUS_FOR_PUNCH: Record<PunchListItem['status'], Issue['status']> = {
+  Open: 'Open',
+  Scheduled: 'In Progress',
+  Completed: 'Resolved',
+  Verified: 'Closed',
+};
+
+const PUNCH_STATUS_FOR_ISSUE: Record<string, PunchListItem['status']> = {
+  Open: 'Open',
+  // An assigned snag has a person on it, which on the closeout board reads as
+  // scheduled. It is the same state wearing the other vocabulary.
+  Assigned: 'Scheduled',
+  'In Progress': 'Scheduled',
+  Resolved: 'Completed',
+  Closed: 'Verified',
+};
+
+/** Render a stored issue as the punch item the closeout screens speak in. */
+export function punchItemFromIssue(issue: HubIssue): PunchListItem {
+  return {
+    id: issue.id,
+    projectId: issue.projectId,
+    itemNumber: issue.issueNumber,
+    title: issue.issueTitle,
+    location: issue.projectArea,
+    description: issue.description,
+    status: PUNCH_STATUS_FOR_ISSUE[issue.status] ?? 'Open',
+    reportedBy: issue.reportedBy,
+    raisedByClient: issue.raisedByRole.toLowerCase() === 'client',
+    targetDate: issue.targetResolutionDate ?? '',
+    completedDate: issue.resolvedAt === null ? '' : issue.resolvedAt.slice(0, 10),
+    internalNotes: issue.internalNotes,
+    clientVisible: issue.clientVisible,
+  };
 }
 
 const str = (v: string | null | undefined): string => v ?? '';
@@ -142,7 +248,7 @@ function toUpdate(r: UpdateRow): DailyUpdate {
   };
 }
 
-function toIssue(r: IssueRow): Issue {
+function toIssue(r: IssueRow): HubIssue {
   return {
     id: r.id,
     projectId: r.project_id,
@@ -161,6 +267,9 @@ function toIssue(r: IssueRow): Issue {
     clientUpdate: str(r.client_update),
     resolution: str(r.resolution),
     clientConfirmation: r.client_confirmation,
+    clientVisible: r.client_visible === true,
+    raisedByRole: str(r.raised_by_role),
+    resolvedAt: r.resolved_at ?? null,
   };
 }
 
@@ -232,7 +341,7 @@ export class HubOperational {
     return rows.map(toUpdate);
   }
 
-  async listIssues(scope: TenantScope, projectId?: string): Promise<Issue[]> {
+  async listIssues(scope: TenantScope, projectId?: string): Promise<HubIssue[]> {
     const { filters } = this.tenant(scope, 'issues');
     const rows = await this.client.select<IssueRow>({
       from: 'hub_issues',
@@ -481,30 +590,151 @@ export class HubOperational {
     });
   }
 
+  /**
+   * The next per-project reference, e.g. `007`.
+   *
+   * Counts what is already there, archived rows included — a number that has
+   * been said out loud on site must never come back attached to something else.
+   *
+   * RACE: two people filing at the same instant get the same number. Accepted
+   * for the pilot rather than adding a sequence table or a unique index that
+   * would turn a collision into a failed submission on a phone with one bar.
+   * The number is a human reference, not a key; the id is the key.
+   */
+  private async nextIssueNumber(
+    filters: Record<string, string>,
+    projectId: string,
+  ): Promise<string> {
+    const existing = await this.client.select<{ id: string }>({
+      from: 'hub_issues',
+      columns: ['id'],
+      filters: { ...filters, project_id: `eq.${projectId}` },
+      limit: 1000,
+    });
+    return String(existing.length + 1).padStart(3, '0');
+  }
+
   async createIssue(
     scope: TenantScope,
-    input: { projectId: string; issueTitle: string; category?: string; description?: string; priority?: string; raisedBy: string; raisedByRole: string },
-  ): Promise<Issue> {
-    const { contractorId } = this.tenant(scope, 'create issue');
+    input: {
+      projectId: string;
+      issueTitle: string;
+      category?: string;
+      description?: string;
+      projectArea?: string;
+      priority?: Issue['priority'];
+      targetResolutionDate?: string | null;
+      internalNotes?: string;
+      clientVisible?: boolean;
+      raisedBy: string;
+      raisedByRole: string;
+    },
+  ): Promise<HubIssue> {
+    const { filters, contractorId } = this.tenant(scope, 'create issue');
+    if (input.projectId.trim() === '') throw new TypeError('projectId is required');
+    if (input.issueTitle.trim() === '') throw new TypeError('an issue needs a title');
+
+    const issueNumber = await this.nextIssueNumber(filters, input.projectId);
+
     const [row] = await this.client.insert<IssueRow>({
       from: 'hub_issues',
       rows: [
         {
           project_id: input.projectId,
           contractor_id: contractorId,
-          issue_title: input.issueTitle,
+          issue_number: issueNumber,
+          issue_title: input.issueTitle.trim(),
           category: input.category ?? null,
           description: input.description ?? null,
+          project_area: input.projectArea?.trim() || null,
           priority: input.priority ?? 'Normal',
+          target_resolution_date: input.targetResolutionDate ?? null,
+          internal_notes: input.internalNotes ?? null,
           raised_by: input.raisedBy,
           raised_by_role: input.raisedByRole,
           // An issue is internal until someone publishes it, like everything
           // else. A client raising one still does not see the office's notes.
-          client_visible: false,
+          // The default is false and only a contractor may pass anything else.
+          client_visible: input.clientVisible ?? false,
         },
       ],
     });
     return toIssue(row!);
+  }
+
+  /**
+   * Edit an issue. Filtered on the asserted contractor as well as the id, so
+   * knowing an id is not enough to change another contractor's record.
+   *
+   * Only the fields given are written — a patch that always wrote every column
+   * would blank a resolution when the caller meant to change a status.
+   *
+   * `resolved_at` is DERIVED from the status rather than passed in, the same way
+   * `client_visible` is derived on a daily update: the two can never drift apart
+   * because one is computed from the other in one place.
+   */
+  async updateIssue(
+    scope: TenantScope,
+    issueId: string,
+    patch: {
+      status?: Issue['status'];
+      assignedTo?: string | null;
+      resolution?: string;
+      clientUpdate?: string;
+      clientVisible?: boolean;
+      internalNotes?: string;
+      targetResolutionDate?: string | null;
+      priority?: Issue['priority'];
+    },
+  ): Promise<void> {
+    const { contractorId } = this.tenant(scope, 'update issue');
+    if (issueId.trim() === '') throw new TypeError('issueId is required');
+
+    const values: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (patch.status !== undefined) {
+      values.status = patch.status;
+      const finished = patch.status === 'Resolved' || patch.status === 'Closed';
+      values.resolved_at = finished ? new Date().toISOString() : null;
+    }
+    if (patch.assignedTo !== undefined) values.assigned_to = patch.assignedTo;
+    if (patch.resolution !== undefined) values.resolution = patch.resolution;
+    if (patch.clientUpdate !== undefined) values.client_update = patch.clientUpdate;
+    if (patch.clientVisible !== undefined) values.client_visible = patch.clientVisible;
+    if (patch.internalNotes !== undefined) values.internal_notes = patch.internalNotes;
+    if (patch.targetResolutionDate !== undefined) {
+      values.target_resolution_date = patch.targetResolutionDate;
+    }
+    if (patch.priority !== undefined) values.priority = patch.priority;
+
+    await this.client.update({
+      from: 'hub_issues',
+      filters: { id: `eq.${issueId}`, contractor_id: `eq.${contractorId}` },
+      patch: values,
+    });
+  }
+
+  /** Archive rather than delete. An issue that was raised is a record. */
+  async archiveIssue(
+    scope: TenantScope,
+    issueId: string,
+    actor: { name: string },
+  ): Promise<void> {
+    const { contractorId } = this.tenant(scope, 'archive issue');
+    if (issueId.trim() === '') throw new TypeError('issueId is required');
+
+    await this.client.update({
+      from: 'hub_issues',
+      filters: {
+        id: `eq.${issueId}`,
+        contractor_id: `eq.${contractorId}`,
+        archived_at: 'is.null',
+      },
+      patch: {
+        archived_at: new Date().toISOString(),
+        archived_by: actor.name,
+        updated_at: new Date().toISOString(),
+      },
+    });
   }
 }
 

@@ -56,6 +56,13 @@ export const VISIBILITY_SWITCHES = [
   'showDetailedPricing',
   'showScheduleToClient',
   'showAssignedTeam',
+  // The four section switches `hub_visibility_settings` has stored since 0001
+  // and nothing ever wrote. §6.1 predates them, so they carry no schema field
+  // name; see the label check in `visibility.test.ts`.
+  'showDocuments',
+  'showPhotos',
+  'showDailyUpdates',
+  'showChangeOrders',
 ] as const satisfies readonly (keyof Project)[];
 
 export type VisibilitySwitch = (typeof VISIBILITY_SWITCHES)[number];
@@ -81,6 +88,22 @@ export const VISIBILITY_LABELS: Record<VisibilitySwitch, { label: string; help: 
   showAssignedTeam: {
     label: 'Show Assigned Team',
     help: 'Project manager and superintendent names.',
+  },
+  showDocuments: {
+    label: 'Show Documents',
+    help: 'The Documents tab in the portal. Each file still needs releasing on its own.',
+  },
+  showPhotos: {
+    label: 'Show Photos',
+    help: 'The Photos tab in the portal. Each photo still needs releasing on its own.',
+  },
+  showDailyUpdates: {
+    label: 'Show Daily Updates',
+    help: 'Progress updates from site, once you have approved them.',
+  },
+  showChangeOrders: {
+    label: 'Show Change Orders',
+    help: 'Change orders sent to this client for a decision.',
   },
 };
 

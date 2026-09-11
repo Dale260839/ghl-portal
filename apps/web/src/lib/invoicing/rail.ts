@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { readGhlConfig } from '../ghl/config.ts';
-import { createGhlInvoiceRail } from './ghl-rail.ts';
+import { createGhlInvoiceRail, type InvoiceBusinessDetails } from './ghl-rail.ts';
 import { unconfiguredRail, type DraftInvoice, type InvoiceRail } from './invoice.ts';
 import type { StoredInvoiceDraft } from '../hub-db/invoice-drafts.ts';
 import type { Project } from '../data/types.ts';
@@ -19,7 +19,15 @@ import type { Project } from '../data/types.ts';
  * is a decision, not a configuration, and adding the seam before the decision
  * would invite someone to flip it by accident.
  */
-export function resolveInvoiceRail(env: NodeJS.ProcessEnv = process.env): InvoiceRail {
+export function resolveInvoiceRail(
+  env: NodeJS.ProcessEnv = process.env,
+  /**
+   * The contractor's own details for the top of the invoice, resolved by the
+   * caller. Left out when the session is not linked to a contractor record, in
+   * which case the invoice carries no business block rather than a guess.
+   */
+  business?: InvoiceBusinessDetails,
+): InvoiceRail {
   const config = readGhlConfig(env);
   if (!config.configured) return unconfiguredRail;
   if (config.config.locationId.trim() === '') return unconfiguredRail;
@@ -29,6 +37,7 @@ export function resolveInvoiceRail(env: NodeJS.ProcessEnv = process.env): Invoic
     locationId: config.config.locationId,
     apiBase: config.config.baseUrl,
     apiVersion: config.config.apiVersion,
+    ...(business !== undefined ? { business } : {}),
   });
 }
 
