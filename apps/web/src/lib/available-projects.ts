@@ -2,20 +2,24 @@ import type { Project } from './data/types.ts';
 import type { ProjectSigning } from './signed-work.ts';
 
 /**
- * Which projects the Projects screen shows. Chris/John, 2026-09-12:
+ * Which projects the Projects screen shows.
+ *
+ * John, 2026-09-12, in two parts:
  *
  *   > available projects should show when stage = awarded. That's what you
  *   > will show as projects. Also status must be signed, or won
+ *   > …
+ *   > both active and awarded should go through
  *
  * ---------------------------------------------------------------------------
  * TWO CONDITIONS, AND THEY ARE NOT THE SAME CONDITION
  *
- * **Stage `awarded`** is BuildSuite's word for "this job was given to this
- * contractor". It lives in `projects.status` and reaches us as
- * `sourceStatus` — deliberately NOT `projectStage`, which is the §7 GHL
- * pipeline (`New Project` … `Warranty`) and contains no `awarded` at all. The
- * two vocabularies are separate and mapping one onto the other is lossy both
- * ways (see `buildsuite/projects.ts`).
+ * **The stage** must be `awarded` or `active` — BuildSuite's own words for a
+ * job that has been given to this contractor, and one that is under way. They
+ * live in `projects.status` and reach us as `sourceStatus`, deliberately NOT
+ * `projectStage`, which is the §7 GHL pipeline (`New Project` … `Warranty`) and
+ * contains neither word. The two vocabularies are separate and mapping one onto
+ * the other is lossy both ways (see `buildsuite/projects.ts`).
  *
  * **Signed or won** is the money question: did the homeowner actually agree.
  * `signed` is a signature on the proposal. `won` is the proposal being
@@ -30,19 +34,23 @@ import type { ProjectSigning } from './signed-work.ts';
  * dropping it off their Projects list is exactly the wrong moment to do it.
  *
  * ---------------------------------------------------------------------------
- * WHY BOTH, RATHER THAN EITHER
+ * THE STAGE HALF IS THE LOOSE ONE. THE MONEY HALF IS WHAT FILTERS.
  *
- * Each alone is wrong in a way that shows up in the live data:
+ * Measured the same day, and worth knowing before anyone widens the stage list
+ * again:
  *
- *   · **Stage alone** — nothing checks that anyone agreed a price. BuildSuite
- *     could mark a job awarded before the contract comes back.
- *   · **Signed alone** — `BSA-052` is signed and sits at stage `active`, not
- *     `awarded`. It is Sing's `[HUB TEST]` record, which is a real signed
- *     proposal on a project that was never awarded through the normal path.
+ *   stage `awarded`   3 projects — all 3 signed
+ *   stage `active`   43 projects — **1** signed
  *
- * So `BSA-052` DOES disappear from Projects under this rule. That is the rule
- * working, not a bug, and it is written down here because it is the kind of
- * thing somebody finds later and reports as one.
+ * So admitting `active` alongside `awarded` adds exactly one project, not
+ * forty-three. The other forty-two are held back by the money half, which is
+ * doing nearly all of the work. `draft`, `matched`, `new` and `completed` stay
+ * out on stage alone.
+ *
+ * The one it admits is `BSA-052`, Sing's `[HUB TEST]` record — a real signed
+ * proposal on a project that never went through the award path. Under the
+ * awarded-only rule it vanished from this screen, which is why `active` was
+ * added.
  *
  * ---------------------------------------------------------------------------
  * THIS IS A DISPLAY RULE, NOT AN ACCESS RULE
@@ -55,8 +63,15 @@ import type { ProjectSigning } from './signed-work.ts';
  * ---------------------------------------------------------------------------
  */
 
-/** BuildSuite's award word, verbatim from `projects.status`. */
-export const AWARDED_SOURCE_STATUS = 'awarded';
+/**
+ * BuildSuite stage words that can reach the Projects screen, verbatim from
+ * `projects.status`.
+ *
+ * The full live vocabulary is `matched`, `active`, `draft`, `new`, `awarded`,
+ * `completed`. `completed` is deliberately absent: finished work belongs on
+ * the archive, not on the list of what a contractor is running today.
+ */
+export const AVAILABLE_SOURCE_STATUSES: readonly string[] = ['awarded', 'active'];
 
 /**
  * `proposals.status` values that mean the client said yes.
@@ -69,14 +84,14 @@ export const AWARDED_SOURCE_STATUS = 'awarded';
 export const WON_PROPOSAL_STATUSES: readonly string[] = ['accepted', 'won'];
 
 /**
- * Is this project at stage `awarded`?
+ * Is this project at a stage that can be shown?
  *
  * Compared case-insensitively and trimmed, because this is a free-text column
  * on somebody else's database. An exact-match check on a status column is how a
  * screen empties itself the day the value arrives capitalised.
  */
-export function isAwarded(project: Pick<Project, 'sourceStatus'>): boolean {
-  return (project.sourceStatus ?? '').trim().toLowerCase() === AWARDED_SOURCE_STATUS;
+export function isAvailableStage(project: Pick<Project, 'sourceStatus'>): boolean {
+  return AVAILABLE_SOURCE_STATUSES.includes((project.sourceStatus ?? '').trim().toLowerCase());
 }
 
 /**
@@ -94,7 +109,7 @@ export function isSignedOrWon(signing: ProjectSigning): boolean {
 
 /** Both conditions. The rule itself, in one place. */
 export function isAvailableProject(signing: ProjectSigning): boolean {
-  return isAwarded(signing.project) && isSignedOrWon(signing);
+  return isAvailableStage(signing.project) && isSignedOrWon(signing);
 }
 
 export interface AvailableSummary {
@@ -102,24 +117,29 @@ export interface AvailableSummary {
   readonly total: number;
   /** What the screen shows. */
   readonly available: number;
-  /** Held back for not being awarded yet. */
-  readonly notAwarded: number;
-  /** Awarded, but nobody has signed or won it — the row worth chasing. */
-  readonly awardedNotAgreed: number;
+  /** Held back on stage — draft, matched, new, completed. */
+  readonly otherStage: number;
+  /**
+   * At a live stage, but nobody has signed or won it.
+   *
+   * **The row worth chasing**, and the reason this is counted apart from
+   * `otherStage` rather than summed into one hidden total.
+   */
+  readonly notAgreed: number;
 }
 
 export function summarizeAvailable(rows: readonly ProjectSigning[]): AvailableSummary {
   let available = 0;
-  let notAwarded = 0;
-  let awardedNotAgreed = 0;
+  let otherStage = 0;
+  let notAgreed = 0;
 
   for (const row of rows) {
-    if (!isAwarded(row.project)) notAwarded += 1;
+    if (!isAvailableStage(row.project)) otherStage += 1;
     else if (isSignedOrWon(row)) available += 1;
-    else awardedNotAgreed += 1;
+    else notAgreed += 1;
   }
 
-  return { total: rows.length, available, notAwarded, awardedNotAgreed };
+  return { total: rows.length, available, otherStage, notAgreed };
 }
 
 export function availableProjects(rows: readonly ProjectSigning[]): ProjectSigning[] {
@@ -130,8 +150,8 @@ export function availableProjects(rows: readonly ProjectSigning[]): ProjectSigni
  * What the screen says above the table.
  *
  * The two held-back counts are reported SEPARATELY and never added together,
- * because they mean opposite things to a contractor. "Not awarded yet" is the
- * pipeline working. "Awarded but nobody has signed" is a job to chase, and
+ * because they mean opposite things to a contractor. "At another stage" is the
+ * pipeline working. "Not signed or won" is a live job nobody has closed, and
  * burying it inside one hidden-count total is how it stops being chased.
  *
  * Returns null when nothing is held back — a banner that never goes away is a
@@ -141,22 +161,14 @@ export function availableProjectsBanner(summary: AvailableSummary): string | nul
   if (summary.total === 0) return null;
 
   const parts: string[] = [];
-  if (summary.notAwarded > 0) {
-    parts.push(`${summary.notAwarded} not awarded yet`);
-  }
-  if (summary.awardedNotAgreed > 0) {
-    parts.push(
-      `${summary.awardedNotAgreed} awarded but ${
-        summary.awardedNotAgreed === 1 ? 'it is' : 'they are'
-      } not signed or won`,
-    );
-  }
+  if (summary.otherStage > 0) parts.push(`${summary.otherStage} at another stage`);
+  if (summary.notAgreed > 0) parts.push(`${summary.notAgreed} not signed or won`);
   if (parts.length === 0) return null;
 
   const shown =
     summary.available === 0
-      ? 'No projects are awarded and signed yet'
-      : `Showing ${summary.available} awarded ${
+      ? 'No projects are live and signed yet'
+      : `Showing ${summary.available} ${
           summary.available === 1 ? 'project' : 'projects'
         } on a signed or won proposal`;
 
