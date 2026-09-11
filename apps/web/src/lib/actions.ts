@@ -260,6 +260,9 @@ export async function updateVisibility(formData: FormData) {
   revalidatePath(`/dashboard/projects/${projectId}`);
   revalidatePath(`/dashboard/projects/${projectId}/visibility`);
   revalidatePath('/portal');
+  // Chris saved and could not tell whether it took (11 Sep). Land back on the
+  // page with a flag the page turns into a plain confirmation.
+  redirect(`/dashboard/projects/${projectId}/visibility?saved=1`);
 }
 
 /** Field submits to the PM. Runs **WF3**, which never notifies the client. */

@@ -23,10 +23,13 @@ import { currentDataSource } from '@/lib/data/current-source';
  */
 export default async function VisibilitySettings({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ saved?: string }>;
 }) {
   const { id } = await params;
+  const { saved } = await searchParams;
   const scope = await requireTenantScope();
   const db = await currentDataSource(scope);
   const project = await db.getProject(scope, id);
@@ -52,6 +55,13 @@ export default async function VisibilitySettings({
           screen.
         </p>
       </div>
+
+      {saved === '1' && (
+        <div className="enter rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm text-emerald-800">
+          Saved. These switches are stored in the Hub for this project and stay set after you sign
+          out. The panel on the right is what the homeowner is served right now.
+        </div>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
         <Card>

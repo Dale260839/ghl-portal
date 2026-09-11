@@ -46,7 +46,7 @@ export default async function ProjectChangeOrdersControl({
 
   const hub = getHubSelections();
   const rows = hub.available ? await hub.selections.listChangeOrders(scope, id) : [];
-  const released = project.clientPortalEnabled;
+  const released = project.clientPortalEnabled && project.showChangeOrders;
   const waiting = rows.filter((c) => c.status === 'Awaiting Client').length;
   const drafts = rows.filter((c) => c.status === 'Draft').length;
 

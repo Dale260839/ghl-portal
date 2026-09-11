@@ -65,6 +65,15 @@ export default async function FieldDocuments() {
   const byProject: { projectId: string; projectName: string; trades: [string, MediaItem[]][] }[] =
     [];
 
+  // The signed scope of work from BuildSuite, per project. The crew asked for
+  // it and it is the one document every trade needs before the folders fill.
+  const scopes = mine
+    .map((p) => {
+      const full = projects.find((x) => x.buildsuiteProjectId === p.buildsuiteProjectId);
+      return { projectId: p.buildsuiteProjectId, projectName: p.projectName, url: full?.scopeOfWorkUrl ?? null, description: full?.description ?? '' };
+    })
+    .filter((x) => x.url !== null || x.description !== '');
+
   if (hub.available) {
     for (const project of mine) {
       const all = await hub.media.listForProject(
@@ -97,6 +106,34 @@ export default async function FieldDocuments() {
           Drawings, permits and specs filed for your trades.
         </p>
       </div>
+
+      {scopes.length > 0 && (
+        <Card className="px-4 py-4">
+          <div className="text-xs font-semibold tracking-wide text-navy-500 uppercase">Scope of work</div>
+          <ul className="mt-2 divide-y divide-navy-100">
+            {scopes.map((sc) => (
+              <li key={sc.projectId} className="py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-navy-900">{sc.projectName}</span>
+                  {sc.url !== null && (
+                    <a
+                      href={sc.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-lg border border-navy-200 px-3 py-1 text-xs font-medium text-navy-700 transition hover:bg-navy-50"
+                    >
+                      Open signed scope (PDF)
+                    </a>
+                  )}
+                </div>
+                {sc.description !== '' && (
+                  <p className="mt-1 text-xs leading-relaxed text-navy-600">{sc.description}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {!hub.available ? (
         <Card className="px-4 py-8 text-center">

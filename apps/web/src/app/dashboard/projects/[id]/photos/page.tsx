@@ -37,7 +37,7 @@ export default async function ProjectPhotosControl({
   const items = hub.available ? await hub.media.listForProject(scope, 'photo', id) : [];
   // No per-type switch exists for photos — the portal master is the only
   // project-level gate, and the row's own flag is the other half.
-  const released = project.clientPortalEnabled;
+  const released = project.clientPortalEnabled && project.showPhotos;
 
   return (
     <div className="space-y-6">

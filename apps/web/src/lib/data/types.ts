@@ -28,6 +28,15 @@ export interface Project {
    * second factor. Null on 53 of 102 live projects, so it is never assumed.
    */
   projectCode: string | null;
+  /**
+   * BuildSuite's signed scope-of-work PDF (`projects.sow_pdf_url`), when it is
+   * a real http(s) link. Shown to the contractor and the crew, never to the
+   * homeowner unless a released document carries it. Optional: fixtures and
+   * GHL-sourced projects have none.
+   */
+  scopeOfWorkUrl?: string | null;
+  /** `projects.project_description`, the written scope. Optional, same reason. */
+  description?: string;
   projectName: string;
   projectAddress: string;
   projectType: string;

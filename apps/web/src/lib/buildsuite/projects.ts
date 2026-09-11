@@ -83,6 +83,12 @@ export const PROJECT_COLUMNS = [
   'client_name',
   'ghl_contact_id',
   'ghl_opportunity_id',
+  // The signed scope-of-work PDF and the written description. Read for the
+  // field crew's Docs screen (Chris, 11 Sep: the crew need the scope). Still not
+  // selected: client_email except for the one invoice read, client_phone,
+  // sow_data, documents.
+  'sow_pdf_url',
+  'project_description',
   // Selected as well as filtered on: `Project.ownerAuthProfileId` carries it,
   // and a row that cannot say who owns it cannot be re-checked downstream.
   'auth_profile_id',
@@ -119,6 +125,8 @@ export interface BuildSuiteProjectRow {
   client_name: string | null;
   ghl_contact_id: string | null;
   ghl_opportunity_id: string | null;
+  sow_pdf_url?: string | null;
+  project_description?: string | null;
   auth_profile_id: string | null;
 }
 

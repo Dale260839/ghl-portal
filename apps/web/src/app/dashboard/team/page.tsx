@@ -205,7 +205,10 @@ export default async function Team({
                           {project.projectName}
                         </span>
                         <span className="block truncate text-navy-400">
-                          {project.buildsuiteProjectId}
+                          {project.projectCode ?? project.buildsuiteProjectId.slice(0, 8)}
+                          {project.projectCode !== null && (
+                            <span className="text-navy-300"> · {project.buildsuiteProjectId.slice(0, 8)}</span>
+                          )}
                         </span>
                       </span>
                     </label>
@@ -333,7 +336,12 @@ export default async function Team({
                             defaultChecked={member.projectIds.includes(project.buildsuiteProjectId)}
                             className="rounded border-navy-300"
                           />
-                          <span className="max-w-48 truncate">{project.projectName}</span>
+                          <span className="max-w-48 truncate">
+                            {project.projectName}
+                            {project.projectCode !== null && (
+                              <span className="text-navy-400"> · {project.projectCode}</span>
+                            )}
+                          </span>
                         </label>
                       ))}
                       <SubmitButton

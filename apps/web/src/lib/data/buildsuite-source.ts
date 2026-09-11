@@ -235,6 +235,10 @@ export class BuildSuiteDataSource implements ProjectDataSource {
       // Identity
       buildsuiteProjectId: row.id,
       projectCode: nonEmpty(row.project_code) ?? null,
+      scopeOfWorkUrl: /^https?:\/\//i.test((row.sow_pdf_url ?? '').trim())
+        ? (row.sow_pdf_url ?? '').trim()
+        : null,
+      description: nonEmpty(row.project_description ?? null) ?? '',
       projectName: row.title?.trim() !== '' ? (row.title ?? 'Untitled project') : 'Untitled project',
       projectAddress: joinAddress(row),
       // `project_type` and `trade` are empty on every live row today.

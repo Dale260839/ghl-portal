@@ -7,6 +7,7 @@ import { currentDataSource } from '@/lib/data/current-source';
 import { Badge, Card, CardHeader, InternalNote, InternalOnly, ProgressBar, currency, shortDate } from '@/components/ui';
 import { ProjectEditor } from '@/components/project-editor';
 import { getHubRecords } from '@/lib/hub-db/records';
+import { getHubTeam } from '@/lib/hub-db/team';
 import { getProposalsReader, pickCurrentProposal } from '@/lib/buildsuite/proposals';
 
 export default async function ProjectOverview({ params }: { params: Promise<{ id: string }> }) {
@@ -29,6 +30,16 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
     db.listDailyUpdates(scope, id),
     db.listTasks(scope, id),
   ]);
+
+  // Who has been given this project on the Team screen. Chris asked (11 Sep)
+  // to see, per project, which crew and homeowners can get in, so a losing
+  // bidder can be cut off from here rather than hunted down on the Team list.
+  const hubTeam = getHubTeam();
+  const access =
+    !hubTeam.available || scope.contractorId === undefined
+      ? []
+      : (await hubTeam.team.listTeam(scope).catch(() => []))
+          .filter((m) => !m.revoked && m.projectIds.includes(id));
 
   // The Hub's overlay on this project — edits and archive state. Absent is the
   // normal case: most projects have never been edited here.
@@ -279,6 +290,40 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
                 </dd>
               </div>
             </dl>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Who has access"
+              action={
+                <Link href="/dashboard/team" className="text-xs font-medium text-navy-600 hover:underline">
+                  Manage on Team →
+                </Link>
+              }
+            />
+            {access.length === 0 ? (
+              <p className="px-5 py-4 text-sm text-navy-400">
+                Nobody has been invited to this project yet. Invite crew or the homeowner from Team
+                and tick this project.
+              </p>
+            ) : (
+              <ul className="divide-y divide-navy-100 text-sm">
+                {access.map((m) => (
+                  <li key={m.id} className="flex items-center justify-between gap-3 px-5 py-2.5">
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-navy-900">
+                        {m.fullName === '' ? m.email : m.fullName}
+                      </span>
+                      <span className="block truncate text-xs text-navy-400">{m.email}</span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <Badge>{m.role === 'field' ? 'Field crew' : m.role === 'client' ? 'Client' : m.role}</Badge>
+                      {!m.activated && <span className="text-xs text-navy-400">invited</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </div>
       </div>

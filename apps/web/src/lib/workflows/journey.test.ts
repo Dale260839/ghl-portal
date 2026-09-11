@@ -39,6 +39,12 @@ const PROJECT: Project = {
   buildsuiteProjectId: 'BSA-052',
   clientPortalEnabled: true,
   showScheduleToClient: true,
+  // Added 2026-09-11: the four section switches were persisted but gated
+  // nothing until `toClientUpdates` started honouring this one. A fixture that
+  // omits it now withholds the whole section, which is the correct new
+  // behaviour — so the journey needs it ON to test the journey, and OFF in its
+  // own case below to test the switch.
+  showDailyUpdates: true,
 } as unknown as Project;
 
 /** What a field user actually files at the end of a day on site. */
@@ -309,4 +315,23 @@ test('publication without a client summary publishes nothing to read', () => {
   const seen = whatTheClientSees(update);
   assert.equal(seen.length, 1, 'the gate itself does not check the summary — WF4 does');
   assert.equal(seen[0]!.clientSummary, '');
+});
+
+test('the section switch withholds every update, however well published', () => {
+  // `Show Daily Updates` on the Visibility screen. A THIRD switch above the
+  // two the gate already applies: the portal master switch, the row's own
+  // `clientVisible`, and now the section.
+  //
+  // It is the coarsest of the three and the one a contractor reaches for when
+  // they want the feed quiet — so it has to beat a correctly published update,
+  // not merely filter alongside it.
+  const update = fieldSubmission();
+  update.managerApprovalStatus = PUBLISHED_APPROVAL_STATUS;
+  update.clientVisible = true;
+  update.clientSummary = 'Framing continued.';
+
+  assert.equal(whatTheClientSees(update).length, 1, 'the premise: this update does publish');
+
+  const quiet = { ...PROJECT, showDailyUpdates: false } as Project;
+  assert.deepEqual(toClientUpdates([update], quiet), [], 'the section switch was ignored');
 });
