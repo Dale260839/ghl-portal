@@ -49,7 +49,8 @@ import type { ProjectSigning } from './signed-work.ts';
  * reaches a listing at all — whatever its stage. Its proposal names the owner
  * instead (`proposals.user_id`), which is why the dashboard, reading proposals,
  * could see work the projects list could not. The fix is
- * `listProjectRows` adopting those rows, not a looser stage.
+ * the tenant filter following BuildSuite's award columns
+ * (`awarded_to_auth_profile_id`, Sing 2026-09-12), not a looser stage.
  *
  * Widening the stage would also have been expensive in the wrong direction:
  * 43 live projects are `active` and exactly one of them is signed, so it

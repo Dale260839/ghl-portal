@@ -130,7 +130,7 @@ test('awarded AND agreement shows; either one alone does not', () => {
 
 test('the live shape, reproduced', () => {
   // 2026-09-12, what the database actually holds across every tenant: three
-  // awarded-and-signed (BSA-053 among them, once adoption makes it listable),
+  // awarded-and-signed (BSA-053 among them, listed through its award columns),
   // BSA-052 signed but active, and two that fail on stage or on money.
   const rows = [
     row({ code: 'BSA-APS-001', sourceStatus: 'awarded', signed: true, proposalStatus: 'accepted' }),
@@ -150,7 +150,8 @@ test('the live shape, reproduced', () => {
 test('BSA-053 shows — the third project that was missing from the screen', () => {
   // It was awarded and signed all along. What hid it was a null
   // `auth_profile_id` on the project row, which kept it out of every listing.
-  // `listProjectRows` adopts it now, so by the time it reaches this rule there
+  // The tenant filter follows `awarded_to_auth_profile_id` now, so by the time
+  // it reaches this rule there
   // is nothing special about it — which is the point.
   assert.equal(
     isAvailableProject(row({ code: 'BSA-053', sourceStatus: 'awarded', signed: true })),

@@ -228,13 +228,16 @@ export class BuildSuiteDataSource implements ProjectDataSource {
     return {
       provenance: 'buildsuite',
 
-      // Tenancy
-      ownerAuthProfileId: row.auth_profile_id ?? '',
+      // Tenancy — whoever WON it, else whoever owns it. The same rule the
+      // tenant filter applies, so a project can never be listed for one
+      // contractor and scoped downstream to another.
+      ownerAuthProfileId: nonEmpty(row.awarded_to_auth_profile_id ?? null) ?? row.auth_profile_id ?? '',
       ghlLocationId: this.locationId,
 
       // Identity
       buildsuiteProjectId: row.id,
       projectCode: nonEmpty(row.project_code) ?? null,
+      awardCode: nonEmpty(row.award_code ?? null) ?? null,
       scopeOfWorkUrl: /^https?:\/\//i.test((row.sow_pdf_url ?? '').trim())
         ? (row.sow_pdf_url ?? '').trim()
         : null,

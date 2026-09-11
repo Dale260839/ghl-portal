@@ -455,8 +455,9 @@ export class SupabaseProposalsReader implements BuildSuiteProposalsReader {
    *   > should retain access while others are blocked
    *
    * The project itself was already closed to a losing bidder: project reads
-   * filter on the owner, and adopting an ownerless project needs a SIGNED
-   * proposal of your own. But `listLive` reads proposals by `contractor_id`
+   * filter on the award (`awarded_to_auth_profile_id`) or, unawarded, the
+   * owner — and nothing lists a project for a contractor who did not win it.
+   * But `listLive` reads proposals by `contractor_id`
    * and status alone, so a losing bidder's quote stayed "live" — on their
    * Engagements screen, and on Invoices, where it can seed an invoice draft for
    * a job somebody else won.

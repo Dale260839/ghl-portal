@@ -14,8 +14,13 @@ import type {
 export interface Project {
   // ── Tenancy (D-012, D-013) ────────────────────────────────────────────────
   /**
-   * BuildSuite's `auth_profiles.id` — the contractor who owns this project.
-   * Every read filters on it; a project without one is visible to nobody.
+   * The auth profile of the contractor OPERATING this project — the one who won
+   * it, else the one who owns it: `COALESCE(awarded_to_auth_profile_id,
+   * auth_profile_id)` (Sing, 2026-09-12).
+   *
+   * Every tenant-scoped read and every downstream scope (`scopeOfProject`) keys
+   * on this, so an awarded project behaves as its winner's everywhere. A
+   * project with neither is visible to nobody.
    */
   ownerAuthProfileId: string;
   /** The GHL sub-account this project belongs to. Scopes every GHL read. */
@@ -28,6 +33,19 @@ export interface Project {
    * second factor. Null on 53 of 102 live projects, so it is never assumed.
    */
   projectCode: string | null;
+  /**
+   * `projects.award_code` — the WINNING contractor's code for this project
+   * (`BSA-APS-003` for BSA-053). Null on a project the contractor created
+   * themselves, where `projectCode` already is their code (Sing, 2026-09-12).
+   *
+   * CONTRACTOR SCREENS ONLY. The homeowner's code is `projectCode`: it is what
+   * the signature automation emails them, what they sign in with, and what their
+   * invoices carry. Display through `lib/project-codes.ts`, never directly — a
+   * guardrail fails if a client-facing file reads this field.
+   *
+   * Optional because only the BuildSuite source knows about awards.
+   */
+  awardCode?: string | null;
   /**
    * BuildSuite's signed scope-of-work PDF (`projects.sow_pdf_url`), when it is
    * a real http(s) link. Shown to the contractor and the crew, never to the

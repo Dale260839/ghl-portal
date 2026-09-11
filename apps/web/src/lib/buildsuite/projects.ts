@@ -92,6 +92,23 @@ export const PROJECT_COLUMNS = [
   // Selected as well as filtered on: `Project.ownerAuthProfileId` carries it,
   // and a row that cannot say who owns it cannot be re-checked downstream.
   'auth_profile_id',
+  // ── The award, as BuildSuite records it (Sing, 2026-09-12) ─────────────────
+  //
+  // When a project is awarded, THE SAME ROW gets these written onto it —
+  // status 'awarded', award_code, awarded_to_auth_profile_id and
+  // awarded_contractor_id. It keeps its id, its project_code and its client
+  // ownership. No copy, no second row, no transfer.
+  //
+  //   project_code  the client's code and the project's permanent identity
+  //   award_code    the WINNING contractor's code; empty on a project the
+  //                 contractor created themselves, where project_code already is
+  //   awarded_to_auth_profile_id / awarded_contractor_id  who won it
+  //
+  // Measured 2026-09-12: awarded_to set on the 4 awarded rows, award_code on 1
+  // (BSA-053 -> BSA-APS-003). No award_code collides with any project_code.
+  'award_code',
+  'awarded_to_auth_profile_id',
+  'awarded_contractor_id',
 ] as const;
 
 /**
@@ -128,6 +145,12 @@ export interface BuildSuiteProjectRow {
   sow_pdf_url?: string | null;
   project_description?: string | null;
   auth_profile_id: string | null;
+  /** The winning contractor's code. Null on a self-created project. */
+  award_code?: string | null;
+  /** Who won it — the auth profile. Set on every awarded project. */
+  awarded_to_auth_profile_id?: string | null;
+  /** Who won it — the contractor record. */
+  awarded_contractor_id?: string | null;
 }
 
 /** What the Hub actually renders. Normalized, nothing internal. */
@@ -309,12 +332,48 @@ export class SupabaseReader implements BuildSuiteReader {
    * The tenant filter is built here, from the asserted scope — never passed in
    * by a caller. A caller that could supply its own filter could supply none.
    */
+  /**
+   * Which projects are this contractor's: the ones they WON, else the ones they own.
+   *
+   * ---------------------------------------------------------------------------
+   * THE RULE (Sing, 2026-09-12)
+   *
+   * `awarded_to_auth_profile_id` says who won a project. When it is set, it
+   * decides — `auth_profile_id` is the project's CLIENT ownership, and it stays
+   * on the row unchanged when the project is awarded. When nobody has been
+   * awarded it, the owner decides, exactly as before.
+   *
+   * So the operating contractor is `COALESCE(awarded_to_auth_profile_id,
+   * auth_profile_id)`, and this filter is that, in PostgREST:
+   *
+   *   awarded_to in (mine)   OR   (awarded_to is null AND auth_profile_id in (mine))
+   *
+   * It also enforces Chris's rule from the 2026-09-10 huddle — "only the
+   * awarded contractor should retain access while others are blocked": a
+   * project whose owner is one contractor and whose award went to another is
+   * listed for the WINNER only. No live row is in that state today; every
+   * awarded row has its winner as its owner or no owner at all.
+   *
+   * ---------------------------------------------------------------------------
+   * WHAT THIS REPLACED
+   *
+   * BSA-053 has no `auth_profile_id`, so it reached no listing. That was first
+   * fixed by inferring the owner from whoever wrote its signed proposal
+   * (`proposals.user_id`) and adopting the row — a workaround for a link that
+   * turns out to exist. `awarded_to_auth_profile_id` IS that link, written by
+   * BuildSuite on award. Two rules deciding who owns a project is how they come
+   * to disagree, so the inference is gone and this is the only rule.
+   * ---------------------------------------------------------------------------
+   */
   private tenantFilter(scope: TenantScope, context: string): Record<string, string> {
     const safe = assertScope(scope, context);
     // PostgREST `in` takes a parenthesised list. assertScope has already
     // guaranteed the list is non-empty — an empty `in ()` would match nothing
     // silently, which reads as "this agency has no projects".
-    return { auth_profile_id: `in.(${safe.authProfileIds.join(',')})` };
+    const mine = `(${safe.authProfileIds.join(',')})`;
+    return {
+      or: `(awarded_to_auth_profile_id.in.${mine},and(awarded_to_auth_profile_id.is.null,auth_profile_id.in.${mine}))`,
+    };
   }
 
   async listActiveProjects(scope: TenantScope, limit = 50): Promise<BuildSuiteProject[]> {
@@ -345,134 +404,16 @@ export class SupabaseReader implements BuildSuiteReader {
   }
 
   async listProjectRows(scope: TenantScope, limit = 200): Promise<BuildSuiteProjectRow[]> {
-    const owned = await this.client.select<BuildSuiteProjectRow>({
+    // One read. The award columns make a project its winner's, so BSA-053 —
+    // no `auth_profile_id`, awarded to Alliance Pro Services — is listed for
+    // APS by the tenant filter itself, with no second pass to find it.
+    return await this.client.select<BuildSuiteProjectRow>({
       from: 'projects',
       columns: PROJECT_COLUMNS,
       filters: this.tenantFilter(scope, 'project rows'),
       order: 'updated_at.desc',
       limit,
     });
-
-    const adopted = await this.adoptedProjectRows(scope, limit);
-    if (adopted.length === 0) return owned;
-
-    // Dedupe by id. A row can only be in both lists if `auth_profile_id` stops
-    // being null between the two reads, which is a race rather than a state,
-    // but a duplicate project on screen is worse than the cost of a Set.
-    const seen = new Set(owned.map((row) => row.id));
-    return [...owned, ...adopted.filter((row) => !seen.has(row.id))];
-  }
-
-  /**
-   * Projects this tenant signed but does not own a row for.
-   *
-   * ---------------------------------------------------------------------------
-   * THE BUG THIS EXISTS TO FIX (found 2026-09-12)
-   *
-   * `BSA-053` is `awarded`, has a SIGNED proposal, and never appeared on the
-   * Projects screen. It appeared on the dashboard and opened fine when clicked,
-   * which is the shape of the problem: **its `projects.auth_profile_id` is
-   * null.**
-   *
-   * Every project read filters on that column, so an ownerless row matches
-   * nobody's tenant and reaches no listing, whatever its stage. The dashboard
-   * reads PROPOSALS, which carry their own ownership, so it could see work the
-   * projects list structurally could not. Two screens disagreeing about which
-   * jobs exist is the worst version of this — a contractor cannot tell which
-   * one is lying.
-   *
-   * The proposal names the owner that the project row is missing:
-   * `proposals.user_id` is the auth profile that authored it. For `BSA-053`
-   * that is `81daa865…`, Alliance Pro Services — exactly whose screen it was
-   * missing from.
-   *
-   * ---------------------------------------------------------------------------
-   * THREE CONSTRAINTS, AND EACH OF THEM IS LOAD-BEARING
-   *
-   * 1. **Only rows with a NULL `auth_profile_id`.** This never overrides an
-   *    existing owner. It matters: six live proposals name an author who is NOT
-   *    the project's owner (all on `BSA-001`), and without this constraint that
-   *    project would be served to the wrong contractor. Adoption fills a gap;
-   *    it does not arbitrate a dispute.
-   *
-   * 2. **Only through a SIGNED proposal.** An unsigned quote is not a claim of
-   *    ownership — several contractors may quote the same job, and an ownerless
-   *    project with two draft proposals would otherwise land on both screens.
-   *
-   * 3. **Matched on `user_id`, a dedicated id field** (§3.6, D4 §6). Never a
-   *    name, an email or a title.
-   *
-   * Measured 2026-09-12: exactly ONE live project meets all three. The rule is
-   * narrow by construction, not by luck.
-   * ---------------------------------------------------------------------------
-   */
-  private async adoptedProjectRows(
-    scope: TenantScope,
-    limit: number,
-  ): Promise<BuildSuiteProjectRow[]> {
-    const safe = assertScope(scope, 'adopted project rows');
-
-    const authored = await this.client.select<{ project_id: string | null; user_id: string | null }>({
-      from: 'proposals',
-      columns: ['project_id', 'user_id'],
-      filters: {
-        user_id: `in.(${safe.authProfileIds.join(',')})`,
-        signature_status: `eq.${SIGNED_SIGNATURE_STATUS}`,
-        signature_signed_at: 'not.is.null',
-        deleted_at: 'is.null',
-      },
-      limit,
-    });
-
-    // Which of this tenant's profiles signed each project. The query already
-    // filtered `user_id` to the tenant, so every value here is one of ours.
-    const authorOf = new Map<string, string>();
-    for (const row of authored) {
-      const id = row.project_id?.trim() ?? '';
-      const author = row.user_id?.trim() ?? '';
-      if (id !== '' && author !== '' && !authorOf.has(id)) authorOf.set(id, author);
-    }
-    const projectIds = [...authorOf.keys()];
-    if (projectIds.length === 0) return [];
-
-    const rows = await this.client.select<BuildSuiteProjectRow>({
-      from: 'projects',
-      columns: PROJECT_COLUMNS,
-      filters: {
-        id: `in.(${projectIds.join(',')})`,
-        // Constraint 1. Without it this would repoint an owned project.
-        auth_profile_id: 'is.null',
-        deleted_at: 'is.null',
-      },
-      order: 'updated_at.desc',
-      limit,
-    });
-
-    // ---------------------------------------------------------------------------
-    // STAMP THE OWNER THE ROW IS MISSING — in memory only.
-    //
-    // Listing an ownerless project was not enough on its own. Everything
-    // downstream scopes a project by its owner (`scopeOfProject` names
-    // `ownerAuthProfileId`), and an adopted row's owner was `''` — which
-    // `assertScope` rightly refuses. So previewing BSA-053 threw
-    // `TenancyError: refusing an unscoped read of milestones` underneath a page
-    // that still rendered, found 2026-09-12 while building the client payment
-    // schedule.
-    //
-    // The owner used is the profile that SIGNED it, which is the exact fact
-    // adoption already trusts, and it is one of the tenant's own profiles by
-    // construction. The row now behaves like any owned project for every read,
-    // instead of every read needing its own exception for adopted ones.
-    //
-    // BuildSuite is not written. This is the Hub's copy of the row, and
-    // `projects.auth_profile_id` is still null there — which is the data gap
-    // worth fixing at source.
-    // ---------------------------------------------------------------------------
-    return rows.map((row) =>
-      row.auth_profile_id === null || row.auth_profile_id === undefined || row.auth_profile_id === ''
-        ? { ...row, auth_profile_id: authorOf.get(row.id) ?? row.auth_profile_id }
-        : row,
-    );
   }
 
   async listProjectRowsForContact(
@@ -589,9 +530,18 @@ export class SupabaseReader implements BuildSuiteReader {
       ghl_contact_id: string | null;
       client_name: string | null;
       auth_profile_id: string | null;
+      awarded_to_auth_profile_id: string | null;
+      awarded_contractor_id: string | null;
     }>({
       from: 'projects',
-      columns: ['id', 'ghl_contact_id', 'client_name', 'auth_profile_id'],
+      columns: [
+        'id',
+        'ghl_contact_id',
+        'client_name',
+        'auth_profile_id',
+        'awarded_to_auth_profile_id',
+        'awarded_contractor_id',
+      ],
       filters: { project_code: `eq.${pair.code}`, client_email: `eq.${pair.email}` },
       limit: 2,
     });
@@ -623,9 +573,25 @@ export class SupabaseReader implements BuildSuiteReader {
     // No signed proposal at all. Nobody gets in, whatever code was typed.
     if (signed.length === 0) return null;
 
+    // WHOSE HOMEOWNER THIS IS — the winning contractor, by the first link that
+    // names one:
+    //
+    //   1. `projects.awarded_contractor_id` — BuildSuite's own record of who won
+    //      it, written onto the row at award (Sing, 2026-09-12). The designed
+    //      answer, so it comes first.
+    //   2. `proposals.contractor_id` on the signed proposal.
+    //   3. The contractor behind the project's operating profile — the award's
+    //      `awarded_to_auth_profile_id`, else the owner.
+    //
+    // BSA-053 needed the first. Its proposal carries no contractor_id and the
+    // row has no owner, so links 2 and 3 found nothing and its homeowner could
+    // not sign in with a correct code on a signed contract.
     const contractorId =
+      (project.awarded_contractor_id ?? '').trim() ||
       (signed[0]?.contractor_id ?? '').trim() ||
-      (await this.contractorOfProject(project.auth_profile_id));
+      (await this.contractorOfProject(
+        project.awarded_to_auth_profile_id ?? project.auth_profile_id,
+      ));
 
     // A signed contract that names no contractor by ANY of the links. The
     // membership this opens is filed under a contractor id, and filing it under

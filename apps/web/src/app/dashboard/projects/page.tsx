@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, HealthBadge, ProgressBar, currency, shortDate } from '@/components/ui';
+import { ContractorProjectCode } from '@/components/project-code';
 import { hasOperationalDetail, moneyDisplay, stageLabel, type Project } from '@/lib/data/types';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getProposalsReader } from '@/lib/buildsuite/proposals';
@@ -187,7 +188,8 @@ export default async function ProjectsList({
   // If a project is missing from this screen, check `projects.auth_profile_id`
   // before touching this rule. An ownerless row reaches no listing at all, at
   // any stage, and that — not the stage filter — is what hid `BSA-053` while
-  // the dashboard showed it. `listProjectRows` adopts those rows now.
+  // the dashboard showed it. The tenant filter now follows the award columns
+  // (`awarded_to_auth_profile_id`), so a won project is listed for its winner.
   //
   // This replaces the `ENABLE_SIGNED_ONLY_FILTER` environment switch, which was
   // off by default and hid only what could be PROVEN unsigned. That was the
@@ -281,18 +283,11 @@ export default async function ProjectsList({
                     )}
                   </div>
                   <div className="mt-0.5 text-xs text-navy-400">
-                    {/* The project CODE, not the UUID (John, 2026-09-12). The code
-                        is what a contractor reads down the phone and what the
-                        homeowner signs in with; the UUID is a database key nobody
-                        can say out loud. When a project has no code yet, it says
-                        so — a truncated UUID in its place would look like a code
-                        and be read out as one. */}
-                    {p.clientName} ·{' '}
-                    {p.projectCode !== null && p.projectCode.trim() !== '' ? (
-                      <span className="font-medium tracking-wide text-navy-500">{p.projectCode}</span>
-                    ) : (
-                      <span className="italic">No project code yet</span>
-                    )}
+                    {/* The contractor's code, not the UUID (John, 2026-09-12): the
+                        award code when this job was won, the project code when it
+                        was self-created, and the client's code beside it when the
+                        two differ (Sing, 2026-09-12). */}
+                    {p.clientName} · <ContractorProjectCode project={p} />
                   </div>
                 </td>
                 <td className="px-5 py-3.5 text-sm text-navy-600">{stageLabel(p)}</td>

@@ -18,6 +18,8 @@ import {
 } from '@/lib/actions';
 import { Badge, Card, CardHeader, shortDate } from '@/components/ui';
 import { NotLinkedToContractor } from '@/components/not-linked';
+import { ContractorProjectCode } from '@/components/project-code';
+import { contractorCode } from '@/lib/project-codes';
 
 /**
  * Team — who the contractor has given access to, and to what.
@@ -205,9 +207,15 @@ export default async function Team({
                           {project.projectName}
                         </span>
                         <span className="block truncate text-navy-400">
-                          {project.projectCode ?? project.buildsuiteProjectId.slice(0, 8)}
-                          {project.projectCode !== null && (
-                            <span className="text-navy-300"> · {project.buildsuiteProjectId.slice(0, 8)}</span>
+                          {/* The contractor's code, and the client's beside it when
+                              they differ — the client's is what a homeowner signs
+                              in with, which is why codes are on this screen. A
+                              project with no code at all keeps the short id so two
+                              uncoded jobs can still be told apart. */}
+                          {contractorCode(project) === null ? (
+                            project.buildsuiteProjectId.slice(0, 8)
+                          ) : (
+                            <ContractorProjectCode project={project} />
                           )}
                         </span>
                       </span>
@@ -338,8 +346,11 @@ export default async function Team({
                           />
                           <span className="max-w-48 truncate">
                             {project.projectName}
-                            {project.projectCode !== null && (
-                              <span className="text-navy-400"> · {project.projectCode}</span>
+                            {contractorCode(project) !== null && (
+                              <span className="text-navy-400">
+                                {' · '}
+                                <ContractorProjectCode project={project} />
+                              </span>
                             )}
                           </span>
                         </label>

@@ -759,6 +759,42 @@ test('no source file carries an invisible control character', () => {
   assert.deepEqual(offenders, [], 'an invisible control character — almost certainly a shell-mangled \\b');
 });
 
+test('a homeowner never sees the award code', () => {
+  // Sing, 2026-09-12: project_code is the CLIENT's code — the one the signature
+  // automation emails them, the one they sign in with, the one their invoices
+  // carry. award_code is the winning contractor's. Showing a homeowner
+  // BSA-APS-003 for a job they know as BSA-053 is a code they have never been
+  // given, on their own project.
+  //
+  // So nothing a homeowner reads may touch `awardCode` or `award_code`: the
+  // portal, the sign-in door, emails, and the invoice reference (which lands
+  // in their inbox). Contractor screens reach it only through
+  // `lib/project-codes.ts` / <ContractorProjectCode>.
+  const clientFacing = (path: string) =>
+    path.startsWith('app/portal/') ||
+    path.startsWith('app/signin/') ||
+    path.startsWith('lib/email/') ||
+    path.startsWith('lib/auth/') ||
+    path.startsWith('lib/invoicing/') ||
+    path === 'lib/portal-gates.ts' ||
+    path === 'lib/portal-data.ts' ||
+    path === 'lib/client-payment-schedule.ts' ||
+    path === 'lib/ghl/email.ts';
+
+  const offenders = FILES.filter(
+    (f) => clientFacing(rel(f.path)) && /\bawardCode\b|\baward_code\b/.test(withoutComments(f.text)),
+  ).map((f) => rel(f.path));
+  assert.deepEqual(offenders, [], 'a client-facing file reads the award code');
+
+  // And no contractor screen writes the COALESCE its own way.
+  const inline = FILES.filter((f) => {
+    const path = rel(f.path);
+    if (path === 'lib/project-codes.ts' || path.startsWith('lib/buildsuite/') || path.startsWith('lib/data/')) return false;
+    return /\.awardCode\b/.test(withoutComments(f.text));
+  }).map((f) => rel(f.path));
+  assert.deepEqual(inline, [], 'use contractorCode() / <ContractorProjectCode>, not awardCode directly');
+});
+
 test('every invoice preview shows the letterhead the invoice will actually carry', () => {
   // The review screen promises "what a contractor reads here is what GoHighLevel
   // receives". Since invoice templates (2026-09-12) can override the logo and

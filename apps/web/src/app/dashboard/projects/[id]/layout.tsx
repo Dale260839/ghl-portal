@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ContractorProjectCode } from '@/components/project-code';
 import { notFound } from 'next/navigation';
 
 import { requireTenantScope } from '@/lib/scope';
@@ -45,7 +46,9 @@ export default async function ProjectWorkspaceLayout({
           {hasOperationalDetail(project) && <HealthBadge status={project.healthStatus} />}
         </div>
         <p className="mt-1 text-sm text-navy-400">
-          {project.projectAddress} · {project.buildsuiteProjectId}
+          {/* Was the UUID. The contractor's code instead, with the client's
+              beside it when they differ (Sing, 2026-09-12). */}
+          {project.projectAddress} · <ContractorProjectCode project={project} />
         </p>
         <p className="mt-2 max-w-2xl text-xs leading-relaxed text-navy-400">
           Your control centre for this project. You create and manage every screen here; the client

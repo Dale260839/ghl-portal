@@ -227,3 +227,57 @@ test('a project with no owner profile does not even try to resolve', async () =>
   assert.equal(await reader.findSignedProjectForClient('BSA-052', 'owner@example.com'), null);
   assert.equal(ran, false);
 });
+
+// ── The award decides whose homeowner this is (Sing, 2026-09-12) ─────────────
+
+const BSA_053 = {
+  id: 'p-053',
+  ghl_contact_id: 'ghl-053',
+  client_name: 'Michael Test',
+  // The live shape: no owner, no contractor on the proposal, awarded to APS.
+  auth_profile_id: null,
+  awarded_to_auth_profile_id: 'aps-profile',
+  awarded_contractor_id: 'aps-contractor',
+};
+
+test('BSA-053: the award record names the contractor when nothing else does', async () => {
+  // Its proposal carries no contractor_id and its row has no owner, so before
+  // this its homeowner could not sign in with a correct code on a signed
+  // contract. `awarded_contractor_id` is BuildSuite's own answer.
+  const { reader } = readerOf([[BSA_053], [{ contractor_id: null }]]);
+  const found = await reader.findSignedProjectForClient('BSA-053', 'owner@example.com');
+  assert.equal(found?.contractorId, 'aps-contractor');
+  assert.equal(found?.projectId, 'p-053');
+});
+
+test('the award record wins over the proposal when both name someone', async () => {
+  // It is the designed record of who won the job, written onto the row at
+  // award. A proposal field is a detail of one document.
+  const { reader } = readerOf([[BSA_053], [{ contractor_id: 'proposal-says-c-9' }]]);
+  const found = await reader.findSignedProjectForClient('BSA-053', 'owner@example.com');
+  assert.equal(found?.contractorId, 'aps-contractor');
+});
+
+test('an unawarded project still falls back to the proposal, then the owner', async () => {
+  const { reader } = readerOf([
+    [{ ...PROJECT, awarded_to_auth_profile_id: null, awarded_contractor_id: null }],
+    [SIGNED_PROPOSAL],
+  ]);
+  const found = await reader.findSignedProjectForClient('BSA-052', 'owner@example.com');
+  assert.equal(found?.contractorId, 'c-1');
+});
+
+test('the award columns are read in the same single project query', async () => {
+  const { reader, calls } = readerOf([[BSA_053], [{ contractor_id: null }]]);
+  await reader.findSignedProjectForClient('BSA-053', 'owner@example.com');
+  const url = decodeURIComponent(calls[0]!.url);
+  assert.match(url, /select=[^&]*awarded_contractor_id/);
+  assert.match(url, /select=[^&]*awarded_to_auth_profile_id/);
+});
+
+test('an award does not bypass the signature gate', async () => {
+  // Awarded is not signed. With no signed proposal, nobody gets in — whoever
+  // BuildSuite says won the job.
+  const { reader } = readerOf([[BSA_053], []]);
+  assert.equal(await reader.findSignedProjectForClient('BSA-053', 'owner@example.com'), null);
+});
