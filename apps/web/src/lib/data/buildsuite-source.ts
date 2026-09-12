@@ -73,6 +73,43 @@ function rowsTtlFor(reader: BuildSuiteReader): TtlCache<BuildSuiteProjectRow[]> 
   return store;
 }
 
+/**
+ * May this contractor operate this project? Only if the award names them.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE CONTRACTOR SIDE CHECKS THE AWARD TOO
+ *
+ * A homeowner's Hub reads are filed under `project.awardedContractorId`
+ * (`hubScopeOfProject`). A contractor's Hub writes are filed under their own
+ * session's contractor. If those two ever differed for one project, the
+ * contractor would publish a schedule into one partition and the homeowner
+ * would read an empty one — silently, with both screens looking fine.
+ *
+ * So an awarded project is listed, and opened, only for the contractor the
+ * award names. That keeps both sides on one partition by construction rather
+ * than by the data happening to agree. It is also Chris's rule from the
+ * 2026-09-10 huddle: only the awarded contractor keeps access.
+ *
+ * Measured 2026-09-12: on all four awarded projects the award and the
+ * contractor behind the winning profile agree, so this hides nothing today. If
+ * it ever does, the log says which project and why.
+ *
+ * Unawarded projects, and sessions not linked to a contractor record, are left
+ * to the tenant filter — there is nothing here to compare.
+ * ---------------------------------------------------------------------------
+ */
+export function awardAllows(project: Project, scope: TenantScope): boolean {
+  const awarded = project.awardedContractorId?.trim() ?? '';
+  const mine = scope.contractorId?.trim() ?? '';
+  if (awarded === '' || mine === '') return true;
+  if (awarded === mine) return true;
+  console.warn(
+    `[projects] ${project.projectCode ?? 'a project'} is awarded to contractor ${awarded.slice(0, 8)}, ` +
+      `not this session's ${mine.slice(0, 8)} — withheld so the two cannot write and read different Hub rows`,
+  );
+  return false;
+}
+
 const rowsForScope: (
   reader: BuildSuiteReader,
   safe: TenantScope,
@@ -138,7 +175,8 @@ export class BuildSuiteDataSource implements ProjectDataSource {
   async listProjects(scope: TenantScope): Promise<Project[]> {
     const safe = assertScope(scope, 'projects');
     const rows = await rowsForScope(this.reader, safe);
-    return this.withVisibility(rows.map((row) => this.toProject(row)));
+    const projects = rows.map((row) => this.toProject(row)).filter((p) => awardAllows(p, safe));
+    return this.withVisibility(projects);
   }
 
   async getProject(scope: TenantScope, buildsuiteProjectId: string): Promise<Project | null> {
@@ -238,6 +276,7 @@ export class BuildSuiteDataSource implements ProjectDataSource {
       buildsuiteProjectId: row.id,
       projectCode: nonEmpty(row.project_code) ?? null,
       awardCode: nonEmpty(row.award_code ?? null) ?? null,
+      awardedContractorId: nonEmpty(row.awarded_contractor_id ?? null) ?? null,
       scopeOfWorkUrl: /^https?:\/\//i.test((row.sow_pdf_url ?? '').trim())
         ? (row.sow_pdf_url ?? '').trim()
         : null,

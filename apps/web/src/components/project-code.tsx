@@ -1,4 +1,4 @@
-import { clientReference, contractorCode } from '@/lib/project-codes';
+import { clientReference, contractorCode, UNLISTED_PROJECT } from '@/lib/project-codes';
 import type { Project } from '@/lib/data/types';
 
 /**
@@ -28,6 +28,27 @@ export function ContractorProjectCode({
     <>
       <span className="font-medium tracking-wide text-navy-500">{code}</span>
       {ref !== null && <span className="text-navy-400"> · client ref {ref}</span>}
+    </>
+  );
+}
+
+/**
+ * A project named in a list row on a contractor or crew screen: its name and
+ * its contractor code — "Handyman / Small Repairs · BSA-APS-003 · client ref
+ * BSA-053". A project the screen cannot find reads "Unlisted project", never
+ * its id.
+ */
+export function ContractorProjectRef({
+  project,
+}: {
+  project: (Pick<Project, 'projectName' | 'projectCode'> & { awardCode?: string | null }) | undefined | null;
+}) {
+  if (project === undefined || project === null) {
+    return <span className="italic">{UNLISTED_PROJECT}</span>;
+  }
+  return (
+    <>
+      {project.projectName} · <ContractorProjectCode project={project} />
     </>
   );
 }

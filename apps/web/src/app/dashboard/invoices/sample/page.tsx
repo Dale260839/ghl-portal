@@ -25,6 +25,11 @@ interface SampleContract {
   id: string;
   projectName: string;
   projectId: string;
+  /**
+   * What the screen shows to identify the job. A code, like the real screens
+   * print, rather than the fixture id; clearly marked as a sample.
+   */
+  projectCode: string;
   priceText: string;
   contractTotal: number | null;
   content: string;
@@ -37,6 +42,7 @@ const SAMPLES: SampleContract[] = [
     id: 'sample-a',
     projectName: 'Master Bath Remodel (sample)',
     projectId: 'sample-project-a',
+    projectCode: 'SAMPLE-001',
     priceText: '24500.00',
     contractTotal: 24500,
     content: `
@@ -59,6 +65,7 @@ All payments are due upon invoice receipt unless otherwise stated.
     id: 'sample-b',
     projectName: 'Garage Door Replacement (sample)',
     projectId: 'sample-project-b',
+    projectCode: 'SAMPLE-002',
     priceText: '$2,000 - $5,000',
     contractTotal: null,
     content: `
@@ -130,7 +137,7 @@ export default function InvoicesSample() {
             />
 
             <div className="border-b border-navy-100 px-5 py-3 text-xs text-navy-500">
-              <span className="font-medium text-navy-700">{sample.projectId}</span>
+              <span className="font-medium text-navy-700">{sample.projectCode}</span>
               {' · '}
               {sample.contractTotal === null ? (
                 <span className="text-amber-700">

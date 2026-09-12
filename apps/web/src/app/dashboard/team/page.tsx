@@ -209,14 +209,10 @@ export default async function Team({
                         <span className="block truncate text-navy-400">
                           {/* The contractor's code, and the client's beside it when
                               they differ — the client's is what a homeowner signs
-                              in with, which is why codes are on this screen. A
-                              project with no code at all keeps the short id so two
-                              uncoded jobs can still be told apart. */}
-                          {contractorCode(project) === null ? (
-                            project.buildsuiteProjectId.slice(0, 8)
-                          ) : (
-                            <ContractorProjectCode project={project} />
-                          )}
+                              in with, which is why codes are on this screen. An
+                              uncoded project says so; the name above it is what
+                              tells two apart, never a fragment of its UUID. */}
+                          <ContractorProjectCode project={project} />
                         </span>
                       </span>
                     </label>

@@ -759,6 +759,45 @@ test('no source file carries an invisible control character', () => {
   assert.deepEqual(offenders, [], 'an invisible control character — almost certainly a shell-mangled \\b');
 });
 
+test('no screen prints a project id — only its code or its name', () => {
+  // John, 2026-09-12: "make sure not display any project id that is random
+  // strings". A crawl of all 130 routes that day found them in three shapes,
+  // and each is refused here:
+  //
+  //   1. the id as page text        {row.project.buildsuiteProjectId}
+  //   2. a fallback to the id        projectName ?? projectId   (six screens)
+  //   3. a truncated id              buildsuiteProjectId.slice(0, 8)
+  //
+  // An id inside an ATTRIBUTE — href, key, value — is fine: nobody reads it.
+  // The test looks only for it rendered as a JSX child, which is the one place
+  // a person would.
+  const offenders: string[] = [];
+  for (const file of FILES) {
+    const path = rel(file.path);
+    if (!path.endsWith('.tsx') || !(path.startsWith('app/') || path.startsWith('components/'))) continue;
+    // Comments blanked but their LINE BREAKS kept, so a reported line number
+    // is the real one. `withoutComments` collapses a block comment to a single
+    // space, which shifted every report below it — by 27 lines on the invoices
+    // page when this was written.
+    const code = file.text
+      .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' '))
+      .replace(/\/\/[^\n]*/g, ' ');
+    code.split('\n').forEach((line, i) => {
+      const where = `${path}:${i + 1}`;
+      // 1. `{...buildsuiteProjectId}` as a child: not after `=` (an attribute)
+      //    and not after `$` (inside a template literal building a URL).
+      if (/(^|[^=$\w])\{[\w.?!]*buildsuiteProjectId\}/.test(line)) offenders.push(`${where} renders the id`);
+      // 2. a name that falls back to an id
+      if (/\?\?\s*(?:[\w.]+\.)?projectId\b(?!\s*[:=])/.test(line) && !/href|key=|value=/.test(line)) {
+        offenders.push(`${where} falls back to the id`);
+      }
+      // 3. a truncated id
+      if (/buildsuiteProjectId\.(?:slice|substring)\(/.test(line)) offenders.push(`${where} truncates the id`);
+    });
+  }
+  assert.deepEqual(offenders, [], 'show the code (ContractorProjectCode) or the name, never the id');
+});
+
 test('a homeowner never sees the award code', () => {
   // Sing, 2026-09-12: project_code is the CLIENT's code — the one the signature
   // automation emails them, the one they sign in with, the one their invoices

@@ -15,6 +15,7 @@
     "hud": "node scripts/build-hud.mjs",
     "hud:maps": "node scripts/mint-cookies.mjs && node scripts/build-wireframes.mjs && node scripts/build-hud.mjs",
     "check:codes": "node scripts/check-project-codes.mjs",
+    "check:ids": "cd apps/web && node --conditions=react-server scripts/check-no-raw-ids.mts",
     "checkin": "node scripts/checkin.mjs"
   }
 }

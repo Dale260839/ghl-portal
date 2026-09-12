@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ContractorProjectCode } from '@/components/project-code';
 
 import { RowMenu } from '@/components/row-menu';
 import { requireTenantScope } from '@/lib/scope';
@@ -32,9 +33,6 @@ type Tone = 'good' | 'warn' | 'bad';
 
 // BuildSuite ids are UUIDs; the fixtures use short codes. Show the short form
 // so a long id never crowds the project name off its line.
-function shortId(id: string): string {
-  return id.length > 16 ? id.slice(0, 8) : id;
-}
 
 function StatusPill({ label, tone }: { label: string; tone: Tone }) {
   const cls =
@@ -252,7 +250,8 @@ export default async function PortfolioDashboard() {
                           {p.projectName}
                         </Link>
                         <span className="mt-0.5 shrink-0 text-[11px] text-navy-400">
-                          {shortId(p.buildsuiteProjectId)}
+                          {/* The contractor's code, not a truncated UUID. */}
+                          <ContractorProjectCode project={p} />
                         </span>
                       </div>
                       <div className="mt-0.5 truncate text-xs text-navy-400">

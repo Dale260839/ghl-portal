@@ -1,4 +1,6 @@
 import { SubmitButton } from '@/components/submit-button';
+import { ContractorProjectRef } from '@/components/project-code';
+import { projectById } from '@/lib/project-codes';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { Card, shortDate } from '@/components/ui';
@@ -79,8 +81,10 @@ export default async function FieldMessages({
     }));
   }
 
-  const nameOf = (projectId: string) =>
-    mine.find((p) => p.buildsuiteProjectId === projectId)?.projectName ?? projectId;
+  // The project itself, so the row can print its name AND its code. The old
+  // `nameOf` fell back to the raw UUID when a project was not in the list;
+  // <ContractorProjectRef> falls back to words instead.
+  const projectOf = (projectId: string) => projectById(mine, projectId);
 
   return (
     <div className="space-y-5">
@@ -104,7 +108,7 @@ export default async function FieldMessages({
                   <span className="text-sm font-semibold text-navy-900">{m.sender}</span>
                   <span className="text-xs text-navy-400">{shortDate(m.date)}</span>
                 </div>
-                <div className="mt-0.5 text-xs text-navy-400">{nameOf(m.projectId)}</div>
+                <div className="mt-0.5 text-xs text-navy-400"><ContractorProjectRef project={projectOf(m.projectId)} /></div>
                 <p className="mt-2 text-sm leading-relaxed whitespace-pre-wrap text-navy-700">
                   {m.body}
                 </p>

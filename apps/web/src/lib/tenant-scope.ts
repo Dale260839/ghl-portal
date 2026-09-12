@@ -131,6 +131,20 @@ export async function hubScopeOfProject(
 ): Promise<TenantScope | null> {
   const base = scopeOfProject(project);
   if (base.authProfileIds[0] === undefined || base.authProfileIds[0].trim() === '') return null;
+
+  // THE AWARD FIRST (John, 2026-09-12: "awarded_contractor_id — I want this used
+  // across all the modules"). BuildSuite writes the winning contractor onto the
+  // project row at award, so for an awarded project there is nothing to infer:
+  // the row says whose it is. Every client-side Hub read goes through here —
+  // schedule, documents, photos, selections, change orders, messages, issues,
+  // payment links — so this one line is what makes them all follow the award.
+  //
+  // The inference through the owner's profile stays as the answer for projects
+  // nobody has been awarded. Measured 2026-09-12: on all four awarded projects
+  // the two agree, so nothing a homeowner can already see moves.
+  const awarded = project.awardedContractorId?.trim() ?? '';
+  if (awarded !== '') return { ...base, contractorId: awarded };
+
   const contractorId = await deps.lookupContractorId(base);
   return contractorId === null ? null : { ...base, contractorId };
 }

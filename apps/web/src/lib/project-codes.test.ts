@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { clientCode, clientReference, contractorCode } from './project-codes.ts';
+import {
+  clientCode,
+  clientReference,
+  contractorCode,
+  projectById,
+  projectNameById,
+  UNLISTED_PROJECT,
+} from './project-codes.ts';
 
 /**
  * The display rule (Sing, 2026-09-12). Contractor: COALESCE(award_code,
@@ -49,4 +56,29 @@ test('a source that knows nothing about awards still works', () => {
   // `awardCode` is optional: fixtures and the GHL source never set it.
   assert.equal(contractorCode({ projectCode: 'BSA-044' }), 'BSA-044');
   assert.equal(clientReference({ projectCode: 'BSA-044' }), null);
+});
+
+// ── Naming a project by id never prints the id ───────────────────────────────
+
+const LIST = [
+  { buildsuiteProjectId: '75233730-d76f-41d7-a495-d40cb7a9c912', projectName: 'Handyman / Small Repairs' },
+];
+
+test('a listed project is named by its name', () => {
+  assert.equal(projectNameById(LIST, '75233730-d76f-41d7-a495-d40cb7a9c912'), 'Handyman / Small Repairs');
+});
+
+test('an unlisted project is named in words, never by its id', () => {
+  // Six screens each fell back to the raw UUID here (John, 2026-09-12: "make
+  // sure not display any project id that is random strings").
+  const id = 'bbd77380-ebc6-417f-8aaf-0f03150198dc';
+  const name = projectNameById(LIST, id);
+  assert.equal(name, UNLISTED_PROJECT);
+  assert.equal(name.includes(id.slice(0, 8)), false);
+  assert.equal(projectById(LIST, id), undefined);
+});
+
+test('a listed project with a blank name is still never named by its id', () => {
+  const id = 'p-blank';
+  assert.equal(projectNameById([{ buildsuiteProjectId: id, projectName: '  ' }], id), UNLISTED_PROJECT);
 });

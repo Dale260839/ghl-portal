@@ -1,4 +1,6 @@
 
+import { ContractorProjectRef } from '@/components/project-code';
+import { projectById } from '@/lib/project-codes';
 import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, CardHeader, InternalNote, StatTile, shortDate } from '@/components/ui';
 import { currentDataSource } from '@/lib/data/current-source';
@@ -23,8 +25,10 @@ export default async function Issues() {
   const urgent = open.filter((i) => i.priority === 'Urgent');
   const unassigned = open.filter((i) => i.assignedTo === null);
 
-  const nameOf = (projectId: string) =>
-    projects.find((p) => p.buildsuiteProjectId === projectId)?.projectName ?? projectId;
+  // The project itself, so the row can print its name AND its code. The old
+  // `nameOf` fell back to the raw UUID when a project was not in the list;
+  // <ContractorProjectRef> falls back to words instead.
+  const projectOf = (projectId: string) => projectById(projects, projectId);
 
   return (
     <div className="space-y-7">
@@ -64,7 +68,7 @@ export default async function Issues() {
                     <span className="text-sm font-medium text-navy-900">{issue.issueTitle}</span>
                   </div>
                   <div className="mt-0.5 truncate text-xs text-navy-400">
-                    {nameOf(issue.projectId)} · {issue.projectArea}
+                    <ContractorProjectRef project={projectOf(issue.projectId)} /> · {issue.projectArea}
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -133,7 +137,7 @@ export default async function Issues() {
                   <Badge tone="good">{issue.status}</Badge>
                 </div>
                 <p className="mt-1 text-xs text-navy-400">
-                  {nameOf(issue.projectId)} · {issue.resolution}
+                  <ContractorProjectRef project={projectOf(issue.projectId)} /> · {issue.resolution}
                 </p>
               </li>
             ))}

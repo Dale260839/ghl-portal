@@ -1,4 +1,5 @@
 import { SubmitButton } from '@/components/submit-button';
+import { ContractorProjectCode } from '@/components/project-code';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getProposalsReader } from '@/lib/buildsuite/proposals';
@@ -251,7 +252,10 @@ export default async function Invoices() {
 
             <div className="border-b border-navy-100 px-5 py-3 text-xs text-navy-500">
               <span className="font-medium text-navy-700">
-                {row.project.buildsuiteProjectId}
+                {/* Was the UUID. The contractor's code instead — the INVOICE
+                    itself still carries project_code, because the homeowner
+                    receives it. */}
+                <ContractorProjectCode project={row.project} />
               </span>
               {' · '}
               {proposal.amount === null ? (

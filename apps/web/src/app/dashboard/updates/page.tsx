@@ -1,4 +1,5 @@
 import { SubmitButton } from '@/components/submit-button';
+import { UNLISTED_PROJECT } from '@/lib/project-codes';
 import { reviewUpdate } from '@/lib/actions';
 
 import { requireTenantScope } from '@/lib/scope';
@@ -35,7 +36,7 @@ export default async function ReviewQueue() {
           return (
             <Card key={u.id}>
               <CardHeader
-                title={project?.projectName ?? u.projectId}
+                title={project?.projectName ?? UNLISTED_PROJECT}
                 action={
                   <Badge tone={u.managerApprovalStatus === 'Pending' ? 'warn' : 'neutral'}>
                     {u.managerApprovalStatus}
@@ -135,7 +136,7 @@ export default async function ReviewQueue() {
               <li key={u.id} className="px-5 py-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-medium text-navy-900">
-                    {project?.projectName ?? u.projectId}
+                    {project?.projectName ?? UNLISTED_PROJECT}
                   </span>
                   <span className="text-xs text-navy-400">
                     published {u.publishDate === null ? '—' : shortDate(u.publishDate)}

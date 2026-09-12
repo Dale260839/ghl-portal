@@ -47,6 +47,21 @@ export interface Project {
    */
   awardCode?: string | null;
   /**
+   * `projects.awarded_contractor_id` — the `contractors.id` of the contractor
+   * who WON this project, as BuildSuite records it at award (Sing, 2026-09-12).
+   *
+   * THE answer to "whose project is this" for everything the Hub files under a
+   * contractor — schedule, documents, photos, selections, change orders,
+   * messages, invoice drafts. `hubScopeOfProject` uses it before any inference,
+   * and a contractor may only open an awarded project if it names them, so the
+   * contractor who writes a project's Hub rows and the homeowner who reads them
+   * always land on the same partition.
+   *
+   * Null on a project nobody has been awarded. Optional because only the
+   * BuildSuite source knows about awards.
+   */
+  awardedContractorId?: string | null;
+  /**
    * BuildSuite's signed scope-of-work PDF (`projects.sow_pdf_url`), when it is
    * a real http(s) link. Shown to the contractor and the crew, never to the
    * homeowner unless a released document carries it. Optional: fixtures and

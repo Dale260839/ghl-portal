@@ -1,4 +1,6 @@
 import { ISSUE_CATEGORIES } from '@buildsuite/contracts';
+import { ContractorProjectRef } from '@/components/project-code';
+import { projectById } from '@/lib/project-codes';
 
 import { SubmitButton } from '@/components/submit-button';
 import { requireTenantScope } from '@/lib/scope';
@@ -74,8 +76,10 @@ export default async function FieldIssues() {
   const open = issues.filter((i) => i.status !== 'Resolved' && i.status !== 'Closed');
   const done = issues.filter((i) => i.status === 'Resolved' || i.status === 'Closed');
 
-  const nameOf = (projectId: string) =>
-    mine.find((p) => p.buildsuiteProjectId === projectId)?.projectName ?? projectId;
+  // The project itself, so the row can print its name AND its code. The old
+  // `nameOf` fell back to the raw UUID when a project was not in the list;
+  // <ContractorProjectRef> falls back to words instead.
+  const projectOf = (projectId: string) => projectById(mine, projectId);
 
   return (
     <div className="space-y-5">
@@ -198,7 +202,7 @@ export default async function FieldIssues() {
                           {i.issueNumber} · {i.issueTitle}
                         </span>
                         <div className="mt-0.5 text-xs text-navy-400">
-                          {nameOf(i.projectId)}
+                          <ContractorProjectRef project={projectOf(i.projectId)} />
                           {i.projectArea !== '' && ` · ${i.projectArea}`} · raised{' '}
                           {shortDate(i.submittedDate)}
                         </div>

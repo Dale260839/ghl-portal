@@ -69,6 +69,12 @@ export function InvoiceTemplateForm({
       ? `From BuildSuite: ${value}`
       : none;
 
+  // The logo is a storage URL made of three UUIDs — printed as a hint it is
+  // exactly the "random string" nobody should be shown (John, 2026-09-12). The
+  // preview beside this form already shows the logo itself.
+  const logoHint =
+    (fallback?.logoUrl ?? '').trim() !== '' ? 'From BuildSuite: your current logo' : 'https://…/logo.png';
+
   const text = (
     name: keyof Fallback,
     label: string,
@@ -83,7 +89,7 @@ export function InvoiceTemplateForm({
         type={type}
         maxLength={max}
         defaultValue={initial?.[name] ?? ''}
-        placeholder={fromBuildSuite(fallback?.[name], none)}
+        placeholder={name === 'logoUrl' ? logoHint : fromBuildSuite(fallback?.[name], none)}
         disabled={!canSave}
         aria-invalid={errors[name] !== undefined}
         className={FIELD}

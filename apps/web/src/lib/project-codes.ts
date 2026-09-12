@@ -55,3 +55,32 @@ export function clientReference(project: Codes): string | null {
 export function clientCode(project: Pick<Project, 'projectCode'>): string | null {
   return present(project.projectCode);
 }
+
+// ── Naming a project a screen holds only by id ───────────────────────────────
+
+/**
+ * What a screen shows when it cannot find the project an id points at.
+ *
+ * Six screens each had their own `nameOf(id)`, and every one fell back to the
+ * id itself — so an issue or a task on a project missing from the list printed
+ * a 36-character UUID where its name should be (John, 2026-09-12: "make sure
+ * not display any project id that is random strings"). This is the one
+ * fallback, and it is words.
+ */
+export const UNLISTED_PROJECT = 'Unlisted project';
+
+/** Find a project by id. The caller renders it; this never returns the id. */
+export function projectById<P extends Pick<Project, 'buildsuiteProjectId'>>(
+  projects: readonly P[],
+  id: string,
+): P | undefined {
+  return projects.find((p) => p.buildsuiteProjectId === id);
+}
+
+/** A project's name by id — its name, or `UNLISTED_PROJECT`. Never the id. */
+export function projectNameById(
+  projects: readonly Pick<Project, 'buildsuiteProjectId' | 'projectName'>[],
+  id: string,
+): string {
+  return projectById(projects, id)?.projectName?.trim() || UNLISTED_PROJECT;
+}
