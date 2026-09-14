@@ -46,7 +46,12 @@ import Link from 'next/link';
  * review work is stored so it survives whichever rail is chosen.
  */
 
-export default async function Invoices() {
+export default async function Invoices({
+  searchParams,
+}: {
+  searchParams?: Promise<{ rail?: string; draft?: string; uncertain?: string }>;
+}) {
+  const outcome = (await searchParams) ?? {};
   const scope = await requireTenantScope();
   const reader = getProposalsReader();
   const hub = getHubInvoiceDrafts();
@@ -72,6 +77,28 @@ export default async function Invoices() {
           </Link>
         </p>
       </div>
+      {outcome.rail !== undefined && (
+        <div
+          className={`enter rounded-lg border px-5 py-3 text-sm ${
+            outcome.uncertain === '1'
+              ? 'border-amber-300 bg-amber-50 text-amber-900'
+              : 'border-red-200 bg-red-50 text-red-800'
+          }`}
+        >
+          {outcome.uncertain === '1' ? (
+            <>
+              <strong>GoHighLevel could not confirm this either way.</strong> {outcome.rail}. The
+              invoice may already exist there. Open GoHighLevel and check before pressing Create
+              again, or the homeowner is invoiced twice.
+            </>
+          ) : (
+            <>
+              <strong>Not created.</strong> {outcome.rail}. Nothing was written in GoHighLevel and
+              the draft is still here.
+            </>
+          )}
+        </div>
+      )}
       {children}
     </div>
   );

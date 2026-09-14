@@ -35,6 +35,8 @@ import { getHubSelections } from './hub-db/selections.ts';
 import { requireAccess } from './access.ts';
 import { clientProjectsFor } from './client-scope.ts';
 import { hubScopeOfProject } from './tenant-scope.ts';
+import { notifyHomeowner } from './notify/homeowner.ts';
+import { MILESTONE_STATUSES, isMilestoneStatus } from './data/types.ts';
 import { getHubStorage } from './hub-db/storage.ts';
 import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
@@ -213,6 +215,16 @@ export async function reviewUpdate(formData: FormData) {
     );
     // eslint-disable-next-line no-console
     console.log(describe(result));
+
+    // Tell the homeowner. Only the client summary travels, never the field
+    // write-up; the email module cannot see anything else.
+    if (project !== null) {
+      await notifyHomeowner(scope, project, {
+        kind: 'update',
+        clientSummary,
+        publishDate: today(),
+      });
+    }
   } else if (action === 'internal') {
     // §10 — recorded, and deliberately NOT visible to the client. The writer
     // derives client_visible from the status, so the two cannot drift apart.
@@ -1098,18 +1110,17 @@ export async function createInvoiceOnRail(formData: FormData) {
   });
 
   if (!result.created) {
-    // An uncertain failure is NOT a failure a contractor should retry. The
-    // invoice may already exist on the rail with no id on our side, and a
-    // second click would make a real second invoice for the same instalment.
-    // Send them to look rather than guessing on their behalf.
-    if (result.uncertain === true) {
-      throw new Error(
-        `${rail.name} could not confirm this either way (${result.reason}). ` +
-          'The invoice MAY have been created. Check GoHighLevel before trying again — ' +
-          'creating it twice would invoice the homeowner twice.',
-      );
-    }
-    throw new Error(`${rail.name} refused to create the invoice: ${result.reason}`);
+    // Land back on the Invoices screen with the reason in plain sight. A thrown
+    // error reaches production as a digest and nothing else, which is what
+    // Chris saw on 14 Sep: the rail refused and nobody could read why. An
+    // uncertain failure is flagged as such, because the invoice MAY exist on
+    // the rail and a second click would invoice the homeowner twice.
+    const params = new URLSearchParams({
+      rail: result.reason,
+      draft: draftId,
+      ...(result.uncertain === true ? { uncertain: '1' } : {}),
+    });
+    redirect(`/dashboard/invoices?${params.toString()}`);
   }
 
   await hub.drafts.recordRailCreation(
@@ -1284,7 +1295,16 @@ export async function updateMilestone(formData: FormData) {
   await ops.updateMilestone(scope, milestoneId, {
     milestoneName: String(formData.get('milestoneName') ?? ''),
     sequence: Number.isFinite(rawSequence) ? rawSequence : 0,
-    status: String(formData.get('status') ?? 'Not Started'),
+    // A fixed vocabulary (Chris, open question since 10 Sep, proposed 14 Sep):
+    // Not Started, In Progress, Completed, Blocked. Anything else is refused
+    // rather than stored as free text the client tracker cannot colour.
+    status: (() => {
+      const raw = String(formData.get('status') ?? 'Not Started');
+      if (!isMilestoneStatus(raw)) {
+        throw new Error(`"${raw}" is not a milestone status. Use one of: ${MILESTONE_STATUSES.join(', ')}.`);
+      }
+      return raw;
+    })(),
     plannedStart: optionalDate(formData.get('plannedStart')),
     plannedEnd: optionalDate(formData.get('plannedEnd')),
     // Presence test: an unchecked box submits nothing, and reading only the
@@ -1564,6 +1584,11 @@ export async function updateChangeOrder(formData: FormData) {
   const projectId = String(formData.get('projectId') ?? '');
   if (changeOrderId === '') throw new Error('changeOrderId is required');
 
+  // What the row looked like before this save, so the homeowner is emailed
+  // once, when the order first goes to them, not on every later edit.
+  const before = (await repo.listChangeOrders(scope, projectId)).find((c) => c.id === changeOrderId);
+  const wasWithClient = before !== undefined && before.status === 'Awaiting Client' && before.clientVisible;
+
   await repo.updateChangeOrder(scope, changeOrderId, {
     title: String(formData.get('title') ?? ''),
     description: String(formData.get('description') ?? ''),
@@ -1574,6 +1599,23 @@ export async function updateChangeOrder(formData: FormData) {
     status: String(formData.get('status') ?? 'Draft'),
     clientVisible: formData.get('clientVisible') !== null,
   });
+
+  const nowWithClient =
+    String(formData.get('status') ?? 'Draft') === 'Awaiting Client' && formData.get('clientVisible') !== null;
+  if (nowWithClient && !wasWithClient) {
+    const project = await (await currentDataSource(scope)).getProject(scope, projectId);
+    if (project !== null) {
+      const added = optionalMoney(formData.get('addedCost')) ?? 0;
+      const credit = optionalMoney(formData.get('creditAmount')) ?? 0;
+      await notifyHomeowner(scope, project, {
+        kind: 'changeOrder',
+        number: before?.changeOrderNumber ?? '',
+        title: String(formData.get('title') ?? ''),
+        netAmount: added - credit + (before?.tax ?? 0),
+        scheduleImpactDays: Number(formData.get('scheduleImpactDays') ?? 0) || 0,
+      });
+    }
+  }
 
   revalidatePath(`/dashboard/projects/${projectId}/change-orders`);
 }

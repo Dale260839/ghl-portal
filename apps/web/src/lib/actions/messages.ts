@@ -10,6 +10,7 @@ import { clientProjectsFor } from '../client-scope.ts';
 import { hubScopeOfProject } from '../tenant-scope.ts';
 import { currentDataSource } from '../data/current-source.ts';
 import { getHubMessages, type HubMessages } from '../hub-db/messages.ts';
+import { notifyHomeowner } from '../notify/homeowner.ts';
 
 /**
  * The message write paths.
@@ -67,11 +68,19 @@ export async function postProjectMessage(formData: FormData) {
   if (body.trim() === '') return;
 
   const scope = await actionTenantScope(session);
+  const release = formData.get('release') !== null;
   await repository().post(
     scope,
-    { projectId, body, clientVisible: formData.get('release') !== null },
+    { projectId, body, clientVisible: release },
     { name: session.name, role: session.role },
   );
+
+  if (release) {
+    const project = await (await currentDataSource(scope)).getProject(scope, projectId);
+    if (project !== null) {
+      await notifyHomeowner(scope, project, { kind: 'message', author: session.name, body: body.trim() });
+    }
+  }
 
   revalidateThreads(projectId);
 }
@@ -92,7 +101,20 @@ export async function setMessageVisibility(formData: FormData) {
   if (messageId === '') throw new Error('messageId is required');
 
   const scope = await actionTenantScope(session);
-  await repository().release(scope, messageId, String(formData.get('release') ?? '') === 'on');
+  const release = String(formData.get('release') ?? '') === 'on';
+  // Read the row before flipping it, so a message already with the client is
+  // not announced twice.
+  const existing = release
+    ? (await repository().listForProject(scope, projectId)).find((m) => m.id === messageId)
+    : undefined;
+  await repository().release(scope, messageId, release);
+
+  if (release && existing !== undefined && !existing.clientVisible) {
+    const project = await (await currentDataSource(scope)).getProject(scope, projectId);
+    if (project !== null) {
+      await notifyHomeowner(scope, project, { kind: 'message', author: existing.author, body: existing.body });
+    }
+  }
 
   revalidateThreads(projectId);
 }

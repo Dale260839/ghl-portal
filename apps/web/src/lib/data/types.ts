@@ -151,13 +151,24 @@ export interface Project {
   allowFileUploads: boolean;
 }
 
+/**
+ * The milestone vocabulary. §6.2 says `Status (select)` and never lists the
+ * values; this is the list, and the timeline select, the write action and the
+ * client tracker's colours all read it from here.
+ */
+export const MILESTONE_STATUSES = ['Not Started', 'In Progress', 'Completed', 'Blocked'] as const;
+export type MilestoneStatus = (typeof MILESTONE_STATUSES)[number];
+export function isMilestoneStatus(value: string): value is MilestoneStatus {
+  return (MILESTONE_STATUSES as readonly string[]).includes(value);
+}
+
 export interface Milestone {
   id: string;
   projectId: string;
   milestoneName: string;
   plannedStart: string;
   plannedEnd: string;
-  status: 'Not Started' | 'In Progress' | 'Completed' | 'Blocked';
+  status: MilestoneStatus;
   sequence: number;
   clientVisible: boolean;
 }

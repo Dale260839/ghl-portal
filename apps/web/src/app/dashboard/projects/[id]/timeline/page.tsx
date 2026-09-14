@@ -4,13 +4,14 @@ import { notFound } from 'next/navigation';
 
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
+import { MILESTONE_STATUSES } from '@/lib/data/types';
 import { Badge, Card, CardHeader } from '@/components/ui';
 import { shortDate } from '@/components/ui';
 import { ControlEmpty, ControlHeader, ControlNote, VisibilityTag } from '@/components/control';
 import { archiveMilestone, createMilestone, updateMilestone } from '@/lib/actions';
 
 /** The four §6.2 states. Free text in the column, a list here. */
-const MILESTONE_STATUSES = ['Not Started', 'In Progress', 'Completed', 'Blocked'] as const;
+
 const FIELD = 'rounded-lg border border-navy-200 px-3 py-2 text-sm';
 
 /**
