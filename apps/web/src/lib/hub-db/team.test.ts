@@ -199,10 +199,21 @@ test('an obviously invalid email is refused before anything is written', async (
 
 // ── Redeeming ────────────────────────────────────────────────────────────────
 
-function acceptResponses(invitation: Record<string, unknown> | undefined) {
+/**
+ * The replies `acceptInvite` receives, in call order: the invitation, the
+ * membership AS IT IS (read first since 2026-09-15, so a reset keeps the joined
+ * date and a revoked member is refused), the membership as written, and the
+ * invitation marked spent.
+ */
+function acceptResponses(
+  invitation: Record<string, unknown> | undefined,
+  member: Record<string, unknown> = {},
+) {
+  const row = { id: 'm1', contractor_id: 'c1', email: 'a@b.com', role: 'field', project_ids: [], activated_at: null, password_hash: null, last_seen_at: null, revoked_at: null, created_at: '2026-08-31T00:00:00Z', full_name: null, invited_by: null, ...member };
   return [
     invitation === undefined ? [] : [invitation],
-    [{ id: 'm1', contractor_id: 'c1', email: 'a@b.com', role: 'field', project_ids: [], activated_at: '2026-08-31T00:00:00Z', password_hash: 'x', last_seen_at: null, revoked_at: null, created_at: '2026-08-31T00:00:00Z', full_name: null, invited_by: null }],
+    [row],
+    [{ ...row, activated_at: row.activated_at ?? '2026-08-31T00:00:00Z', password_hash: 'x' }],
     [],
   ];
 }
@@ -599,4 +610,137 @@ test('setProjects refuses without a resolved contractor', async () => {
     () => team.setProjects({ locationId: 'loc', authProfileIds: ['p1'] }, 'm-1', ['bsp-1']),
     /contractor/i,
   );
+});
+
+// ── People, per project (2026-09-15) ─────────────────────────────────────────
+
+const CONTRACTOR = '5dd312bd-0b95-45af-be7b-c19a14eff103';
+const member = (over: Record<string, unknown> = {}) => ({
+  id: 'm1', contractor_id: CONTRACTOR, email: 'crew@example.com', role: 'field',
+  project_ids: ['p-other'], activated_at: '2026-09-01T00:00:00Z', password_hash: 'x',
+  last_seen_at: null, revoked_at: null, created_at: '2026-09-01T00:00:00Z',
+  full_name: 'Crew', invited_by: 'Marcus', auth_profile_ids: [], ...over,
+});
+
+test('the people on a project are read with "contains", under this contractor only', async () => {
+  const { team, calls } = fakeTeam([[member({ project_ids: ['p-053'] })]]);
+  await team.listForProject(scope, 'p-053');
+  const url = decodeURIComponent(calls[0]!.url);
+  assert.match(url, /project_ids=cs\.\{p-053\}/);
+  assert.match(url, new RegExp(`contractor_id=eq\.${CONTRACTOR}`));
+});
+
+test('adding someone to a project keeps their other projects', async () => {
+  const { team, calls } = fakeTeam([[member()], [member()]]);
+  await team.addToProject(scope, 'm1', 'p-053');
+  const patch = calls.find((c) => c.method === 'PATCH')!.body as Record<string, unknown>;
+  assert.deepEqual(patch.project_ids, ['p-other', 'p-053']);
+});
+
+test('removing someone from a project takes off that project only', async () => {
+  const { team, calls } = fakeTeam([[member({ project_ids: ['p-other', 'p-053'] })], [member()]]);
+  await team.removeFromProject(scope, 'm1', 'p-053');
+  const patch = calls.find((c) => c.method === 'PATCH')!.body as Record<string, unknown>;
+  assert.deepEqual(patch.project_ids, ['p-other']);
+});
+
+test('a project cannot be given to somebody else\'s team member', async () => {
+  // The lookup is filtered by the contractor, so another tenant's id finds nothing.
+  const { team } = fakeTeam([[]]);
+  await assert.rejects(() => team.addToProject(scope, 'someone-elses', 'p-053'), /not on your team/);
+});
+
+test('inviting a NEW person to a project scopes them to that project', async () => {
+  const { team, calls } = fakeTeam([[], [member({ id: 'm-new', project_ids: ['p-053'], activated_at: null })], []]);
+  const out = await team.inviteToProject(scope, { email: 'New@Example.com', fullName: 'New', projectId: 'p-053' }, actor);
+
+  assert.equal(out.kind, 'invited');
+  const insert = calls.find((c) => c.method === 'POST' && c.url.includes('hub_memberships'))!;
+  const [row] = insert.body as Record<string, unknown>[];
+  assert.deepEqual(row!.project_ids, ['p-053']);
+  assert.equal(row!.role, 'field');
+  assert.equal(row!.email, 'new@example.com');
+});
+
+test('someone already on the team is ADDED to the project, not invited twice', async () => {
+  // One live membership per person per contractor — a second invitation would
+  // fail on the unique index, and they already have a way in.
+  const { team, calls } = fakeTeam([[member()], [member()]]);
+  const out = await team.inviteToProject(scope, { email: 'crew@example.com', fullName: '', projectId: 'p-053' }, actor);
+
+  assert.equal(out.kind, 'added');
+  assert.equal(calls.some((c) => c.method === 'POST'), false, 'no new membership or invitation');
+  const patch = calls.find((c) => c.method === 'PATCH')!.body as Record<string, unknown>;
+  assert.deepEqual(patch.project_ids, ['p-other', 'p-053']);
+});
+
+test('a homeowner\'s address is refused, never invited', async () => {
+  const { team, calls } = fakeTeam([[member({ role: 'client' })]]);
+  const out = await team.inviteToProject(scope, { email: 'crew@example.com', fullName: '', projectId: 'p-053' }, actor);
+  assert.equal(out.kind, 'refused');
+  assert.match(out.kind === 'refused' ? out.reason : '', /project code/);
+  assert.equal(calls.some((c) => c.method !== 'GET'), false);
+});
+
+// ── Password reset ───────────────────────────────────────────────────────────
+
+test('a reset revokes older links, then issues a single-use one for a day', async () => {
+  const { team, calls } = fakeTeam([[member()], [], []]);
+  const before = Date.now();
+  const out = await team.issuePasswordReset(scope, 'm1', actor, 'https://hub.example.com');
+
+  const revokeOld = calls.find((c) => c.method === 'PATCH' && c.url.includes('hub_invitations'))!;
+  assert.match(decodeURIComponent(revokeOld.url), /membership_id=eq\.m1/);
+  assert.match(decodeURIComponent(revokeOld.url), /accepted_at=is\.null/);
+  assert.ok((revokeOld.body as Record<string, unknown>).revoked_at);
+
+  const [row] = calls.find((c) => c.method === 'POST' && c.url.includes('hub_invitations'))!.body as Record<string, unknown>[];
+  assert.equal(row!.token_hash, hashToken(out.token), 'only the hash is stored');
+  const lifetime = new Date(String(row!.expires_at)).getTime() - before;
+  assert.ok(lifetime > 23 * 3600e3 && lifetime <= 24 * 3600e3 + 5e3, `a reset lives a day, not ${lifetime}ms`);
+  assert.match(out.resetUrl, /^https:\/\/hub\.example\.com\/invite\//);
+});
+
+test('re-sending to someone who never accepted is an invitation, and lives a week', async () => {
+  // The invitation email says "seven days"; a one-day link would make it untrue.
+  const { team, calls } = fakeTeam([[member({ activated_at: null, password_hash: null })], [], []]);
+  const before = Date.now();
+  await team.issuePasswordReset(scope, 'm1', actor);
+  const [row] = calls.find((c) => c.method === 'POST')!.body as Record<string, unknown>[];
+  const lifetime = new Date(String(row!.expires_at)).getTime() - before;
+  assert.ok(lifetime > 6.9 * 86400e3, 'a re-invitation lives as long as an invitation');
+  assert.match(String(row!.created_by), /invitation resent/);
+});
+
+test('a homeowner has no Hub password to reset', async () => {
+  const { team, calls } = fakeTeam([[member({ role: 'client' })]]);
+  await assert.rejects(() => team.issuePasswordReset(scope, 'm1', actor), /project code/);
+  assert.equal(calls.some((c) => c.method !== 'GET'), false, 'nothing written');
+});
+
+test('a revoked person cannot be sent a reset', async () => {
+  const { team, calls } = fakeTeam([[member({ revoked_at: '2026-09-10T00:00:00Z' })]]);
+  await assert.rejects(() => team.issuePasswordReset(scope, 'm1', actor), /restore/);
+  assert.equal(calls.some((c) => c.method !== 'GET'), false);
+});
+
+test('redeeming a reset keeps the date they first joined', async () => {
+  const joined = '2026-09-01T00:00:00Z';
+  const { team, calls } = fakeTeam(acceptResponses(validInvitation, { activated_at: joined, password_hash: 'old' }));
+  const token = issueInviteToken({ email: 'a@b.com', role: 'field', contractorId: 'c1' }, SECRET);
+
+  const result = await team.acceptInvite(token, 'a-long-enough-password');
+  assert.equal(result.ok, true);
+  const patch = calls.find((c) => c.method === 'PATCH' && c.url.includes('hub_memberships'))!.body as Record<string, unknown>;
+  assert.equal(patch.activated_at, joined, 'a reset is not a new arrival');
+  assert.ok(patch.password_hash !== 'old');
+});
+
+test('a still-valid link cannot set a password for a revoked member', async () => {
+  const { team, calls } = fakeTeam(acceptResponses(validInvitation, { revoked_at: '2026-09-10T00:00:00Z' }));
+  const token = issueInviteToken({ email: 'a@b.com', role: 'field', contractorId: 'c1' }, SECRET);
+
+  const result = await team.acceptInvite(token, 'a-long-enough-password');
+  assert.deepEqual(result, { ok: false, reason: 'revoked' });
+  assert.equal(calls.some((c) => c.method === 'PATCH'), false, 'the password must not change');
 });

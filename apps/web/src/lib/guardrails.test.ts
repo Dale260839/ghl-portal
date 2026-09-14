@@ -708,8 +708,13 @@ test('§1.4 portal navigation stays on the project being shown', () => {
   const bare = code.match(/href=\{item\.href\}/g) ?? [];
   assert.deepEqual(bare, [], 'a nav link uses the bare href and will drop the portal project');
 
-  const carried = code.match(/href=\{portalHref\(item\.href, search\)\}/g) ?? [];
-  assert.equal(carried.length, 2, 'SidebarNav and MobileNav must both carry the portal project');
+  // At least one carried link in EACH component. An exact total was brittle: the
+  // "Projects" parent (2026-09-15) added a third, and a count is not the rule —
+  // the rule is that no nav link is bare, which the assertion above checks.
+  const sidebar = code.slice(code.indexOf('export function SidebarNav'), code.indexOf('export function MobileNav'));
+  const mobile = code.slice(code.indexOf('export function MobileNav'));
+  assert.match(sidebar, /href=\{portalHref\(item\.href, search\)\}/, 'SidebarNav must carry the portal project');
+  assert.match(mobile, /href=\{portalHref\(item\.href, search\)\}/, 'MobileNav must carry the portal project');
 
   // And every portal link the LAYOUT renders itself. The change-order bell was
   // still a bare <Link href="/portal/change-orders"> after the nav was fixed.

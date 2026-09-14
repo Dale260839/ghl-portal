@@ -14,23 +14,14 @@ import { DataModeBanner } from '@/components/ui';
 import { getHubClient } from '@/lib/hub-db/client';
 import { currentDataSource, currentSourceKind } from '@/lib/data/current-source';
 import {
-  IconBudget,
-  IconChangeOrders,
-  IconCompletion,
   IconDashboard,
-  IconDesigns,
-  IconDocuments,
   IconInvoices,
   IconIssues,
-  IconMessages,
   IconProjects,
   IconReports,
-  IconSchedule,
-  IconSettings,
   IconTasks,
   IconTeam,
   IconUpdates,
-  IconWarranty,
 } from '@/components/nav-icons';
 
 import { isActiveProject } from '@/lib/data/types';
@@ -63,35 +54,42 @@ export default async function DashboardLayout({ children }: { children: React.Re
     (i) => i.status !== 'Resolved' && i.status !== 'Closed',
   ).length;
 
-  // The per-project screens (Schedule, Change Orders, …) live under a project.
-  // The sidebar mirrors the Project Hub design, so those items open the first
-  // active project's copy — a populated screen rather than a chooser.
+  // Where the sidebar's project sections point when you are not inside a
+  // project: the first active one, so they open a populated screen rather than
+  // a chooser. Inside a project they follow that project instead.
   const firstActive = projects.find(isActiveProject) ?? projects[0];
-  const proj = (seg: string): string =>
-    firstActive !== undefined
-      ? `/dashboard/projects/${firstActive.buildsuiteProjectId}/${seg}`
-      : '/dashboard/projects';
 
+  // ---------------------------------------------------------------------------
+  // "PROJECTS" IS A PARENT NOW (John, 2026-09-15).
+  //
+  // Its children are the project's own sections — Timeline through Visibility,
+  // plus People — and they open the project you are in. Eight flat entries used
+  // to point at those same pages (Schedule, Designs & Selections, Estimates &
+  // Budget, Change Orders, Documents, Messages, Punch List and Warranty, and
+  // Settings, which was Visibility), always for the FIRST active project,
+  // whichever one you were actually looking at. They are gone: each now lives
+  // once, under the project it belongs to.
+  //
+  // What stays at the top level is what spans every project: the portfolio,
+  // the review queue, the cross-project issue list, invoices, reports, and the
+  // Team roster.
+  // ---------------------------------------------------------------------------
   const nav: NavItem[] = [
     { href: '/dashboard', label: 'Portfolio Dashboard', icon: IconDashboard },
-    { href: '/dashboard/projects', label: 'Projects', icon: IconProjects },
-    { href: proj('schedule'), label: 'Schedule', icon: IconSchedule },
+    {
+      href: '/dashboard/projects',
+      label: 'Projects',
+      icon: IconProjects,
+      projectSections: { fallbackProjectId: firstActive?.buildsuiteProjectId ?? null },
+    },
     { href: '/dashboard/engagements', label: 'Tasks', icon: IconTasks },
     { href: '/dashboard/updates', label: 'Field Updates', icon: IconUpdates, badge: pendingReview },
-    // The screen invites crew and homeowners and lists them. Chris looked for
-    // "Team" on the 10 Sep call and did not find it under "Clients".
-    { href: '/dashboard/team', label: 'Team', icon: IconTeam },
-    { href: proj('designs'), label: 'Designs & Selections', icon: IconDesigns },
-    { href: proj('budget'), label: 'Estimates & Budget', icon: IconBudget },
-    { href: proj('change-orders'), label: 'Change Orders', icon: IconChangeOrders },
-    { href: proj('documents'), label: 'Documents', icon: IconDocuments },
     { href: '/dashboard/issues', label: 'Issues', icon: IconIssues, badge: openIssues },
-    { href: proj('messages'), label: 'Messages', icon: IconMessages },
     { href: '/dashboard/invoices', label: 'Invoices & Payments', icon: IconInvoices },
-    { href: proj('completion'), label: 'Punch List', icon: IconCompletion },
-    { href: proj('completion'), label: 'Warranty', icon: IconWarranty },
+    // Everyone across every project, and what each may see. Inviting someone is
+    // per project now — on that project's People section.
+    { href: '/dashboard/team', label: 'Team', icon: IconTeam },
     { href: '/dashboard/pipeline', label: 'Reports', icon: IconReports },
-    { href: proj('visibility'), label: 'Settings', icon: IconSettings },
   ];
 
   return (

@@ -481,11 +481,19 @@ export class SupabaseReader implements BuildSuiteReader {
    */
   async clientEmailForProject(scope: TenantScope, projectId: string): Promise<string | null> {
     if (projectId.trim() === '') return null;
+    // Owned OR awarded (2026-09-15). Filtering on `auth_profile_id` alone missed
+    // every project this contractor WON without owning the row — BSA-053 has no
+    // owner in BuildSuite and `awarded_to_auth_profile_id` naming Alliance Pro
+    // Services — so its People screen and its invoice both lost the homeowner's
+    // address. Both keys come from the asserted scope; neither widens beyond
+    // this tenant's own profiles.
+    const safe = assertScope(scope, 'client email');
+    const ids = safe.authProfileIds.join(',');
     const rows = await this.client.select<{ client_email: string | null }>({
       from: 'projects',
       columns: ['client_email'],
       filters: {
-        ...this.tenantFilter(scope, 'client email'),
+        or: `(auth_profile_id.in.(${ids}),awarded_to_auth_profile_id.in.(${ids}))`,
         id: `eq.${projectId}`,
         deleted_at: 'is.null',
       },

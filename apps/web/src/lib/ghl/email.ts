@@ -186,6 +186,35 @@ export function invitationEmail(input: {
   };
 }
 
+/**
+ * The password-reset email, for a field worker (2026-09-15).
+ *
+ * The same link mechanism as an invitation, so the same plain shape. It says
+ * the two things a person needs when they did NOT ask for it: their current
+ * password still works, and ignoring this changes nothing.
+ */
+export function passwordResetEmail(input: {
+  inviterName: string;
+  companyName: string;
+  resetUrl: string;
+}): { subject: string; html: string } {
+  const company = input.companyName === '' ? 'your contractor' : input.companyName;
+  return {
+    subject: `Set a new password for the ${company} Project Hub`,
+    html: `
+<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#0a1f44;max-width:520px">
+  <p>Hello,</p>
+  <p>${escapeHtml(input.inviterName)} at ${escapeHtml(company)} has sent you a link to set a new password for the Project Hub.</p>
+  <p style="margin:28px 0">
+    <a href="${input.resetUrl}" style="background:#0a1f44;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;display:inline-block;font-weight:600">Set a new password</a>
+  </p>
+  <p style="font-size:13px;color:#5b6b8c">This link works once and expires in 24 hours. If the button does not open, copy this address into your browser:</p>
+  <p style="font-size:12px;color:#5b6b8c;word-break:break-all">${input.resetUrl}</p>
+  <p style="font-size:13px;color:#5b6b8c">If you did not expect this, ignore it — your current password keeps working until you choose a new one.</p>
+</div>`.trim(),
+  };
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')

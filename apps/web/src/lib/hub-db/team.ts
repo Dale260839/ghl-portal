@@ -38,6 +38,13 @@ export const INVITE_PURPOSE = 'hub-invite';
 export const INVITE_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 /**
+ * A day. A reset link is asked for by somebody trying to get in right now, so
+ * it does not need an invitation's week — and a shorter life is a smaller
+ * window for a forwarded one.
+ */
+export const PASSWORD_RESET_TTL_SECONDS = 24 * 60 * 60;
+
+/**
  * Roles a contractor may hand out by invitation. FIELD CREW ONLY.
  *
  * ---------------------------------------------------------------------------
@@ -411,11 +418,27 @@ export class HubTeam {
     if (invitation.accepted_at !== null) return { ok: false, reason: 'already-used' };
     if (new Date(invitation.expires_at) < now) return { ok: false, reason: 'expired' };
 
+    // The same link now serves a PASSWORD RESET as well as a first invitation
+    // (2026-09-15), so the membership is read before it is written:
+    //
+    //   · revoked — refused. A still-valid link must not let somebody the
+    //     contractor has withdrawn choose a new password. Access was already
+    //     refused on their next request; now the password is not changed either.
+    //   · already activated — keep the date they first joined. A reset is not a
+    //     new arrival, and the Team screen's "joined" date should not move.
+    const [current] = await this.client.select<MembershipRow>({
+      from: 'hub_memberships',
+      filters: { id: `eq.${invitation.membership_id}` },
+      limit: 1,
+    });
+    if (current === undefined) return { ok: false, reason: 'invalid' };
+    if (current.revoked_at !== null) return { ok: false, reason: 'revoked' };
+
     const [membership] = await this.client.update<MembershipRow>({
       from: 'hub_memberships',
       filters: { id: `eq.${invitation.membership_id}` },
       patch: {
-        activated_at: now.toISOString(),
+        activated_at: current.activated_at ?? now.toISOString(),
         password_hash: hashPassword(password),
         updated_at: now.toISOString(),
       },
@@ -672,6 +695,194 @@ export class HubTeam {
    * update, so a membership belonging to another contractor cannot be
    * reassigned even if its id is known.
    */
+  // ── Per project (John, 2026-09-15: "Invitation is per project") ──────────────
+
+  /**
+   * Everyone on ONE project: its field crew, and its homeowner once they have
+   * signed in. Revoked members are included, so the People screen can offer to
+   * restore them rather than letting them vanish.
+   *
+   * `project_ids` is an array; `cs.{id}` is PostgREST's "contains". The
+   * contractor filter comes from the scope, so another tenant's crew who happen
+   * to hold the same project id cannot appear here.
+   */
+  async listForProject(scope: TenantScope, projectId: string): Promise<Membership[]> {
+    const contractorId = this.contractorOf(scope, 'project people');
+    if (projectId.trim() === '') return [];
+    const rows = await this.client.select<MembershipRow>({
+      from: 'hub_memberships',
+      filters: { contractor_id: `eq.${contractorId}`, project_ids: `cs.{${projectId}}` },
+      order: 'created_at.asc',
+      limit: 200,
+    });
+    return rows.map(toMembership);
+  }
+
+  /** One member, only if they are this contractor's. */
+  private async memberOf(contractorId: string, membershipId: string): Promise<MembershipRow | null> {
+    const [row] = await this.client.select<MembershipRow>({
+      from: 'hub_memberships',
+      filters: { id: `eq.${membershipId}`, contractor_id: `eq.${contractorId}` },
+      limit: 1,
+    });
+    return row ?? null;
+  }
+
+  /** Put an existing team member on this project. Their other projects stay. */
+  async addToProject(scope: TenantScope, membershipId: string, projectId: string): Promise<void> {
+    const contractorId = this.contractorOf(scope, 'add to project');
+    const row = await this.memberOf(contractorId, membershipId);
+    if (row === null) throw new Error('that person is not on your team');
+    const projectIds = [...new Set([...(row.project_ids ?? []), projectId])];
+    await this.setProjects(scope, membershipId, projectIds);
+  }
+
+  /** Take someone off this project only. Their other projects stay. */
+  async removeFromProject(scope: TenantScope, membershipId: string, projectId: string): Promise<void> {
+    const contractorId = this.contractorOf(scope, 'remove from project');
+    const row = await this.memberOf(contractorId, membershipId);
+    if (row === null) throw new Error('that person is not on your team');
+    await this.setProjects(scope, membershipId, (row.project_ids ?? []).filter((id) => id !== projectId));
+  }
+
+  /**
+   * Invite a field worker to THIS project.
+   *
+   * Somebody already on the team is ADDED to the project rather than invited
+   * again — `hub_memberships_live_email` allows one live row per person per
+   * contractor, so a second invitation would fail, and they already have a way
+   * in. Somebody new gets a membership scoped to this project and a link.
+   *
+   * Field crew only. A homeowner is never invited: they sign in with their
+   * project code (see `INVITABLE_ROLES`).
+   */
+  async inviteToProject(
+    scope: TenantScope,
+    input: { email: string; fullName: string; projectId: string },
+    actor: { name: string },
+    baseUrl?: string,
+  ): Promise<
+    | { kind: 'invited'; result: InviteResult }
+    | { kind: 'added'; membership: Membership }
+    | { kind: 'refused'; reason: string }
+  > {
+    const contractorId = this.contractorOf(scope, 'invite to project');
+    const email = input.email.trim().toLowerCase();
+    if (email === '' || !email.includes('@')) throw new Error('a valid email is required');
+
+    const [existing] = await this.client.select<MembershipRow>({
+      from: 'hub_memberships',
+      filters: { contractor_id: `eq.${contractorId}`, email: `eq.${email}`, revoked_at: 'is.null' },
+      limit: 1,
+    });
+
+    if (existing !== undefined) {
+      if (existing.role !== 'field') {
+        return {
+          kind: 'refused',
+          reason:
+            existing.role === 'client'
+              ? 'That address belongs to a homeowner. Homeowners sign in with their project code and are never invited.'
+              : 'That address is already on your account with a different role.',
+        };
+      }
+      const projectIds = [...new Set([...(existing.project_ids ?? []), input.projectId])];
+      await this.setProjects(scope, existing.id, projectIds);
+      return { kind: 'added', membership: toMembership({ ...existing, project_ids: projectIds }) };
+    }
+
+    const result = await this.invite(
+      scope,
+      { email, fullName: input.fullName, role: 'field', projectIds: [input.projectId] },
+      actor,
+      baseUrl,
+    );
+    return { kind: 'invited', result };
+  }
+
+  /**
+   * A single-use link a field worker opens to set a NEW password.
+   *
+   * ---------------------------------------------------------------------------
+   * THE SAME MECHANISM AS AN INVITATION, ON PURPOSE
+   *
+   * A reset is "let this person choose a password" — which is exactly what an
+   * invitation link already does, through a redeem page that is built and
+   * tested. So a reset is a fresh `hub_invitations` row for the existing
+   * membership: single use, stored only as a hash, checked against the
+   * database rather than trusted for being signed.
+   *
+   * Every older unused link for this person is revoked first, so only the
+   * newest works — a reset issued because a link went astray must kill that
+   * link. The old password keeps working until the new one is set; to lock
+   * somebody out NOW, the control is Revoke.
+   *
+   * Shorter-lived than an invitation: a day, not seven. An invitation waits for
+   * someone on site all week; a reset is asked for by someone trying to get in.
+   *
+   * FIELD CREW ONLY. A homeowner's password is their project code — BuildSuite's
+   * `project_code`, which the Hub cannot write — so there is nothing here to
+   * reset for them.
+   * ---------------------------------------------------------------------------
+   */
+  async issuePasswordReset(
+    scope: TenantScope,
+    membershipId: string,
+    actor: { name: string },
+    baseUrl?: string,
+  ): Promise<{ membership: Membership; token: string; resetUrl: string }> {
+    const contractorId = this.contractorOf(scope, 'password reset');
+    const row = await this.memberOf(contractorId, membershipId);
+    if (row === null) throw new Error('that person is not on your team');
+    if (row.role !== 'field') {
+      throw new Error("a homeowner's password is their project code, which the Hub cannot change");
+    }
+    if (row.revoked_at !== null) throw new Error('restore their access before resetting their password');
+
+    const now = new Date();
+    await this.client.update({
+      from: 'hub_invitations',
+      filters: {
+        membership_id: `eq.${row.id}`,
+        contractor_id: `eq.${contractorId}`,
+        accepted_at: 'is.null',
+        revoked_at: 'is.null',
+      },
+      patch: { revoked_at: now.toISOString() },
+    });
+
+    // Somebody who never accepted is being RE-INVITED, so their link lives as
+    // long as an invitation does and the invitation email's "seven days" is
+    // true. Only a real reset is shortened to a day.
+    const isReset = row.activated_at !== null;
+    const ttlSeconds = isReset ? PASSWORD_RESET_TTL_SECONDS : INVITE_TTL_SECONDS;
+    const token = issueInviteToken(
+      { email: row.email, role: 'field', contractorId },
+      this.secret,
+      { ttlSeconds },
+    );
+    await this.client.insert({
+      from: 'hub_invitations',
+      rows: [
+        {
+          contractor_id: contractorId,
+          membership_id: row.id,
+          email: row.email,
+          role: 'field',
+          token_hash: hashToken(token),
+          expires_at: new Date(now.getTime() + ttlSeconds * 1000).toISOString(),
+          created_by: isReset ? `${actor.name} (password reset)` : `${actor.name} (invitation resent)`,
+        },
+      ],
+    });
+
+    return {
+      membership: toMembership(row),
+      token,
+      resetUrl: `${(baseUrl ?? this.appUrl).replace(/\/+$/, '')}/invite/${encodeURIComponent(token)}`,
+    };
+  }
+
   async setProjects(
     scope: TenantScope,
     membershipId: string,

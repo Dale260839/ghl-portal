@@ -5,12 +5,10 @@ import { getSession } from '@/lib/session';
 import {
   CLIENT_PROVISIONED_BY,
   getHubTeam,
-  INVITABLE_ROLES,
   type Membership,
 } from '@/lib/hub-db/team';
 import { GRANTABLE_RESOURCES } from '@/lib/permissions';
 import {
-  inviteTeamMember,
   revokeTeamMember,
   restoreTeamMember,
   saveTeamGrants,
@@ -54,14 +52,9 @@ function statusOf(m: Membership): { label: string; tone: 'good' | 'warn' | 'neut
   return { label: 'Active', tone: 'good' };
 }
 
-export default async function Team({
-  searchParams,
-}: {
-  searchParams: Promise<{ invited?: string; link?: string; delivery?: string }>;
-}) {
+export default async function Team() {
   const scope = await requireTenantScope();
   const session = await getSession();
-  const params = await searchParams;
   const hub = getHubTeam();
 
   if (!hub.available) {
@@ -108,127 +101,25 @@ export default async function Team({
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-navy-900">Team</h1>
         <p className="mt-1 text-sm text-navy-400">
-          Invite your crew, and see the homeowners who signed in with their project code. Tick
-          what each person can see.
+          Everyone across your projects, and what each person can see. To invite someone, open
+          the project and go to People — invitations are per project.
         </p>
       </div>
 
-      {/* The link is shown once, after inviting. No mail sender is configured
-          yet, so the contractor sends it themselves — same link the email would
-          carry, handed to the person allowed to send it. */}
-      {params.link !== undefined && (
-        <Card className="border-emerald-600/20 bg-emerald-50/50 px-5 py-4">
-          <p className="text-sm font-medium text-emerald-800">
-            {params.delivery === 'sent'
-              ? `Invitation emailed to ${params.invited}`
-              : `Invitation created for ${params.invited}`}
-          </p>
-          {/* The link is shown whether or not the email went. If sending is off
-              the contractor needs it; if it went, they can still see exactly
-              what the person received. */}
-          <p className="mt-1 text-xs text-emerald-700">
-            {params.delivery === 'sent'
-              ? 'Sent through GoHighLevel. This is the same link, in case they need it again.'
-              : params.delivery === 'disabled'
-                ? 'Email sending is off, so send them this link yourself.'
-                : params.delivery === 'failed'
-                  ? 'The email did not send. Send them this link yourself, and tell us it failed.'
-                  : 'Send them this link. It works once and expires in 7 days.'}
-          </p>
-          <code className="mt-2 block overflow-x-auto rounded-lg border border-emerald-600/20 bg-white px-3 py-2 text-xs break-all text-navy-700">
-            {params.link}
-          </code>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader title="Invite someone" />
-        <form action={inviteTeamMember} className="grid gap-3 px-5 py-4 sm:grid-cols-4">
-          <input
-            name="email"
-            type="email"
-            required
-            placeholder="their@email.com"
-            className="rounded-lg border border-navy-200 px-3 py-2 text-sm sm:col-span-2"
-          />
-          <input
-            name="fullName"
-            placeholder="Name (optional)"
-            className="rounded-lg border border-navy-200 px-3 py-2 text-sm"
-          />
-          <div className="flex gap-2">
-            {/* Field crew is the only invitable role now, so this states the
-                fact rather than offering a select with one option in it. A
-                homeowner is not invited at all — their account opens itself
-                when they sign in with the project code from their contract. */}
-            <input type="hidden" name="role" value={INVITABLE_ROLES[0]} />
-            <span className="flex flex-1 items-center rounded-lg border border-navy-200 bg-navy-50/60 px-3 py-2 text-sm text-navy-600">
-              Field crew
-            </span>
-            <SubmitButton
-              className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
-            >
-              Invite
-            </SubmitButton>
-          </div>
-
-          {/* WHICH projects, not just which permissions. These are two different
-              questions and the form only ever asked the second one, so everyone
-              invited so far can see nothing: a crew member's projects and a
-              client's portal both come from this list.
-
-              Ticking nothing is allowed and means nothing — it is the safe
-              default for a person you want to add now and assign later, and it
-              fails closed rather than showing them everything. */}
-          <fieldset className="sm:col-span-4">
-            <legend className="text-xs font-medium text-navy-700">
-              Projects they can see
-            </legend>
-            {projects.length === 0 ? (
-              <p className="mt-1.5 text-xs text-navy-400">
-                No projects yet. You can invite them now and assign work later.
-              </p>
-            ) : (
-              <>
-                <div className="mt-2 grid max-h-44 gap-1 overflow-y-auto rounded-lg border border-navy-200 p-2 sm:grid-cols-2">
-                  {projects.map((project) => (
-                    <label
-                      key={project.buildsuiteProjectId}
-                      className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-xs transition hover:bg-navy-50"
-                    >
-                      <input
-                        type="checkbox"
-                        name="projectIds"
-                        value={project.buildsuiteProjectId}
-                        className="mt-0.5 shrink-0"
-                      />
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium text-navy-800">
-                          {project.projectName}
-                        </span>
-                        <span className="block truncate text-navy-400">
-                          {/* The contractor's code, and the client's beside it when
-                              they differ — the client's is what a homeowner signs
-                              in with, which is why codes are on this screen. An
-                              uncoded project says so; the name above it is what
-                              tells two apart, never a fragment of its UUID. */}
-                          <ContractorProjectCode project={project} />
-                        </span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                <p className="mt-1.5 text-xs text-navy-400">
-                  Tick none and they can sign in but see no projects until you assign some.
-                </p>
-              </>
-            )}
-          </fieldset>
-        </form>
-        <p className="border-t border-navy-100 px-5 py-3 text-xs text-navy-400">
-          Invitations are for field crew. A homeowner does not need one — signing the contract
-          emails them their project code, and that code signs them in. Another contractor is an
-          account-level change, not a team one.
+      {/* Invitations moved to each project's People section (John,
+          2026-09-15: "Invitation is per project"). An invitation always puts
+          someone on a specific job, so it is made from that job. This screen
+          stays the roster across every project: who has access, and what each
+          may see. */}
+      <Card className="px-5 py-4">
+        <p className="text-sm text-navy-700">
+          <span className="font-medium text-navy-900">Inviting someone?</span> Open the project
+          they will work on and go to <span className="font-medium">People</span>. They are
+          invited to that project, and anyone already on your team is simply added to it.
+        </p>
+        <p className="mt-1 text-xs text-navy-400">
+          Homeowners are never invited — they sign in with the project code from their signed
+          contract.
         </p>
       </Card>
 

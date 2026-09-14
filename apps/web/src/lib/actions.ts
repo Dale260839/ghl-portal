@@ -38,7 +38,7 @@ import { hubScopeOfProject } from './tenant-scope.ts';
 import { notifyHomeowner } from './notify/homeowner.ts';
 import { MILESTONE_STATUSES, isMilestoneStatus } from './data/types.ts';
 import { getHubStorage } from './hub-db/storage.ts';
-import { getHubTeam, INVITABLE_ROLES, type InvitableRole } from './hub-db/team';
+import { getHubTeam } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
 import { getHubInvoiceTemplates } from './hub-db/invoice-templates.ts';
 import {
@@ -54,7 +54,7 @@ import { paymentScheduleDrafts } from './payment-schedule';
 import { GRANTABLE_RESOURCES } from './permissions';
 import { accountSwitchEnabled, findDevAccount } from './dev-accounts';
 import { appUrl } from './app-url';
-import { getGhlEmail, invitationEmail } from './ghl/email';
+import { getGhlEmail, invitationEmail, passwordResetEmail } from './ghl/email';
 import type { Resource } from './permissions';
 
 /** Which permission resource governs each archivable table. */
@@ -591,80 +591,146 @@ async function teamContext() {
   return { scope, team: hub.team, actor: { name: session.name } };
 }
 
-export async function inviteTeamMember(formData: FormData) {
-  const { scope, team, actor } = await teamContext();
-
-  const role = String(formData.get('role') ?? '');
-  if (!(INVITABLE_ROLES as readonly string[]).includes(role)) {
-    throw new Error(`${role} is not a role a contractor can invite`);
-  }
-
-  // Which projects this person gets. Checked against the projects the
-  // contractor actually has rather than trusted from the form: `formData` is
-  // whatever was posted, and an id pasted in by hand must not hand someone
-  // access to another contractor's job.
-  const requested = new Set(formData.getAll('projectIds').map((v) => String(v)));
-  const projectIds =
-    requested.size === 0
-      ? []
-      : (await (await currentDataSource(scope)).listProjects(scope))
-          .map((p) => p.buildsuiteProjectId)
-          .filter((id) => requested.has(id));
-
-  const result = await team.invite(
-    scope,
-    {
-      email: String(formData.get('email') ?? ''),
-      fullName: String(formData.get('fullName') ?? ''),
-      role: role as InvitableRole,
-      projectIds,
-    },
-    actor,
-    // The host this request came in on, so the link works wherever the app is
-    // running. Previously a fixed env var, which sent a localhost link.
-    await appUrl(),
-  );
-
-  // Send it. GoHighLevel rather than a new provider: it already holds the
-  // contact, and a reply lands in the thread the contractor already uses.
-  let delivery = 'none';
-  // Addressed to the contractor's own sub-account, not the deployment's.
-  const mail = getGhlEmail(scope.locationId);
-  if (mail.available) {
-    const { subject, html } = invitationEmail({
-      inviterName: actor.name,
-      companyName: String(formData.get('companyName') ?? ''),
-      role: role as InvitableRole,
-      acceptUrl: result.acceptUrl,
-    });
-    const sent = await mail.email.send({
-      email: result.membership.email,
-      name: result.membership.fullName,
-      subject,
-      html,
-    });
-    delivery = sent.sent ? 'sent' : sent.reason;
-  }
-
-  revalidatePath('/dashboard/team');
-  // The link comes back on the URL regardless of whether the email went. If
-  // sending is off or failed, the contractor can still send it themselves —
-  // and if it succeeded, they can still see what the person was sent.
-  redirect(
-    `/dashboard/team?invited=${encodeURIComponent(result.membership.email)}&link=${encodeURIComponent(result.acceptUrl)}&delivery=${delivery}`,
-  );
-}
+// `inviteTeamMember` — the global invitation — was removed on 2026-09-15.
+// Invitations are per project now (`inviteToProject`), so there is exactly one
+// way to invite someone and it always names the job they are invited to.
 
 export async function revokeTeamMember(formData: FormData) {
   const { scope, team, actor } = await teamContext();
   await team.revoke(scope, String(formData.get('membershipId') ?? ''), actor);
   revalidatePath('/dashboard/team');
+  // Also offered on each project's People section.
+  revalidatePath('/dashboard/projects/[id]/people', 'page');
 }
 
 export async function restoreTeamMember(formData: FormData) {
   const { scope, team } = await teamContext();
   await team.restore(scope, String(formData.get('membershipId') ?? ''));
   revalidatePath('/dashboard/team');
+  revalidatePath('/dashboard/projects/[id]/people', 'page');
+}
+
+// ── People, per project (John, 2026-09-15) ───────────────────────────────────
+//
+// "Invitation is per project." Every action below names a project, and the
+// project is read back through the contractor's OWN tenant scope before anyone
+// is added to it — a project id posted by hand must not put a crew member on
+// another contractor's job. Each calls `teamContext()` first, which refuses
+// anyone who is not really a contractor.
+
+/** The project a People action is about: one of this contractor's, or a refusal. */
+async function projectForPeople(scope: TenantScope, formData: FormData) {
+  const projectId = String(formData.get('projectId') ?? '');
+  const project = await (await currentDataSource(scope)).getProject(scope, projectId);
+  if (project === null) throw new Error('that project is not one of yours');
+  return {
+    project,
+    back: `/dashboard/projects/${encodeURIComponent(project.buildsuiteProjectId)}/people`,
+  };
+}
+
+export async function inviteToProject(formData: FormData) {
+  const { scope, team, actor } = await teamContext();
+  const { project, back } = await projectForPeople(scope, formData);
+
+  const outcome = await team.inviteToProject(
+    scope,
+    {
+      email: String(formData.get('email') ?? ''),
+      fullName: String(formData.get('fullName') ?? ''),
+      projectId: project.buildsuiteProjectId,
+    },
+    actor,
+    await appUrl(),
+  );
+
+  if (outcome.kind === 'refused') {
+    redirect(`${back}?notice=${encodeURIComponent(outcome.reason)}`);
+  }
+  if (outcome.kind === 'added') {
+    revalidatePath(back);
+    redirect(`${back}?added=${encodeURIComponent(outcome.membership.email)}`);
+  }
+
+  // A new person: the same delivery as a Team invitation — GoHighLevel when
+  // sending is on, and the link handed back either way.
+  let delivery = 'none';
+  const mail = getGhlEmail(scope.locationId);
+  if (mail.available) {
+    const { subject, html } = invitationEmail({
+      inviterName: actor.name,
+      companyName: String(formData.get('companyName') ?? ''),
+      role: 'field',
+      acceptUrl: outcome.result.acceptUrl,
+    });
+    const sent = await mail.email.send({
+      email: outcome.result.membership.email,
+      name: outcome.result.membership.fullName,
+      subject,
+      html,
+    });
+    delivery = sent.sent ? 'sent' : sent.reason;
+  }
+  revalidatePath(back);
+  revalidatePath('/dashboard/team');
+  redirect(
+    `${back}?kind=invite&who=${encodeURIComponent(outcome.result.membership.email)}&link=${encodeURIComponent(outcome.result.acceptUrl)}&delivery=${delivery}`,
+  );
+}
+
+export async function addMemberToProject(formData: FormData) {
+  const { scope, team } = await teamContext();
+  const { project, back } = await projectForPeople(scope, formData);
+  await team.addToProject(scope, String(formData.get('membershipId') ?? ''), project.buildsuiteProjectId);
+  revalidatePath(back);
+  revalidatePath('/dashboard/team');
+}
+
+export async function removeMemberFromProject(formData: FormData) {
+  const { scope, team } = await teamContext();
+  const { project, back } = await projectForPeople(scope, formData);
+  await team.removeFromProject(scope, String(formData.get('membershipId') ?? ''), project.buildsuiteProjectId);
+  revalidatePath(back);
+  revalidatePath('/dashboard/team');
+}
+
+/**
+ * Send a field worker a link to set a new password. See `issuePasswordReset`.
+ *
+ * The link comes back to the contractor as well as going by email, the same as
+ * an invitation: if sending is off or fails, they can pass it on themselves.
+ */
+export async function resetMemberPassword(formData: FormData) {
+  const { scope, team, actor } = await teamContext();
+  const { back } = await projectForPeople(scope, formData);
+  const reset = await team.issuePasswordReset(
+    scope,
+    String(formData.get('membershipId') ?? ''),
+    actor,
+    await appUrl(),
+  );
+
+  // Somebody who never accepted their invitation gets invitation wording — "set
+  // a NEW password" to a person who never had one reads as a mistake.
+  const isReset = reset.membership.activated;
+  const companyName = String(formData.get('companyName') ?? '');
+  let delivery = 'none';
+  const mail = getGhlEmail(scope.locationId);
+  if (mail.available) {
+    const { subject, html } = isReset
+      ? passwordResetEmail({ inviterName: actor.name, companyName, resetUrl: reset.resetUrl })
+      : invitationEmail({ inviterName: actor.name, companyName, role: 'field', acceptUrl: reset.resetUrl });
+    const sent = await mail.email.send({
+      email: reset.membership.email,
+      name: reset.membership.fullName,
+      subject,
+      html,
+    });
+    delivery = sent.sent ? 'sent' : sent.reason;
+  }
+  redirect(
+    `${back}?kind=${isReset ? 'reset' : 'invite'}&who=${encodeURIComponent(reset.membership.email)}&link=${encodeURIComponent(reset.resetUrl)}&delivery=${delivery}`,
+  );
 }
 
 /**

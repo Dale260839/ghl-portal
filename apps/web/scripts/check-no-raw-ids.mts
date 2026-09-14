@@ -7,7 +7,7 @@
  * John, 2026-09-12: "make sure not display any project id that is random
  * strings". The guardrail in `guardrails.test.ts` refuses the three shapes the
  * code has used; this is the check that does not depend on knowing the shapes.
- * It renders all 130 routes as a contractor, a crew member and a homeowner —
+ * It renders every route as a contractor, a crew member and a homeowner —
  * and every project tab as a client preview — and scans what a person can
  * actually SEE: page text, tooltips, placeholders, alt text and labels. Script
  * payloads and link targets are excluded; nobody reads those.
@@ -22,7 +22,7 @@
 process.loadEnvFile('.env.local');
 const { sign, resolveSessionSecret } = await import('../src/lib/auth/session-crypto.ts');
 
-const BASE = process.argv[2] ?? 'http://localhost:3466';
+const BASE = process.argv[2] ?? process.env.HUB_BASE ?? 'http://localhost:3466';
 const secret = resolveSessionSecret();
 const mint = (s: object) => sign(s, secret, { ttlSeconds: 3600 });
 
@@ -39,7 +39,7 @@ const PROJECTS = {
   'BSA-APS-001': 'bbd77380-ebc6-417f-8aaf-0f03150198dc',
   'BSA-052': '39089861-15bb-467f-a169-8dfc88778671',
 };
-const SUB = ['', '/budget', '/change-orders', '/completion', '/designs', '/documents', '/issues', '/messages', '/payments', '/photos', '/schedule', '/timeline', '/updates', '/visibility'];
+const SUB = ['', '/budget', '/change-orders', '/completion', '/designs', '/documents', '/issues', '/messages', '/payments', '/photos', '/schedule', '/timeline', '/updates', '/visibility', '/people'];
 const PORTAL = ['', '/budget', '/change-orders', '/completion', '/designs', '/documents', '/issues', '/messages', '/payments', '/photos', '/schedule', '/timeline', '/updates'];
 
 const routes: [keyof typeof sessions, string][] = [];

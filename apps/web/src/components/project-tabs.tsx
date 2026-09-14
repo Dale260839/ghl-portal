@@ -3,6 +3,8 @@
 import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { PROJECT_SECTIONS } from '@/lib/project-nav';
+
 /** Tints the tab while its screen is loading, so a click is never silent. */
 function TabLabel({ label }: { label: string }) {
   const { pending } = useLinkStatus();
@@ -21,22 +23,10 @@ function TabLabel({ label }: { label: string }) {
  * not re-render on navigation, so only `usePathname` can know which tab is live.
  */
 
-const TABS: { seg: string; label: string }[] = [
-  { seg: '', label: 'Overview' },
-  { seg: 'timeline', label: 'Timeline' },
-  { seg: 'schedule', label: 'Schedule' },
-  { seg: 'updates', label: 'Daily Updates' },
-  { seg: 'designs', label: 'Designs & Selections' },
-  { seg: 'budget', label: 'Budget' },
-  { seg: 'change-orders', label: 'Change Orders' },
-  { seg: 'documents', label: 'Documents' },
-  { seg: 'photos', label: 'Photos & Videos' },
-  { seg: 'messages', label: 'Messages' },
-  { seg: 'issues', label: 'Issues' },
-  { seg: 'payments', label: 'Payments' },
-  { seg: 'completion', label: 'Completion' },
-  { seg: 'visibility', label: 'Visibility' },
-];
+// Overview, then the SAME sections the sidebar nests under "Projects" — one list
+// for both (`lib/project-nav.ts`), so a section cannot be added to one and not
+// the other.
+const TABS: { seg: string; label: string }[] = [{ seg: '', label: 'Overview' }, ...PROJECT_SECTIONS];
 
 export function ProjectTabs({ id }: { id: string }) {
   const pathname = usePathname();
