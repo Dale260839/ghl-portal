@@ -5,7 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 import { portalHref } from '@/lib/portal-link';
-import { PROJECT_SECTIONS, projectSectionBase, sectionFromPath } from '@/lib/project-nav';
+import { PROJECT_SECTIONS, activeSection, sectionHref } from '@/lib/project-nav';
 import type { ReactNode } from 'react';
 
 /**
@@ -31,11 +31,11 @@ export interface NavItem {
   badge?: number;
   /**
    * Makes this item a PARENT whose children are a project's sections (John,
-   * 2026-09-15). The sections point at the project you are in; outside one, at
-   * this fallback — the first active project — and they are hidden when there
-   * is none. See `lib/project-nav.ts`.
+   * 2026-09-15). Inside a project they open that project's section; anywhere
+   * else they open the Projects list asking which project — never some project
+   * chosen on the contractor's behalf. See `lib/project-nav.ts`.
    */
-  projectSections?: { fallbackProjectId: string | null };
+  projectSections?: true;
 }
 
 /**
@@ -72,26 +72,23 @@ function LinkPending() {
 /**
  * A project's sections, nested under the "Projects" parent.
  *
- * Open whenever you are inside a project, so the section you are on is always
- * visible and highlighted. Elsewhere it starts closed — fourteen sub-items on
- * every screen would bury the rest of the sidebar — and the chevron opens it.
+ * OPEN BY DEFAULT, everywhere. They used to start folded outside a project,
+ * which made sense while a section link had nowhere to go without one. Since
+ * the chooser (2026-09-15) a section works from any screen — it asks which
+ * project — so hiding them only added a click to reach them. The chevron still
+ * folds them away; inside a project they stay open, so the section you are on
+ * is always visible and lit.
  */
-function ProjectSectionLinks({
-  base,
-  pathname,
-}: {
-  base: string;
-  pathname: string;
-}) {
-  const current = pathname.startsWith(`${base}/`) || pathname === base ? sectionFromPath(pathname) : null;
+function ProjectSectionLinks({ pathname, open }: { pathname: string; open: string | null }) {
+  const current = activeSection(pathname, open);
   return (
     <ul className="mt-0.5 mb-1 ml-5 space-y-0.5 border-l border-white/10 pl-2">
       {PROJECT_SECTIONS.map((section) => {
         const active = current === section.seg;
         return (
-          <li key={section.seg}>
+          <li key={section.seg === '' ? 'overview' : section.seg}>
             <Link
-              href={`${base}/${section.seg}`}
+              href={sectionHref(pathname, section.seg)}
               aria-current={active ? 'page' : undefined}
               className={`group relative flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150 ${
                 active
@@ -114,7 +111,7 @@ export function SidebarNav({ nav }: { nav: NavItem[] }) {
   // Keeps the portal on the project being shown — see `lib/portal-link.ts`.
   const search = useSearchParams();
   const inProjects = pathname === '/dashboard/projects' || pathname.startsWith('/dashboard/projects/');
-  const [opened, setOpened] = useState(false);
+  const [folded, setFolded] = useState(false);
 
   return (
     <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
@@ -122,16 +119,16 @@ export function SidebarNav({ nav }: { nav: NavItem[] }) {
         const active = isActive(pathname, item.href, SECTION_ROOTS);
 
         if (item.projectSections !== undefined) {
-          const base = projectSectionBase(pathname, item.projectSections.fallbackProjectId);
-          const expanded = base !== null && (inProjects || opened);
+          // Inside a project, always open. Elsewhere, open unless folded.
+          const expanded = inProjects || !folded;
           return (
             <div key={`${item.href}::${item.label}`}>
               <div className="flex items-center gap-1">
                 <Link
                   href={portalHref(item.href, search)}
-                  // The list itself is "active" only on the list; inside a
-                  // project the highlighted row is the section below.
-                  aria-current={pathname === item.href ? 'page' : undefined}
+                  // The list itself is "active" only on the plain list; inside
+                  // a project, or while choosing one, the lit row is below.
+                  aria-current={pathname === item.href && search.get('open') === null ? 'page' : undefined}
                   className={`group relative flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-[background-color,color,transform] duration-150 ${
                     inProjects
                       ? 'bg-white/10 text-white before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-amber-accent'
@@ -144,10 +141,10 @@ export function SidebarNav({ nav }: { nav: NavItem[] }) {
                   <span className="flex-1 truncate">{item.label}</span>
                   <LinkPending />
                 </Link>
-                {base !== null && !inProjects && (
+                {!inProjects && (
                   <button
                     type="button"
-                    onClick={() => setOpened((v) => !v)}
+                    onClick={() => setFolded((v) => !v)}
                     aria-expanded={expanded}
                     aria-label={expanded ? 'Hide project sections' : 'Show project sections'}
                     className="rounded-md p-2 text-navy-400 transition hover:bg-white/5 hover:text-white"
@@ -158,7 +155,7 @@ export function SidebarNav({ nav }: { nav: NavItem[] }) {
                   </button>
                 )}
               </div>
-              {expanded && <ProjectSectionLinks base={base} pathname={pathname} />}
+              {expanded && <ProjectSectionLinks pathname={pathname} open={search.get('open')} />}
             </div>
           );
         }

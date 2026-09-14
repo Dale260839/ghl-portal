@@ -24,8 +24,6 @@ import {
   IconUpdates,
 } from '@/components/nav-icons';
 
-import { isActiveProject } from '@/lib/data/types';
-
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   if (session === null) redirect('/');
@@ -37,10 +35,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Badge counts make the sidebar a worklist rather than a menu — a PM should
   // see from the nav alone that three updates are waiting. The business name
   // rides along in the same round: it is what the shell is branded with.
-  const [updates, issues, projects, businessName] = await Promise.all([
+  const [updates, issues, businessName] = await Promise.all([
     db.listDailyUpdates(scope),
     db.listIssues(scope),
-    db.listProjects(scope),
     resolveContractorName(scope),
   ]);
   // Chris, 8 Sep: the shell shows the contractor's own code and "Project Hub",
@@ -54,20 +51,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
     (i) => i.status !== 'Resolved' && i.status !== 'Closed',
   ).length;
 
-  // Where the sidebar's project sections point when you are not inside a
-  // project: the first active one, so they open a populated screen rather than
-  // a chooser. Inside a project they follow that project instead.
-  const firstActive = projects.find(isActiveProject) ?? projects[0];
-
   // ---------------------------------------------------------------------------
   // "PROJECTS" IS A PARENT NOW (John, 2026-09-15).
   //
-  // Its children are the project's own sections — Timeline through Visibility,
-  // plus People — and they open the project you are in. Eight flat entries used
-  // to point at those same pages (Schedule, Designs & Selections, Estimates &
-  // Budget, Change Orders, Documents, Messages, Punch List and Warranty, and
-  // Settings, which was Visibility), always for the FIRST active project,
-  // whichever one you were actually looking at. They are gone: each now lives
+  // Its children are the project's own sections — Overview, Timeline through
+  // Visibility, and People. Inside a project they open that project's section;
+  // anywhere else they open the Projects list asking WHICH project, rather than
+  // picking one for the contractor. The tabs that repeated them across the top
+  // of every project page are gone.
+  //
+  // Eight flat entries used to point at those same pages (Schedule, Designs &
+  // Selections, Estimates & Budget, Change Orders, Documents, Messages, Punch
+  // List and Warranty, and Settings, which was Visibility), always for the FIRST
+  // active project, whichever one you were actually looking at. Each now lives
   // once, under the project it belongs to.
   //
   // What stays at the top level is what spans every project: the portfolio,
@@ -80,7 +76,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
       href: '/dashboard/projects',
       label: 'Projects',
       icon: IconProjects,
-      projectSections: { fallbackProjectId: firstActive?.buildsuiteProjectId ?? null },
+      // Outside a project, a section opens the Projects list asking which
+      // project — it no longer quietly opens the first active one.
+      projectSections: true,
     },
     { href: '/dashboard/engagements', label: 'Tasks', icon: IconTasks },
     { href: '/dashboard/updates', label: 'Field Updates', icon: IconUpdates, badge: pendingReview },

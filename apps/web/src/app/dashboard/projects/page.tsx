@@ -23,6 +23,16 @@ import {
   DEFAULT_PROJECT_VIEW,
   type ProjectView,
 } from '@/lib/available-projects';
+import { parseOpenSection, projectSectionPath, type ProjectSection } from '@/lib/project-nav';
+
+/** The list's own URL for a view, keeping the section being chosen for. */
+function listHref(view: ProjectView, opening: ProjectSection | null): string {
+  const params = new URLSearchParams();
+  if (view !== DEFAULT_PROJECT_VIEW) params.set('view', view);
+  if (opening !== null) params.set('open', opening.seg);
+  const query = params.toString();
+  return query === '' ? '/dashboard/projects' : `/dashboard/projects?${query}`;
+}
 
 /**
  * Awarded · Draft · All.
@@ -38,9 +48,12 @@ import {
 function ProjectViewPills({
   current,
   counts,
+  opening,
 }: {
   current: ProjectView;
   counts: Record<ProjectView, number>;
+  /** Kept on every pill, so switching to Draft while choosing still chooses. */
+  opening: ProjectSection | null;
 }) {
   return (
     <nav aria-label="Filter projects" className="flex flex-wrap gap-2">
@@ -49,7 +62,7 @@ function ProjectViewPills({
         return (
           <Link
             key={view}
-            href={view === DEFAULT_PROJECT_VIEW ? '/dashboard/projects' : `/dashboard/projects?view=${view}`}
+            href={listHref(view, opening)}
             aria-current={active ? 'page' : undefined}
             className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${
               active
@@ -148,9 +161,15 @@ function SignedPdfCell({ url }: { url: string | null }) {
 export default async function ProjectsList({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string | string[] }>;
+  searchParams: Promise<{ view?: string | string[]; open?: string | string[] }>;
 }) {
-  const view = parseProjectView((await searchParams).view);
+  const params = await searchParams;
+  const view = parseProjectView(params.view);
+  // CHOOSER MODE (John, 2026-09-15). A section clicked in the sidebar with no
+  // project open lands here — `?open=timeline` — and every row then opens that
+  // project's Timeline instead of its Overview. Anything that is not one of our
+  // sections is ignored, so a mangled link falls back to the ordinary list.
+  const opening = parseOpenSection(params.open);
   const scope = await requireTenantScope();
   const everyProject = await (await currentDataSource(scope)).listProjects(scope);
 
@@ -231,7 +250,25 @@ export default async function ProjectsList({
         </p>
       </div>
 
-      <ProjectViewPills current={view} counts={counts} />
+      {opening !== null && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-accent/40 bg-amber-soft px-4 py-3"
+        >
+          <p className="text-sm text-navy-900">
+            <span className="font-semibold">Choose a project</span> to open its{' '}
+            <span className="font-semibold">{opening.label}</span>.
+          </p>
+          <Link
+            href={listHref(view, null)}
+            className="text-xs font-medium text-navy-600 underline underline-offset-2 hover:text-navy-900"
+          >
+            Cancel
+          </Link>
+        </div>
+      )}
+
+      <ProjectViewPills current={view} counts={counts} opening={opening} />
 
       {banner !== null && (
         <div className="rounded-lg border border-navy-200 bg-navy-50 px-4 py-3 text-sm text-navy-600">
@@ -273,7 +310,7 @@ export default async function ProjectsList({
                 <td className="px-5 py-3.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <Link
-                      href={`/dashboard/projects/${p.buildsuiteProjectId}`}
+                      href={projectSectionPath(p.buildsuiteProjectId, opening?.seg ?? '')}
                       className="text-sm font-medium text-navy-900 hover:underline"
                     >
                       {p.projectName}
@@ -328,7 +365,7 @@ export default async function ProjectsList({
           {rows.map(({ project: p, status, proposal }) => (
             <li key={p.buildsuiteProjectId}>
               <Link
-                href={`/dashboard/projects/${p.buildsuiteProjectId}`}
+                href={projectSectionPath(p.buildsuiteProjectId, opening?.seg ?? '')}
                 className="block px-5 py-4 transition hover:bg-navy-50/60"
               >
                 <div className="flex items-start justify-between gap-3">

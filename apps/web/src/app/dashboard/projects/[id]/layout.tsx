@@ -6,7 +6,6 @@ import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { hasOperationalDetail } from '@/lib/data/types';
 import { HealthBadge } from '@/components/ui';
-import { ProjectTabs } from '@/components/project-tabs';
 
 /**
  * The per-project control workspace.
@@ -56,7 +55,9 @@ export default async function ProjectWorkspaceLayout({
         </p>
       </div>
 
-      <ProjectTabs id={project.buildsuiteProjectId} />
+      {/* No tab strip (John, 2026-09-15). The project's sections live under
+          "Projects" in the sidebar, which follows this project; a second copy
+          of the same fifteen links across the top was the same menu twice. */}
 
       {children}
     </div>
