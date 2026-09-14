@@ -863,3 +863,28 @@ test('every invoice preview shows the letterhead the invoice will actually carry
   assert.ok(send, 'createInvoiceOnRail has moved or been renamed');
   assert.match(send[0], /mergeLetterhead\(/, 'the invoice sent must use the same merge as the preview');
 });
+
+test('every navy shade used is defined in the theme', () => {
+  // Tailwind emits NOTHING for a shade the theme does not define, and says
+  // nothing about it. navy-300 and navy-500 were missing until 2026-09-15, so
+  // 76 class uses across 30 files silently rendered in whatever colour they
+  // inherited — and the sidebar's project sections came out navy-on-navy,
+  // nearly invisible. The build passed and every test was green.
+  //
+  // Comments are stripped first, so a sentence NAMING a shade cannot trip this.
+  const css = readFileSync(join(SRC, 'app', 'globals.css'), 'utf8');
+  const defined = new Set([...css.matchAll(/--color-navy-(\d+)\s*:/g)].map((m) => m[1]));
+
+  const offenders: string[] = [];
+  for (const file of FILES) {
+    const code = withoutComments(file.text);
+    for (const m of code.matchAll(/\bnavy-(\d{2,3})\b/g)) {
+      if (!defined.has(m[1]!)) offenders.push(`${rel(file.path)} uses navy-${m[1]}`);
+    }
+  }
+  assert.deepEqual(
+    [...new Set(offenders)],
+    [],
+    `navy shades defined: ${[...defined].join(', ')} — add the missing one to globals.css`,
+  );
+});

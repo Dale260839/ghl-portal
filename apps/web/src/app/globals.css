@@ -4,7 +4,21 @@
   --color-navy-50: #f1f5fb;
   --color-navy-100: #dde7f5;
   --color-navy-200: #c0d2ec;
+  /*
+   * 300 and 500 were missing (found 2026-09-15). Tailwind emits nothing for a
+   * shade the theme does not define, so all 76 uses of navy-300/navy-500 across
+   * the app silently rendered in whatever colour they inherited — heavier than
+   * intended on light screens, and near-invisible navy-on-navy in the sidebar's
+   * project sections. Chosen by contrast, not by averaging the neighbours:
+   *
+   *   300  #7a95c6   6.0:1 on navy-950 (sidebar)   3.0:1 on white (quiet labels)
+   *   500  #3f629b   6.1:1 on white (secondary text)
+   *
+   * A guardrail now fails on any navy shade used but not defined here.
+   */
+  --color-navy-300: #7a95c6;
   --color-navy-400: #5b7fb8;
+  --color-navy-500: #3f629b;
   --color-navy-600: #24467f;
   --color-navy-700: #1b3563;
   --color-navy-800: #142a4f;
