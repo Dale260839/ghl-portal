@@ -1,57 +1,23 @@
-import { SignInForm } from './sign-in-form';
+import { redirect } from 'next/navigation';
 
 /**
- * Homeowner sign-in (§9.2, C-2).
+ * RETIRED as a page — sign-in is one route, `/` (John, 2026-09-15).
  *
- * The front door that turns email + project code into a session. It used to
- * turn them into an emailed link instead; Chris replaced that on 2026-09-10
- * with the code itself as the password, sent by a BuildSuite automation when
- * the contract is signed. See `lib/auth/client-credentials.ts`.
+ * This was the homeowner's own door: email plus project code. The same two
+ * fields now work on `/`, where the server tells a homeowner from a field
+ * worker by what they typed. The route is kept as a redirect, not deleted,
+ * because it has been handed out: earlier signature emails and anyone's
+ * bookmark point here, and a 404 at the moment a homeowner first tries to see
+ * their project is a phone call to the contractor.
  *
- * A separate route from `/` on purpose — `/` is the contractor and demo entry,
- * this is the one a homeowner is sent to, and the two should never share a
- * form.
+ * A message sent here with `?error=` is carried across rather than dropped.
  */
-
-export const metadata = {
-  title: 'Sign in to your Project Hub',
-};
-
-export default async function SignInPage({
+export default async function RetiredSignIn({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string | string[] }>;
 }) {
-  // Set by the retired `/auth/verify` route, so an old emailed link lands here
-  // with an explanation rather than on a 404.
-  const { error } = await searchParams;
-
-  return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-12">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-navy-900">
-          Sign in to your Project Hub
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-navy-500">
-          See your project’s progress, schedule, documents and updates in one place.
-        </p>
-      </div>
-
-      {error !== undefined && error !== '' && (
-        <p
-          className="mt-5 rounded-lg border border-amber-600/25 bg-amber-50/70 px-4 py-3 text-sm leading-relaxed text-navy-900"
-          role="alert"
-        >
-          {error}
-        </p>
-      )}
-
-      <SignInForm />
-
-      <p className="mt-8 border-t border-navy-100 pt-5 text-xs leading-relaxed text-navy-400">
-        Trouble signing in? Contact your contractor directly. They can confirm your project code and
-        the email address on your project.
-      </p>
-    </main>
-  );
+  const raw = (await searchParams).error;
+  const error = Array.isArray(raw) ? raw[0] : raw;
+  redirect(error !== undefined && error !== '' ? `/?error=${encodeURIComponent(error)}` : '/');
 }

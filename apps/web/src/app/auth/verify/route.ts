@@ -26,6 +26,8 @@ import { NextResponse, type NextRequest } from 'next/server';
  * anyone who follows an old link is told what happened and sent to the door
  * that still works, rather than getting a 404 and phoning their contractor.
  *
+ * That door is `/` since 2026-09-15, when sign-in became one route.
+ *
  * The machinery behind it is intact and still tested — `auth/client-lookup.ts`,
  * `auth/sign-in-request.ts`, `auth/verification-token.ts`. Nothing reaches them
  * from a screen any more, which is what closes the door: a server action that
@@ -46,7 +48,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // will never honour is one refactor away from honouring it again.
   console.warn('[auth] refused a retired sign-in link');
 
-  const url = new URL('/signin', request.nextUrl.origin);
+  const url = new URL('/', request.nextUrl.origin);
   url.searchParams.set('error', REPLACED);
   return NextResponse.redirect(url);
 }

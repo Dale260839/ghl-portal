@@ -5,10 +5,10 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getBuildSuiteReader } from './buildsuite/projects.ts';
 import type { ClientLoginReader } from './auth/client-lookup.ts';
-import { clientIpFrom } from './auth/rate-limit.ts';
+import { clientIpFrom, createRateLimiter, PASSWORD_SIGN_IN_LIMIT } from './auth/rate-limit.ts';
+import { unifiedSignIn } from './auth/unified-sign-in.ts';
 import {
   clientCodeLimiter,
-  clientCodeMessage,
   signInWithProjectCode,
   type SignedProjectReader,
 } from './auth/client-credentials.ts';
@@ -20,6 +20,10 @@ import {
 } from './auth/sign-in-request.ts';
 import { resolveEmailSender } from './email/sender.ts';
 import { accountForEmail, clearSession, getSession, homeFor, setSession, type Session } from './session';
+import { demoSignInEnabled } from './demo-accounts';
+
+/** One limiter for the password path, for the life of the process. */
+const passwordSignInLimiter = createRateLimiter(PASSWORD_SIGN_IN_LIMIT);
 import { planReturn, planViewAs, realIdentity, viewAsEnabled } from './view-as';
 import { assertCan, ownsTask } from './permissions';
 import { actionTenantScope, requireTenantScope } from './scope';
@@ -87,71 +91,95 @@ import { currentWriter } from './data/current-writer.ts';
 import { TASKS } from './data/fixtures';
 import { MESSAGES } from './data/portal-fixtures';
 
-export async function signIn(_prev: { error?: string } | undefined, formData: FormData) {
-  // Two distinct field names on purpose. The demo radios are `email`; a real
-  // account types `accountEmail`. Sharing one name would let a selected radio
-  // shadow what someone typed, and they would be signed in as a demo identity
-  // while believing they had used their own credentials.
-  const password = String(formData.get('password') ?? '');
-  const email = String(formData.get('accountEmail') ?? '') || String(formData.get('email') ?? '');
+/**
+ * The ONE sign-in (John, 2026-09-15). Email, and a password or project code.
+ *
+ * Who the person is — field crew, homeowner — is decided by `unifiedSignIn`
+ * from what they typed, and tested there without a request. This is only the
+ * wiring: the live checks, the caller's IP, and the cookie at the end.
+ * Contractors do not come through here: they arrive by the BuildSuite /
+ * GoHighLevel menu link (`/api/auth/ghl`), which is unchanged.
+ *
+ * Every session minted below carries `authProfileIds` — the profiles the
+ * person reads under — because a session without them failed its first scoped
+ * read on 2026-09-01, and a guardrail holds every call site to it.
+ */
+export async function signIn(
+  _prev: { error?: string; email?: string } | undefined,
+  formData: FormData,
+) {
+  const email = String(formData.get('email') ?? '');
+  const secret = String(formData.get('secret') ?? '');
+  const ip = clientIpFrom(await headers());
 
-  // Real invited users first. Someone who set a password through an invitation
-  // must be able to come back, and their account takes precedence over any
-  // demo identity that happens to share an email.
-  if (password !== '') {
-    const hub = getHubTeam();
-    if (hub.available) {
-      const result = await hub.team.authenticate(email, password);
-      if (result.ok) {
-        const m = result.membership;
-        await setSession({
-          role: m.role,
-          name: m.fullName === '' ? m.email : m.fullName,
-          email: m.email,
-          membershipId: m.id,
-          // The BuildSuite profiles this member reads under, from the
-          // membership row. A contractor and a field member carry the
-          // contractor's profiles; a client carries none, because their access
-          // is their projects plus the gate and BuildSuite stays closed to them.
-          //
-          // It used to be `[m.contractorId]`, which put a contractor id where an
-          // auth profile id belongs — the same conflation that hid a
-          // contractor's own records on 2026-09-01.
-          authProfileIds: m.authProfileIds,
-          // No `contactId` for a client. A membership id is not a GoHighLevel
-          // contact id, and putting one there sent the portal looking up a
-          // contact that does not exist; see `lib/client-scope.ts`.
-        } as Session);
-        redirect(homeFor(m.role));
-      }
+  const hub = getHubTeam();
+  const buildsuite = getBuildSuiteReader();
 
-      if (result.reason === 'revoked') {
-        return { error: 'This account no longer has access. Ask your contractor to restore it.' };
-      }
-      if (result.reason === 'not-activated') {
-        return { error: 'Finish setting up your account using the invitation link first.' };
-      }
-      // 'unknown' falls through to the demo path rather than answering here,
-      // so a wrong password and an unknown email look identical.
-    }
+  const outcome = await unifiedSignIn(email, secret, {
+    member: hub.available ? hub.team : null,
+    // The homeowner check needs BOTH databases: BuildSuite proves the signed
+    // contract, the Hub opens the account. Either one missing is an outage, and
+    // an outage must never become an unauthenticated sign-in — there is no
+    // fixture path here at all.
+    code: (who, code) =>
+      buildsuite.available && hub.available
+        ? signInWithProjectCode(who, code, {
+            reader: buildsuite as SignedProjectReader,
+            store: hub.team,
+            limiter: clientCodeLimiter,
+            ip,
+          })
+        : Promise.resolve({ result: 'unavailable' as const }),
+    limiter: passwordSignInLimiter,
+    ip,
+    // Production passes null. See `demoSignInEnabled`.
+    demo: demoSignInEnabled() ? accountForEmail : null,
+  });
+
+  // The email goes back so the form can keep it; the secret never does.
+  if (outcome.result === 'refused') return { error: outcome.message, email: email.trim() };
+
+  if (outcome.result === 'member') {
+    const m = outcome.membership;
+    await setSession({
+      role: m.role,
+      name: m.fullName === '' ? m.email : m.fullName,
+      email: m.email,
+      membershipId: m.id,
+      // The contractor's profiles for a field member; none for a client, whose
+      // access is their projects plus the gate.
+      authProfileIds: m.authProfileIds,
+    } as Session);
+    redirect(homeFor(m.role as Session['role']));
   }
 
-  const account = accountForEmail(email);
-  if (account === undefined) {
-    return { error: 'We could not sign you in. Check the email and password.' };
+  if (outcome.result === 'client') {
+    const m = outcome.membership;
+    await setSession({
+      role: 'client',
+      name: m.fullName === '' ? m.email : m.fullName,
+      email: m.email,
+      membershipId: m.id,
+      // EMPTY, and this is the privacy model rather than an oversight: a
+      // homeowner reads only the Hub's own tables. No `contactId` either — it
+      // would return every project that contact holds, including ones whose
+      // code this person has never proved.
+      authProfileIds: [],
+    } as Session);
+    redirect(homeFor('client'));
   }
 
-  // Demo build: the demo identities have no password. Real auth for staff is
-  // GHL portal login (§9.2); real auth for invited users is the branch above.
+  // Development only — `demoSignInEnabled()` is false on any deployment that
+  // did not set it.
+  const account = outcome.account;
   await setSession({
     role: account.role,
     name: account.name,
     email: account.email,
     contactId: account.contactId,
     authProfileIds: account.authProfileIds,
-  });
-
-  redirect(homeFor(account.role));
+  } as Session);
+  redirect(homeFor(account.role as Session['role']));
 }
 
 export async function signOut() {
@@ -973,68 +1001,9 @@ export async function requestSignIn(
 
 }
 
-/**
- * The homeowner's sign-in: email plus the project code from their contract.
- *
- * ---------------------------------------------------------------------------
- * WHY THIS MINTS A SESSION WHERE `requestSignIn` MINTS AN EMAIL
- *
- * Chris, 2026-09-10: signing the contract fires a BuildSuite automation that
- * sends the homeowner their project code, and that code is the password. There
- * is no invitation to wait for and no link to expire, which is the point — the
- * whole path is automatic from signature to first login.
- *
- * The policy is in `auth/client-credentials.ts` and is tested without a
- * database. This function is only the wiring: the live reader, the live store,
- * the caller's IP, and the cookie at the end.
- *
- * BOTH DEPENDENCIES MUST BE LIVE. An unavailable BuildSuite must never become
- * an unauthenticated sign-in, so a missing reader or a missing Hub reports an
- * outage rather than falling through to anything — there is deliberately no
- * fixture path here at all.
- * ---------------------------------------------------------------------------
- */
-export async function signInWithCode(
-  _prev: { message?: string } | undefined,
-  formData: FormData,
-): Promise<{ message: string }> {
-  const email = String(formData.get('email') ?? '');
-  const projectCode = String(formData.get('projectCode') ?? '');
-
-  const buildsuite = getBuildSuiteReader();
-  const hub = getHubTeam();
-  if (!buildsuite.available || !hub.available) {
-    return { message: clientCodeMessage({ result: 'unavailable' }) };
-  }
-
-  const reader: SignedProjectReader = buildsuite;
-  const outcome = await signInWithProjectCode(email, projectCode, {
-    reader,
-    store: hub.team,
-    limiter: clientCodeLimiter,
-    ip: clientIpFrom(await headers()),
-  });
-
-  if (outcome.result !== 'signed-in') return { message: clientCodeMessage(outcome) };
-
-  const m = outcome.membership;
-  await setSession({
-    role: 'client',
-    name: m.fullName === '' ? m.email : m.fullName,
-    email: m.email,
-    membershipId: m.id,
-    // EMPTY, and this is the privacy model rather than an oversight. A
-    // homeowner reads only the Hub's own tables; a profile here would open
-    // BuildSuite to them. `currentAccess` reads their projects from the
-    // membership on every request, so revocation and assignment are live.
-    authProfileIds: [],
-    // No `contactId`. A contact id would send `clientProjectsFor` down the
-    // contact path and return every project that contact holds — including
-    // ones whose code this person has never proved.
-  } as Session);
-
-  redirect(homeFor('client'));
-}
+// `signInWithCode` — the homeowner's separate sign-in action — was folded into
+// `signIn` on 2026-09-15. One form, one action; the homeowner check itself is
+// unchanged (`auth/client-credentials.ts`).
 
 /**
  * Create this invoice on the rail. **A write to a live system.**

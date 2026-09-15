@@ -104,27 +104,28 @@ test('the field and portal shells check access, not just a session', () => {
   }
 });
 
-test('sign-in tries a real account before falling back to a demo identity', () => {
-  // Otherwise a demo identity sharing an email would shadow someone's real
-  // account, and they would be signed in as somebody else entirely.
+// "A real account is tried before a demo identity" used to be read out of the
+// source here. Since sign-in became one route (2026-09-15) the decision lives
+// in `auth/unified-sign-in.ts` and is tested by behaviour instead — see "a real
+// account still wins over it" there. The radio buttons that made two field
+// names necessary are gone with it.
+
+test('the sign-in form and the sign-in action agree on their field names', () => {
+  // One form, two fields. A rename on either side alone would leave every
+  // sign-in reading an empty string — refused as "wrong credentials", so it
+  // would look like everyone forgot their password at once.
+  const form = readFileSync(join(LIB, '..', 'app', 'login-form.tsx'), 'utf8');
   const actions = readFileSync(join(LIB, 'actions.ts'), 'utf8');
   const signIn = actions.match(/export async function signIn\([\s\S]*?\n\}/);
+  assert.ok(signIn, 'signIn has moved or been renamed');
 
-  assert.ok(signIn);
-  const realPath = signIn[0].indexOf('authenticate(');
-  const demoPath = signIn[0].indexOf('accountForEmail(');
-  assert.ok(realPath !== -1, 'sign-in must try real credentials');
-  assert.ok(realPath < demoPath, 'real accounts must be tried first');
-});
-
-test('the two sign-in paths use different field names', () => {
-  // The demo radios and the typed email both submitted `email` at first, so a
-  // selected radio shadowed what someone typed and signed them in as a demo
-  // identity while they believed they had used their own credentials.
-  const form = readFileSync(join(LIB, '..', 'app', 'login-form.tsx'), 'utf8');
-
-  assert.match(form, /name="accountEmail"/);
-  assert.match(form, /name="password"/);
+  for (const field of ['email', 'secret']) {
+    assert.match(form, new RegExp(`name="${field}"`), `the form must submit "${field}"`);
+    assert.ok(signIn[0].includes(`formData.get('${field}')`), `signIn must read "${field}"`);
+  }
+  // Exactly one email field: the second one is what let a radio button shadow
+  // what someone typed.
+  assert.equal(form.match(/type="email"/g)?.length, 1, 'one email field, not two');
 });
 
 // ── The ticks reaching a screen ─────────────────────────────────────────────

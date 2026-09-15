@@ -152,6 +152,25 @@ export function signInRequestKeys(email: string, ip: string): readonly string[] 
 }
 
 /**
+ * Signing in with a PASSWORD — field crew, from the one sign-in form.
+ *
+ * There was no limit on this path at all until 2026-09-15: a field worker's
+ * password could be guessed without end. Looser than the project-code limit
+ * because a password is at least ten characters the person chose, not a
+ * sequential six-bit code — but no longer unlimited.
+ */
+export const PASSWORD_SIGN_IN_LIMIT: RateLimitConfig = { limit: 10, windowSeconds: 15 * 60 };
+
+/** Keys for a password attempt. Its own prefix, so it never spends the code budget. */
+export function passwordSignInKeys(email: string, ip: string): readonly string[] {
+  const keys: string[] = [];
+  const normalizedEmail = email.trim().toLowerCase();
+  if (normalizedEmail !== '') keys.push(`pw:email:${normalizedEmail}`);
+  if (ip !== '') keys.push(`pw:ip:${ip}`);
+  return keys;
+}
+
+/**
  * The keys a project-code sign-in is counted against.
  *
  * A SEPARATE PREFIX from `signin:`, on purpose. The two doors have different

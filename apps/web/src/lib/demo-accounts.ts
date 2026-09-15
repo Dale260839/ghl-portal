@@ -56,7 +56,11 @@ export interface DemoAccount extends Session {
   description: string;
 }
 
-/** The sign-in identities offered on the login screen. */
+/**
+ * The demo identities. No longer offered on the sign-in page (2026-09-15):
+ * they sign in only with `ENABLE_DEMO_SIGNIN=true` (see `demoSignInEnabled`),
+ * and the dev-only view-as / account switcher still read them.
+ */
 export const DEMO_ACCOUNTS: DemoAccount[] = [
   {
     role: 'contractor',
@@ -97,6 +101,20 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     description: 'Homeowner with two active projects — sees only approved, published content',
   },
 ];
+
+/**
+ * May the demo identities sign in at all? Only when explicitly switched on.
+ *
+ * They carry REAL BuildSuite profiles and have no password, so on a reachable
+ * deployment they are a way into real client records for anyone. Until
+ * 2026-09-15 they were radio buttons on the public sign-in page. Now they need
+ * `ENABLE_DEMO_SIGNIN=true` — for local development — and are never shown on
+ * the page otherwise. The strict comparison is the point: anything but the
+ * exact string leaves the door shut.
+ */
+export function demoSignInEnabled(): boolean {
+  return process.env.ENABLE_DEMO_SIGNIN === 'true';
+}
 
 export function accountForEmail(email: string): DemoAccount | undefined {
   const normalized = email.trim().toLowerCase();

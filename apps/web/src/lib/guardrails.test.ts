@@ -162,6 +162,12 @@ test('every mutating server action checks permission before it writes', () => {
   // whether or not an account matched (`sign-in-request.ts`).
 
   const sessionOnly = new Set([
+    // The ONE sign-in (2026-09-15), which includes the homeowner's project-code
+    // path. Unlike `requestSignIn` it DOES write — a homeowner's first sign-in
+    // opens their membership — so the exemption is not "it writes nothing" but
+    // "it runs before there is a session, so there is no role for `assertCan`
+    // to check". What authorises that write is the signed contract itself,
+    // matched inside BuildSuite. Pinned below, so this line cannot quietly widen.
     'signIn',
     'signOut',
     'viewAs',
@@ -176,12 +182,6 @@ test('every mutating server action checks permission before it writes', () => {
     // are pinned below rather than taken on trust.
     'switchAccount',
     'requestSignIn',
-    // The homeowner's code sign-in. Unlike `requestSignIn` it DOES write — it
-    // opens a membership — so the exemption is not "it writes nothing" but "it
-    // runs before there is a session, so there is no role for `assertCan` to
-    // check". What authorises the write is the signed contract itself, matched
-    // inside BuildSuite. Pinned below, so this line cannot quietly widen.
-    'signInWithCode',
   ]);
 
   const bodies = [...actions.text.matchAll(/^export async function (\w+)[\s\S]*?\n\}/gm)];
@@ -330,42 +330,91 @@ test('the account switch is gated by a flag AND the real identity', () => {
   assert.match(body[0], /findDevAccount\(/, 'it must look the account up, not trust the form');
 });
 
-test('the code sign-in delegates its whole decision, and widens nothing', () => {
-  // `signInWithCode` is exempt from the permission rule because it runs before
-  // a session exists. That exemption is only safe while the action stays pure
-  // wiring: every decision in `auth/client-credentials.ts`, which is tested
-  // without a database, and nothing decided inline where it cannot be.
+test('the sign-in delegates its whole decision, and widens nothing', () => {
+  // `signIn` is exempt from the permission rule because it runs before a
+  // session exists. That exemption is only safe while the action stays pure
+  // wiring: the routing in `auth/unified-sign-in.ts` and the homeowner check in
+  // `auth/client-credentials.ts`, both tested without a database, and nothing
+  // decided inline where it cannot be.
   //
-  // The three ways this goes wrong are all cheap to check and expensive to
-  // find later, so they are checked here rather than trusted.
+  // It was `signInWithCode`, the homeowner's own action, until sign-in became
+  // one route on 2026-09-15. The same four ways this goes wrong apply to the
+  // merged action, and they are checked here rather than trusted.
   const actions = FILES.find((f) => rel(f.path) === 'lib/actions.ts');
   assert.ok(actions);
 
-  const body = actions.text.match(/export async function signInWithCode\([\s\S]*?\n\}/);
-  assert.ok(body, 'signInWithCode has moved or been renamed');
+  const body = actions.text.match(/export async function signIn\([\s\S]*?\n\}/);
+  assert.ok(body, 'signIn has moved or been renamed');
+  assert.equal(
+    /export async function signInWithCode\(/.test(actions.text),
+    false,
+    'a second sign-in action is a second door with its own rules — keep one',
+  );
 
+  assert.match(body[0], /unifiedSignIn\(/, 'who the person is must be decided by the tested module');
   assert.match(
     body[0],
     /signInWithProjectCode\(/,
-    'the decision must come from the policy module, not from a comparison written here',
+    'the homeowner decision must come from the policy module, not from a comparison written here',
   );
 
   // An unavailable BuildSuite must never become an unauthenticated sign-in.
   // There is deliberately no fixture reader on this path at all.
   assert.match(
     body[0],
-    /!buildsuite\.available \|\| !hub\.available/,
-    'a missing database must refuse, not fall through to anything',
+    /buildsuite\.available && hub\.available\s*\?\s*signInWithProjectCode\(/,
+    'the homeowner check must run only when both databases are there',
   );
 
   // A `contactId` sends the portal down `listProjectsForContact`, which returns
   // EVERY project that contact holds — including ones whose code this visitor
   // has never proved. That is precisely the widening the retired emailed-link
-  // door had, and the reason it was retired.
+  // door had. The only `contactId` allowed in this action is the demo
+  // identity's own, on the development-only branch.
+  const clientBranch = body[0].match(/outcome\.result === 'client'[\s\S]*?redirect\(/);
+  assert.ok(clientBranch, 'the homeowner branch has moved');
   assert.equal(
-    /contactId:/.test(body[0]),
+    /contactId:/.test(clientBranch[0]),
     false,
     'a code sign-in must scope to the membership, never to a contact',
+  );
+});
+
+test('demo sign-in is shut unless ENABLE_DEMO_SIGNIN is exactly "true"', () => {
+  // Until 2026-09-15 the public sign-in page listed demo identities as radio
+  // buttons. Each carries a REAL BuildSuite profile and none has a password, so
+  // on a reachable deployment anyone could open real client records. The flag
+  // is the only thing between that and the internet; these pin it shut.
+  const demo = FILES.find((f) => rel(f.path) === 'lib/demo-accounts.ts');
+  const actions = FILES.find((f) => rel(f.path) === 'lib/actions.ts');
+  const page = FILES.find((f) => rel(f.path) === 'app/page.tsx');
+  const form = FILES.find((f) => rel(f.path) === 'app/login-form.tsx');
+  assert.ok(demo && actions && page && form);
+
+  const flag = demo.text.match(/export function demoSignInEnabled\(\)[\s\S]*?\n\}/);
+  assert.ok(flag, 'demoSignInEnabled has moved or been renamed');
+  assert.match(
+    flag[0],
+    /process\.env\.ENABLE_DEMO_SIGNIN === 'true'/,
+    'a strict comparison: "1", "yes" or a typo must leave it shut',
+  );
+
+  const signIn = actions.text.match(/export async function signIn\([\s\S]*?\n\}/);
+  assert.ok(signIn);
+  assert.match(
+    signIn[0],
+    /demo: demoSignInEnabled\(\) \? accountForEmail : null/,
+    'the action must pass no demo lookup unless the flag is on',
+  );
+
+  // The page decides what the browser receives: nothing, unless the flag is on.
+  assert.match(page.text, /demoSignInEnabled\(\)\s*\?\s*DEMO_ACCOUNTS/, 'the page must gate the list on the flag');
+  // And the client component must never hold the identities itself — anything
+  // it imports ships to every visitor's browser.
+  assert.equal(
+    /DEMO_ACCOUNTS|demo-accounts|@\/lib\/session/.test(withoutComments(form.text)),
+    false,
+    'the sign-in form must not import the demo identities',
   );
 });
 
@@ -673,13 +722,13 @@ test('no form submits through a button that stays live during the round trip', (
   for (const file of FILES) {
     const path = rel(file.path);
     if (!path.startsWith('app/') && !path.startsWith('components/')) continue;
-    // The component that implements the behaviour, and the four that had
+    // The component that implements the behaviour, and the two that had
     // already solved it their own way with `useFormStatus` before this existed.
     // Exempt because they DO disable while pending, not because they are old.
+    // The two sign-in forms were on this list too; since 2026-09-15 there is
+    // one, and it uses <SubmitButton>.
     const handlesItsOwn = [
       'components/submit-button.tsx',
-      'app/login-form.tsx',
-      'app/signin/sign-in-form.tsx',
       'components/account-switcher.tsx',
       'components/view-switcher.tsx',
     ];
@@ -817,6 +866,9 @@ test('a homeowner never sees the award code', () => {
   const clientFacing = (path: string) =>
     path.startsWith('app/portal/') ||
     path.startsWith('app/signin/') ||
+    // The one sign-in route: homeowners sign in here since 2026-09-15.
+    path === 'app/page.tsx' ||
+    path === 'app/login-form.tsx' ||
     path.startsWith('lib/email/') ||
     path.startsWith('lib/auth/') ||
     path.startsWith('lib/invoicing/') ||

@@ -17,7 +17,8 @@ outstanding — §3 is now a description, not a request.
   BuildSuite automation emails the homeowner their project code    ← already live, §3
               │
               ▼
-  homeowner opens  /signin
+  homeowner opens  /          (the one sign-in page since 2026-09-15;
+                               /signin still works and redirects there)
     email  = the address on the contract   (projects.client_email)
     password = the project code            (projects.project_code)
               │
@@ -125,7 +126,8 @@ Three things, if it does not already:
 
 1. the project code, shown as a code and not folded into a sentence;
 2. the address it must be used with (`client_email`, the one being written to);
-3. the link — `https://<hub host>/signin`.
+3. the link — `https://<hub host>/`. (`/signin` also works: it redirects there,
+   so emails already sent with it are fine.)
 
 **Do not put the signed-contract PDF link in it.** Sing, 2026-09-09: that URL is
 public and unauthenticated. A guardrail already refuses it on any client-facing
@@ -208,8 +210,8 @@ whatever string BuildSuite puts in `project_code`.
 | `lib/auth/rate-limit.ts` | `CLIENT_CODE_LIMIT`, `clientCodeKeys` |
 | `lib/buildsuite/projects.ts` | `findSignedProjectForClient`, the shared validator, the contractor fallback |
 | `lib/hub-db/team.ts` | `provisionClientFromSignedProject`; `INVITABLE_ROLES` → `['field']` |
-| `lib/actions.ts` | `signInWithCode` |
-| `app/signin/` | the form is now credentials, not a link request |
+| `lib/actions.ts` | `signInWithCode` — folded into `signIn` on 2026-09-15, see §7 |
+| `app/signin/` | the form is now credentials, not a link request — a redirect to `/` since 2026-09-15 |
 | `app/auth/verify/route.ts` | **retired** — refuses and redirects |
 | `app/dashboard/team/page.tsx` | field-crew invites only; homeowners shown as *signed in with their project code* |
 | `lib/ghl/email.ts` | invitation copy narrowed to field crew |
@@ -222,3 +224,32 @@ insufficient.
 
 **No database migration.** `hub_memberships` already had every column this
 needs.
+
+---
+
+## 7 · One sign-in route (John, 2026-09-15)
+
+The homeowner no longer has a page of their own. Everyone who types
+credentials uses `/`: an email, and one field labelled **Password or project
+code**. The server decides who they are from the shape of that second field
+(`lib/auth/unified-sign-in.ts`):
+
+| They type | Goes to | Limit |
+|---|---|---|
+| a project code — `BSA-053`, `bsa 53`, `BSA-APS-003` | the check in this document, unchanged | 5 an hour, per email and per IP |
+| anything else | the field-crew password check | 10 per 15 minutes, per email and per IP — this path had no limit before |
+
+A code that the homeowner check rejects is also tried as a field-crew password
+(a crew member may have chosen one that looks like a code), without spending a
+second attempt. A code that is rate-limited is refused outright and never tried
+as a password, so the merged form is not a way around the five-an-hour limit.
+Every wrong-credential failure reads the same, whichever half was wrong.
+
+**Contractors are unchanged.** They open the Hub from the BuildSuite menu in
+GoHighLevel (`/auth/ghl` → `/api/auth/ghl`) and are signed in automatically. A
+link that cannot be verified comes back to `/` with the reason shown on the
+page.
+
+**The demo identities are off the page.** They were radio buttons that signed
+anyone in, with no password, under a real BuildSuite profile. They now work only
+with `ENABLE_DEMO_SIGNIN=true`, for local development.

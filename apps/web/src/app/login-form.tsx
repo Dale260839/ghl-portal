@@ -1,107 +1,142 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useRef, useState } from 'react';
 import { signIn } from '@/lib/actions';
-import type { DemoAccount } from '@/lib/session';
+import { SubmitButton } from '@/components/submit-button';
 
-export function LoginForm({ accounts }: { accounts: DemoAccount[] }) {
-  const [selected, setSelected] = useState(accounts[0]?.email ?? '');
-  const [state, formAction, pending] = useActionState(signIn, undefined);
+/**
+ * The ONE sign-in form (John, 2026-09-15).
+ *
+ * ---------------------------------------------------------------------------
+ * TWO FIELDS FOR EVERYONE WHO TYPES CREDENTIALS
+ *
+ * Field crew type the password they set from their invitation. Homeowners type
+ * the project code the BuildSuite automation emailed them when they signed.
+ * Nobody picks which they are: the server reads the shape of the second field
+ * and routes it (`lib/auth/unified-sign-in.ts`). Contractors never see this
+ * form — they arrive signed in from the BuildSuite menu in GoHighLevel.
+ *
+ * This replaces three things: demo-identity radio buttons that signed anyone
+ * in with no password, a separate "account" email/password pair beside them,
+ * and a separate homeowner page at `/signin`. One door, one set of rules.
+ *
+ * The secret field is a password field with a reveal toggle, not a text field:
+ * it IS a password for the crew, and a homeowner reading `BSA-053` off a phone
+ * can show it to check what they typed.
+ * ---------------------------------------------------------------------------
+ */
+
+const INPUT =
+  'mt-1.5 w-full rounded-lg border border-navy-200 bg-white px-3.5 py-2.5 text-sm text-navy-900 placeholder:text-navy-300 focus-visible:border-navy-600 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-navy-600';
+
+export interface DemoChoice {
+  email: string;
+  label: string;
+}
+
+export function LoginForm({ demo }: { demo: DemoChoice[] }) {
+  const [state, formAction] = useActionState(signIn, undefined);
+  const [reveal, setReveal] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const secretRef = useRef<HTMLInputElement>(null);
 
   return (
-    <form action={formAction} className="mt-7">
-      <fieldset className="space-y-2.5">
-        <legend className="sr-only">Choose an experience</legend>
-        {accounts.map((account) => {
-          const active = selected === account.email;
-          return (
-            <label
-              key={account.email}
-              className={`flex cursor-pointer gap-3 rounded-lg border p-3.5 transition ${
-                active
-                  ? 'border-navy-600 bg-navy-50 ring-1 ring-navy-600'
-                  : 'border-navy-100 hover:border-navy-200 hover:bg-navy-50/50'
-              }`}
-            >
-              <input
-                type="radio"
-                name="email"
-                value={account.email}
-                checked={active}
-                onChange={() => setSelected(account.email)}
-                className="mt-1 h-4 w-4 shrink-0 accent-navy-600"
-              />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium text-navy-900">{account.label}</span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-navy-400">
-                  {account.description}
-                </span>
-                <span className="mt-1.5 block truncate text-xs text-navy-400">
-                  {account.name} · {account.email}
-                </span>
-              </span>
-            </label>
-          );
-        })}
-      </fieldset>
-
-      {/* Real accounts sign in here — anyone who set a password through an
-          invitation. The demo identities above have no password and are
-          scaffolding; this is the path that survives them. */}
-      <div className="mt-6 border-t border-navy-100 pt-5">
-        <p className="text-xs font-medium tracking-wide text-navy-400 uppercase">
-          Or sign in with your account
-        </p>
-        <div className="mt-3 space-y-2.5">
-          <input
-            name="accountEmail"
-            type="email"
-            autoComplete="username"
-            placeholder="your@email.com"
-            className="w-full rounded-lg border border-navy-200 px-3 py-2 text-sm"
-          />
-          <input
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            placeholder="Password"
-            className="w-full rounded-lg border border-navy-200 px-3 py-2 text-sm"
-          />
-        </div>
-        <p className="mt-2 text-xs text-navy-400">
-          Invited by a contractor? Use the email your invitation was sent to.
-        </p>
-      </div>
-
+    <form action={formAction} className="mt-7 space-y-4">
       {state?.error !== undefined && (
-        <p className="mt-3 text-sm text-red-600" role="alert">
+        <p
+          className="rounded-lg border border-red-600/20 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-800"
+          role="alert"
+        >
           {state.error}
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="mt-5 w-full rounded-lg bg-navy-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy-600 disabled:opacity-60"
+      <div>
+        <label htmlFor="email" className="block text-sm font-medium text-navy-900">
+          Email address
+        </label>
+        <input
+          ref={emailRef}
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="username"
+          required
+          // A failed attempt keeps the email; the secret is never sent back.
+          defaultValue={state?.email ?? ''}
+          placeholder="you@example.com"
+          className={INPUT}
+        />
+      </div>
+
+      <div>
+        <div className="flex items-baseline justify-between gap-3">
+          <label htmlFor="secret" className="block text-sm font-medium text-navy-900">
+            Password or project code
+          </label>
+          <button
+            type="button"
+            onClick={() => setReveal((v) => !v)}
+            aria-controls="secret"
+            aria-pressed={reveal}
+            className="text-xs font-medium text-navy-500 underline-offset-2 hover:text-navy-800 hover:underline"
+          >
+            {reveal ? 'Hide' : 'Show'}
+          </button>
+        </div>
+        <input
+          ref={secretRef}
+          id="secret"
+          name="secret"
+          type={reveal ? 'text' : 'password'}
+          autoComplete="current-password"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          required
+          className={INPUT}
+          aria-describedby="secret-help"
+        />
+        <p id="secret-help" className="mt-1.5 text-xs leading-relaxed text-navy-400">
+          Homeowners: the project code from your signed contract, like BSA-053. Field crew: the
+          password you set from your invitation.
+        </p>
+      </div>
+
+      <SubmitButton
+        pendingLabel="Signing in…"
+        className="w-full rounded-lg bg-navy-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy-600 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {pending ? 'Signing in…' : 'Sign in'}
-      </button>
+        Sign in
+      </SubmitButton>
 
-      {/* The homeowner door. It was built and nothing linked to it, so the only
-          way in was to know the URL — which is not a door.
-
-          A separate route on purpose: a homeowner signs in with an emailed
-          link, not a password, and putting both on one form invites somebody to
-          type a project code into a password box. */}
-      <p className="mt-5 border-t border-navy-100 pt-4 text-center text-sm text-navy-500">
-        Are you a homeowner?{' '}
-        <a
-          href="/signin"
-          className="font-medium text-navy-800 underline underline-offset-2 hover:text-navy-900"
-        >
-          Sign in with your project code
-        </a>
-      </p>
+      {/* Development only. The server passes an empty list unless
+          ENABLE_DEMO_SIGNIN=true, so on a deployment this renders nothing and
+          ships no identities. Filling the fields rather than signing in keeps
+          it on the same path as everyone else. */}
+      {demo.length > 0 && (
+        <div className="rounded-lg border border-dashed border-amber-600/40 bg-amber-50/60 px-4 py-3">
+          <p className="text-xs font-semibold text-navy-800">Development: demo identities are on</p>
+          <p className="mt-0.5 text-xs text-navy-500">
+            They have no password. Never set ENABLE_DEMO_SIGNIN on a shared deployment.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {demo.map((d) => (
+              <button
+                key={d.email}
+                type="button"
+                onClick={() => {
+                  if (emailRef.current !== null) emailRef.current.value = d.email;
+                  if (secretRef.current !== null) secretRef.current.value = 'demo';
+                }}
+                className="rounded-md border border-navy-200 bg-white px-2 py-1 text-xs text-navy-700 hover:bg-navy-50"
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </form>
   );
 }
