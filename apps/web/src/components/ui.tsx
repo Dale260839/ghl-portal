@@ -164,7 +164,7 @@ export function DataModeBanner({
    * telling every contractor that working features did not exist yet.
    *
    * Optional, so a caller that genuinely cannot tell says nothing rather than
-   * guessing. `undefined` keeps the old wording.
+   * guessing: `undefined` is treated as healthy and shows no banner.
    */
   hubConnected?: boolean;
   /**
@@ -184,30 +184,22 @@ export function DataModeBanner({
   if (kind === 'ghl') return null;
 
   if (kind === 'buildsuite') {
+    // Healthy: say nothing. A "Live BuildSuite data — real projects, clients and
+    // dates … saving to the Hub database" strip used to sit across the top of
+    // every screen; it was removed on request on 2026-09-15. Live data is the
+    // normal state, so the banner now speaks only when saving is broken.
+    if (hubConnected !== false) return null;
     return (
-      <div className="border-b border-navy-200 bg-navy-50 px-4 py-1.5 text-center text-xs text-navy-600">
-        <strong className="font-semibold">Live BuildSuite data</strong> — real projects, clients and
-        dates.{' '}
-        {hubConnected === true ? (
-          <>Schedule, field updates and invoices are saving to the Hub database.</>
-        ) : hubConnected === false ? (
-          <span className="text-amber-700">
-            {hubProblem !== undefined && hubProblem !== '' ? (
-              <>
-                The Hub database is not connected (missing {hubProblem}), so schedule, field
-                updates and invoices cannot be saved.
-              </>
-            ) : (
-              <>
-                The Hub database is not reachable, so schedule, field updates and invoices cannot
-                be saved.
-              </>
-            )}
-          </span>
+      <div className="border-b border-amber-600/20 bg-amber-soft px-4 py-1.5 text-center text-xs text-amber-700">
+        {hubProblem !== undefined && hubProblem !== '' ? (
+          <>
+            The Hub database is not connected (missing {hubProblem}), so schedule, field updates
+            and invoices cannot be saved.
+          </>
         ) : (
           <>
-            Field updates, milestones and budgets arrive once this deployment is connected to the
-            Hub database.
+            The Hub database is not reachable, so schedule, field updates and invoices cannot be
+            saved.
           </>
         )}
       </div>
