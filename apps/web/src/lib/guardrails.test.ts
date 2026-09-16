@@ -380,6 +380,39 @@ test('the sign-in delegates its whole decision, and widens nothing', () => {
   );
 });
 
+test('nothing that runs in the browser imports the demo identities as values', () => {
+  // `demo-accounts.ts` holds real BuildSuite profile ids. A browser-side file —
+  // or a module one imports, like `session-mismatch.ts` for the error page —
+  // may take its TYPES (erased at build) but never a value, or the identities
+  // ship to every visitor.
+  const DEMO_MODULE = /from '(?:@\/lib\/demo-accounts|@\/lib\/session|\.\/demo-accounts(?:\.ts)?|\.\/session(?:\.ts)?)'/;
+  const offenders: string[] = [];
+  for (const file of FILES) {
+    const path = rel(file.path);
+    const browserSide = /^\s*['"]use client['"]/.test(file.text) || path === 'lib/session-mismatch.ts';
+    if (!browserSide) continue;
+    for (const line of file.text.split('\n')) {
+      if (DEMO_MODULE.test(line) && !/^\s*import type /.test(line)) offenders.push(`${path}: ${line.trim()}`);
+    }
+  }
+  assert.deepEqual(offenders, [], 'use `import type` — values from these modules must stay on the server');
+});
+
+test('every error page says who the screen belongs to', () => {
+  // The error page checks the browser's current role before blaming the
+  // database (2026-09-17). An error page that did not say whose screen it is
+  // could not tell a crew sign-in in another tab from a refused write.
+  const pages = FILES.filter((f) => /(^|\/)error\.tsx$/.test(rel(f.path)) && f.text.includes('<FriendlyError'));
+  assert.ok(pages.length >= 4, `expected the four error pages, found ${pages.length}`);
+  const missing = pages.filter((f) => !/allowedRoles=\{/.test(f.text)).map((f) => rel(f.path));
+  assert.deepEqual(missing, []);
+
+  const contractorOnly = pages.filter((f) => rel(f.path).startsWith('app/dashboard/'));
+  for (const f of contractorOnly) {
+    assert.match(f.text, /const ALLOWED = \['contractor'\] as const/, `${rel(f.path)} belongs to the contractor alone`);
+  }
+});
+
 test('demo sign-in is shut unless ENABLE_DEMO_SIGNIN is exactly "true"', () => {
   // Until 2026-09-15 the public sign-in page listed demo identities as radio
   // buttons. Each carries a REAL BuildSuite profile and none has a password, so
