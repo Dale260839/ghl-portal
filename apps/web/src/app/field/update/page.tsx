@@ -1,5 +1,7 @@
 import { SubmitButton } from '@/components/submit-button';
 import { submitFieldUpdate } from '@/lib/actions';
+import { uploadFieldPhoto } from '@/lib/actions/field-tasks';
+import { PhotoUploader } from '@/components/photo-uploader';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getSession } from '@/lib/session';
@@ -69,6 +71,14 @@ export default async function FieldUpdate() {
               required
               className="mt-1.5 w-full rounded-lg border border-navy-200 px-3 py-2.5 text-sm"
             />
+          </div>
+
+          <div>
+            <div className="text-xs font-medium text-navy-600">Photos</div>
+            <div className="mt-1.5">
+              {/* Saved to the project chosen above as soon as they are added. */}
+              <PhotoUploader upload={uploadFieldPhoto} formFields={['projectId']} />
+            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-2.5">

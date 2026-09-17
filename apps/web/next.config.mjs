@@ -10,6 +10,14 @@ const nextConfig = {
   transpilePackages: ['@buildsuite/contracts'],
   // Monorepo: the workspace root is one level up from apps/web.
   outputFileTracingRoot: path.join(here, '../../'),
+  experimental: {
+    serverActions: {
+      // Next's default is 1 MB, which no phone photo fits under. Photos are
+      // shrunk in the browser first (lib/field-task.ts); this is the backstop,
+      // kept under Vercel's 4.5 MB request cap.
+      bodySizeLimit: '4mb',
+    },
+  },
 };
 
 export default nextConfig;

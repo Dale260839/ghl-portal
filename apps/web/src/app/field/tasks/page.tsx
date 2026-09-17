@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { SubmitButton } from '@/components/submit-button';
 import { ContractorProjectRef } from '@/components/project-code';
 import { projectById } from '@/lib/project-codes';
@@ -81,7 +82,12 @@ export default async function FieldTasks() {
                           aria-label="New"
                         />
                       )}
-                      <span className="text-sm font-semibold text-navy-900">{task.taskName}</span>
+                      <Link
+                        href={`/field/tasks/${task.id}`}
+                        className="text-sm font-semibold text-navy-900 underline-offset-2 hover:underline"
+                      >
+                        {task.taskName}
+                      </Link>
                     </div>
                     <div className="mt-0.5 text-xs text-navy-400">
                       <ContractorProjectRef project={projectOf(task.projectId)} />
@@ -102,6 +108,13 @@ export default async function FieldTasks() {
 
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-navy-400">
                   <span>{task.scheduledDate === '' ? 'No date set' : `Scheduled ${shortDate(task.scheduledDate.slice(0, 10))}`}</span>
+
+                  <Link
+                    href={`/field/tasks/${task.id}`}
+                    className="inline-flex min-h-9 items-center rounded-lg border border-navy-200 bg-white px-3.5 text-sm font-semibold text-navy-800 transition hover:bg-navy-50"
+                  >
+                    Open · status, update, photos
+                  </Link>
 
                   {isUnseen(task) && (
                     // Marking it seen is what clears the ding. A field user with

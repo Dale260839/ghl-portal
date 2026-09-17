@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, type ReactNode } from 'react';
+import { Fragment, useActionState, useRef, type ReactNode } from 'react';
 
 /** What an action can hand back to the form that called it. */
 export interface ActionNotice {
@@ -35,9 +35,18 @@ export function NoticeForm({
   children: ReactNode;
 }) {
   const [state, formAction] = useActionState(action, undefined);
+  // Each completed save hands back a new state object. Keying the contents on
+  // it remounts them, so client pieces inside — a photo uploader's list and its
+  // count — start fresh rather than being reported again with the next save.
+  const version = useRef(0);
+  const last = useRef(state);
+  if (last.current !== state) {
+    last.current = state;
+    version.current += 1;
+  }
   return (
     <form action={formAction} className={className}>
-      {children}
+      <Fragment key={version.current}>{children}</Fragment>
       {state?.notice !== undefined && state.notice !== '' && (
         <p
           role="status"

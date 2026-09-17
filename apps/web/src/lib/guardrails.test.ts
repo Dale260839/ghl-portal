@@ -448,6 +448,60 @@ test('the Tasks section is under every project', () => {
   assert.match(nav.text, /\{ seg: 'tasks', label: 'Tasks' \}/);
 });
 
+test('a crew member acts only on their own task, and files it under that task’s project', () => {
+  // John, 2026-09-17: the crew opens a task, sets its status, and sends an
+  // update with photos. Each action must re-read the task through the caller's
+  // scope, and must file a photo or update under the STORED task's project — a
+  // project id from the form would let a crew member write into any job.
+  const mod = FILES.find((f) => rel(f.path) === 'lib/actions/field-tasks.ts');
+  assert.ok(mod, 'lib/actions/field-tasks.ts has moved');
+  const text = withoutComments(mod.text);
+  const exported = [...text.matchAll(/export async function (\w+)\([\s\S]*?\n\}\r?\n/g)];
+  assert.ok(exported.length >= 4, 'the crew task actions have moved');
+
+  for (const m of exported) {
+    assert.match(m[0], /assertCan\(/, `${m[1]} writes without asking permission`);
+  }
+  const body = (name: string) => exported.find((m) => m[1] === name)?.[0] ?? '';
+  for (const name of ['setFieldTaskStatus', 'postTaskUpdate', 'uploadTaskPhoto']) {
+    assert.match(body(name), /myTask\(taskId\)/, `${name} must start from the caller's own task`);
+    assert.equal(/formData\.get\('projectId'\)/.test(body(name)), false, `${name} must not take the project from the form`);
+  }
+  assert.match(body('postTaskUpdate'), /projectId: task\.projectId/);
+  assert.match(body('uploadTaskPhoto'), /projectId: context\.task\.projectId/);
+  // The one that does take a project from the form checks it against theirs.
+  assert.match(body('uploadFieldPhoto'), /fieldProjectsFor\(access, projects, tasks\)\.some\(/);
+  // And the task itself: assigned to this person, on one of their projects.
+  assert.match(text, /tasksForField\(tasks, mine, access\.session\.membershipId \?\? ''\)/);
+  assert.match(text, /ownsTask\(access\.session, task\)/);
+});
+
+test('a photo from a phone can be uploaded: shrunk first, and under the raised limit', () => {
+  // Every upload was a server action at Next's 1 MB default, and a phone photo
+  // is 2-10 MB, so crew photos could not be saved. The field screens now go
+  // through <PhotoUploader>, which shrinks before sending; a bare file input
+  // would bring the full-size photo back.
+  const offenders = FILES.filter((f) => rel(f.path).startsWith('app/field/') && /type="file"/.test(f.text)).map((f) => rel(f.path));
+  assert.deepEqual(offenders, [], 'use <PhotoUploader> on the field screens');
+
+  const uploader = FILES.find((f) => rel(f.path) === 'components/photo-uploader.tsx');
+  assert.ok(uploader);
+  assert.match(uploader.text, /fitWithin\(bitmap\.width, bitmap\.height, PHOTO_MAX_EDGE\)/);
+  assert.match(uploader.text, /canvas\.toBlob\(resolve, 'image\/jpeg'/);
+
+  const config = readFileSync(join(SRC, '..', 'next.config.mjs'), 'utf8');
+  assert.match(config, /bodySizeLimit: '4mb'/, 'the server-action body limit is what lets a shrunk photo through');
+});
+
+test('an assigned task opens, and only for the person it is assigned to', () => {
+  const page = FILES.find((f) => rel(f.path) === 'app/field/tasks/[id]/page.tsx');
+  const list = FILES.find((f) => rel(f.path) === 'app/field/tasks/page.tsx');
+  assert.ok(page && list);
+  assert.match(page.text, /tasksForField\(tasks, mine, session\?\.membershipId \?\? ''\)\.find\(/);
+  assert.match(page.text, /if \(task === undefined\) notFound\(\)/);
+  assert.match(list.text, /href=\{`\/field\/tasks\/\$\{task\.id\}`\}/, 'the Tasks list must link to each task');
+});
+
 test('nothing that runs in the browser imports the demo identities as values', () => {
   // `demo-accounts.ts` holds real BuildSuite profile ids. A browser-side file —
   // or a module one imports, like `session-mismatch.ts` for the error page —

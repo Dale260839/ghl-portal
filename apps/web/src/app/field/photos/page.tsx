@@ -1,10 +1,10 @@
-import { SubmitButton } from '@/components/submit-button';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { requireAccess } from '@/lib/access';
 import { fieldProjectsFor } from '@/lib/field-scope';
 import { getHubMedia, type MediaItem } from '@/lib/hub-db/media';
-import { attachProjectFile } from '@/lib/actions';
+import { uploadFieldPhoto } from '@/lib/actions/field-tasks';
+import { PhotoUploader } from '@/components/photo-uploader';
 import { Card, shortDate } from '@/components/ui';
 
 /**
@@ -80,8 +80,7 @@ export default async function FieldPhotos({
           <div className="border-b border-navy-100 px-4 py-3 text-xs font-semibold tracking-wide text-navy-500 uppercase">
             Add a photo
           </div>
-          <form action={attachProjectFile} className="space-y-3 px-4 py-4">
-            <input type="hidden" name="kind" value="photo" />
+          <form className="space-y-3 px-4 py-4">
             <label className="block text-xs text-navy-500">
               Project
               <select name="projectId" defaultValue={preselect ?? mine[0]?.buildsuiteProjectId} className={`${FIELD} mt-1 w-full`}>
@@ -93,28 +92,13 @@ export default async function FieldPhotos({
               </select>
             </label>
             <label className="block text-xs text-navy-500">
-              Photo
-              {/* `capture` opens the camera on a phone rather than the gallery.
-                  On a laptop it is an ordinary file picker. */}
-              <input
-                type="file"
-                name="file"
-                accept="image/*"
-                capture="environment"
-                required
-                className={`${FIELD} mt-1 w-full`}
-              />
+              Caption (optional, set it before adding the photo)
+              <input name="caption" placeholder="e.g. Rough-in, north wall" className={`${FIELD} mt-1 w-full`} />
             </label>
-            <label className="block text-xs text-navy-500">
-              Caption (optional)
-              <input name="label" placeholder="e.g. Rough-in, north wall" className={`${FIELD} mt-1 w-full`} />
-            </label>
-            <SubmitButton className="w-full rounded-lg bg-navy-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-navy-700">
-              Upload photo
-            </SubmitButton>
-            <p className="text-xs text-navy-400">
-              Saved to the job, internal. Your PM decides what the homeowner sees.
-            </p>
+            {/* Shrunk on the phone and saved at once. The old file field posted
+                the full photo through a 1 MB server action limit, so a real
+                phone photo could not be saved. */}
+            <PhotoUploader upload={uploadFieldPhoto} formFields={['projectId', 'caption']} />
           </form>
         </Card>
       )}
