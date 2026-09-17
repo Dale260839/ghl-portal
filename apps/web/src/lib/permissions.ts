@@ -274,12 +274,15 @@ export function allowedActions(role: Role, resource: Resource): Action[] {
 
 /** §9.4 — a crew member acts only on work assigned to them. */
 export function ownsTask(
-  user: { role: Role; name: string },
+  user: { role: Role; membershipId?: string },
   task: { assignedTo: string | null },
 ): boolean {
   if (user.role === 'contractor') return true;
   if (user.role !== 'field') return false;
-  return task.assignedTo !== null && task.assignedTo === user.name;
+  // `assigned_to` is a crew MEMBERSHIP id (hub_tasks, 0001). This compared the
+  // person's name until 2026-09-17, which no stored task could ever equal — so a
+  // crew member could never clear their own "new" badge.
+  return task.assignedTo !== null && user.membershipId !== undefined && task.assignedTo === user.membershipId;
 }
 
 /** §9.1 — a homeowner acts only on their own project's records. */

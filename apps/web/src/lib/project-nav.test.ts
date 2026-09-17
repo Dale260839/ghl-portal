@@ -21,11 +21,12 @@ const ID = '75233730-d76f-41d7-a495-d40cb7a9c912';
 
 test('the sections are the ones asked for, Overview first and People last', () => {
   // Overview was a tab; with the tabs gone it has to live in the sidebar, or a
-  // contractor inside a project has no way back to its summary.
+  // contractor inside a project has no way back to its summary. Tasks joined on
+  // 2026-09-17, when contractors could first assign work to the crew.
   assert.deepEqual(
     PROJECT_SECTIONS.map((s) => s.label),
     [
-      'Overview', 'Timeline', 'Schedule', 'Daily Updates', 'Designs & Selections', 'Budget',
+      'Overview', 'Timeline', 'Schedule', 'Tasks', 'Daily Updates', 'Designs & Selections', 'Budget',
       'Change Orders', 'Documents', 'Photos & Videos', 'Messages', 'Issues',
       'Payments', 'Completion', 'Visibility', 'People',
     ],

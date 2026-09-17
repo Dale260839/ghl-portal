@@ -190,17 +190,23 @@ test('an unknown action on a resource is refused, not allowed by default', () =>
 
 // ── Ownership is a separate question ────────────────────────────────────────
 
-test('a field user acts only on tasks assigned to them', () => {
-  const tony = { role: 'field' as const, name: 'Tony Alvarez' };
+test('a field user acts only on tasks assigned to them — by membership, not by name', () => {
+  // `hub_tasks.assigned_to` holds a crew membership id. This compared names
+  // until 2026-09-17, which no stored task could equal, so nobody on the crew
+  // could ever clear their own "new" badge.
+  const tony = { role: 'field' as const, membershipId: 'm-tony' };
 
-  assert.equal(ownsTask(tony, { assignedTo: 'Tony Alvarez' }), true);
-  assert.equal(ownsTask(tony, { assignedTo: 'Someone Else' }), false);
+  assert.equal(ownsTask(tony, { assignedTo: 'm-tony' }), true);
+  assert.equal(ownsTask(tony, { assignedTo: 'm-someone-else' }), false);
   assert.equal(ownsTask(tony, { assignedTo: null }), false, 'unassigned is nobody’s');
+  assert.equal(ownsTask({ role: 'field' }, { assignedTo: 'm-tony' }), false, 'no membership, no tasks');
+  // A name is not an identity: a task stored against a name matches nobody.
+  assert.equal(ownsTask({ role: 'field', membershipId: 'm-tony' }, { assignedTo: 'Tony Alvarez' }), false);
 });
 
 test('a contractor owns every record; a client owns no task', () => {
-  assert.equal(ownsTask({ role: 'contractor', name: 'Marcus' }, { assignedTo: null }), true);
-  assert.equal(ownsTask({ role: 'client', name: 'Dana' }, { assignedTo: 'Dana' }), false);
+  assert.equal(ownsTask({ role: 'contractor' }, { assignedTo: null }), true);
+  assert.equal(ownsTask({ role: 'client', membershipId: 'm-dana' }, { assignedTo: 'm-dana' }), false);
 });
 
 test('a client acts only on their own contact’s records', () => {

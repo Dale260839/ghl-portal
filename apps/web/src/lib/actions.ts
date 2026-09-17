@@ -69,6 +69,13 @@ import {
   type ResolvedAssignee,
 } from './schedule-assignees.ts';
 import { clientCode, contractorCode } from './project-codes.ts';
+import {
+  assignableCrew,
+  assignmentChange,
+  isTaskStatus,
+  resolveTaskAssignee,
+  type TaskAssignee,
+} from './task-assignment.ts';
 import type { Resource } from './permissions';
 
 /** Which permission resource governs each archivable table. */
@@ -424,13 +431,24 @@ export async function markTaskSeen(formData: FormData) {
   assertCan(session.role, 'update', 'task');
 
   const taskId = String(formData.get('taskId') ?? '');
-  const task = TASKS.find((t) => t.id === taskId);
+  if (taskId === '') throw new Error('taskId is required');
+
+  // Read through the caller's own scope, from the same source the Tasks screen
+  // reads. This used to look the id up in the fixture array whatever the
+  // source, so on live data "Got it" found nothing and the badge never cleared.
+  const scope = await actionTenantScope(session);
+  const task = (await (await currentDataSource(scope)).listTasks(scope)).find((t) => t.id === taskId);
 
   // Permission and ownership are separate questions and both have to pass.
   // Without the second, a field user could clear somebody else's ding by
   // posting their task id.
   if (task !== undefined && ownsTask(session, task)) {
-    task.seenAt = new Date().toISOString();
+    const writer = currentWriter();
+    await writer.markTaskSeen(scope, taskId);
+    if (!writer.persistent) {
+      const fixture = TASKS.find((t) => t.id === taskId);
+      if (fixture !== undefined) fixture.seenAt = new Date().toISOString();
+    }
   }
 
   revalidatePath('/field');
@@ -1443,6 +1461,149 @@ export async function archiveScheduleItem(formData: FormData) {
 
   await schedule.archive(scope, itemId, { name: session.name });
   revalidatePath(`/dashboard/projects/${projectId}/schedule`);
+}
+
+// ── Tasks: the contractor assigns work to the crew (2026-09-17) ─────────────
+//
+// `hub_tasks` has had `assigned_to`, `pm_note` and the seen/unseen "ding" since
+// 0001, and the crew's Tasks screen shows what is assigned to them — but nothing
+// ever created a task, so that screen was always empty. See task-assignment.ts.
+
+async function taskContext() {
+  const session = await getSession();
+  if (session === null) throw new Error('not signed in');
+
+  const hub = getHubOperational();
+  if (!hub.available) {
+    throw new Error(`the Hub database is not connected (missing ${hub.missing.join(', ')})`);
+  }
+  return { session, scope: await actionTenantScope(session), ops: hub.ops };
+}
+
+/**
+ * The project, through the contractor's own scope, and the crew a task on it
+ * can be given to — the same list People shows for the project.
+ */
+async function taskPeople(scope: TenantScope, projectId: string) {
+  const project = await (await currentDataSource(scope)).getProject(scope, projectId);
+  if (project === null) throw new Error('that project is not one of yours');
+  const team = getHubTeam();
+  const crew = team.available ? await team.team.listForProject(scope, projectId).catch(() => []) : [];
+  return { project, options: assignableCrew(crew) };
+}
+
+function refuseUnknownTaskAssignee(who: TaskAssignee): void {
+  if (who.kind === 'unknown') {
+    throw new Error('that person is not on this project’s crew any more — reload and choose again');
+  }
+}
+
+function revalidateTasks(projectId: string): void {
+  revalidatePath(`/dashboard/projects/${projectId}/tasks`);
+  revalidatePath(`/dashboard/projects/${projectId}`);
+  revalidatePath('/field');
+  revalidatePath('/field/tasks');
+}
+
+export async function createProjectTask(
+  _previous: { notice?: string } | undefined,
+  formData: FormData,
+): Promise<{ notice?: string } | undefined> {
+  const { session, scope, ops } = await taskContext();
+  // Handing out work is the office's act. The matrix gives `create` on tasks to
+  // the contractor alone — `update` is shared with the crew, who start and
+  // finish their own work, and must not be able to reassign it.
+  assertCan(session.role, 'create', 'task');
+
+  const projectId = String(formData.get('projectId') ?? '');
+  const taskName = String(formData.get('taskName') ?? '').trim();
+  if (projectId === '') throw new Error('projectId is required');
+  if (taskName === '') throw new Error('a task needs a name');
+
+  const { options } = await taskPeople(scope, projectId);
+  const who = resolveTaskAssignee(options, String(formData.get('assignedTo') ?? ''));
+  // A new task has nobody to keep.
+  refuseUnknownTaskAssignee(who.kind === 'keep' ? { kind: 'unknown' } : who);
+
+  const trade = String(formData.get('assignedTrade') ?? '').trim();
+  const note = String(formData.get('pmNote') ?? '').trim();
+  const date = String(formData.get('scheduledDate') ?? '').trim();
+
+  await ops.createTask(scope, {
+    projectId,
+    taskName,
+    assignedTo: who.kind === 'crew' ? who.member.id : undefined,
+    assignedTrade: trade === '' ? undefined : trade,
+    pmNote: note === '' ? undefined : note,
+    scheduledDate: date === '' ? undefined : date,
+    createdBy: session.name,
+  });
+
+  revalidateTasks(projectId);
+  return {
+    notice:
+      who.kind === 'crew'
+        ? `Assigned to ${who.member.label}. It is on their Tasks screen now, marked new until they open it.`
+        : 'Saved as unassigned. Assign it to someone to put it on their Tasks screen.',
+  };
+}
+
+export async function updateProjectTask(
+  _previous: { notice?: string } | undefined,
+  formData: FormData,
+): Promise<{ notice?: string } | undefined> {
+  const { session, scope, ops } = await taskContext();
+  // Reassigning is handing out work too — see createProjectTask.
+  assertCan(session.role, 'create', 'task');
+
+  const projectId = String(formData.get('projectId') ?? '');
+  const taskId = String(formData.get('taskId') ?? '');
+  if (projectId === '' || taskId === '') throw new Error('projectId and taskId are required');
+
+  const { options } = await taskPeople(scope, projectId);
+  // The stored task, read through the tenant: who it WAS with decides whether
+  // this is a new assignment, and a hidden form field would let a stale page
+  // decide that.
+  const existing = (await ops.listTasks(scope, projectId)).find((t) => t.id === taskId);
+  if (existing === undefined) throw new Error('that task is not on this project');
+
+  const who = resolveTaskAssignee(options, String(formData.get('assignedTo') ?? ''));
+  refuseUnknownTaskAssignee(who);
+  const assignment = assignmentChange(existing.assignedTo, who, new Date().toISOString());
+
+  const postedStatus = String(formData.get('status') ?? '');
+  const date = String(formData.get('scheduledDate') ?? '').trim();
+
+  await ops.updateTask(scope, taskId, {
+    taskName: String(formData.get('taskName') ?? ''),
+    pmNote: String(formData.get('pmNote') ?? ''),
+    assignedTrade: String(formData.get('assignedTrade') ?? ''),
+    scheduledDate: date === '' ? null : date,
+    // Only a status from the fixed list; anything else keeps what was there.
+    status: isTaskStatus(postedStatus) ? postedStatus : existing.status,
+    assignment,
+  });
+
+  revalidateTasks(projectId);
+  if (assignment === null) return { notice: 'Saved.' };
+  return {
+    notice:
+      who.kind === 'crew'
+        ? `Saved and assigned to ${who.member.label}. It shows as new on their Tasks screen.`
+        : 'Saved and unassigned. It has left the crew’s Tasks screen.',
+  };
+}
+
+export async function archiveProjectTask(formData: FormData) {
+  const { session, scope, ops } = await taskContext();
+  assertCan(session.role, 'archive', 'task');
+
+  const projectId = String(formData.get('projectId') ?? '');
+  const taskId = String(formData.get('taskId') ?? '');
+  if (taskId === '') throw new Error('taskId is required');
+
+  await ops.archiveTask(scope, taskId, { name: session.name });
+  revalidateTasks(projectId);
 }
 
 // ── Milestones (§6.2) ───────────────────────────────────────────────────────

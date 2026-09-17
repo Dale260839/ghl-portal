@@ -571,6 +571,66 @@ export class HubOperational {
     return toTask(row!);
   }
 
+  /**
+   * The contractor editing a task: its details, its status, and who it is with.
+   *
+   * `assignment` is written only when who it is assigned to CHANGED (see
+   * `assignmentChange`). A new assignee is a new ding — `assigned_at` now,
+   * `seen_at` cleared — while an unchanged one keeps the crew member's
+   * seen/unseen state exactly as it was.
+   */
+  async updateTask(
+    scope: TenantScope,
+    taskId: string,
+    patch: {
+      taskName: string;
+      pmNote: string;
+      assignedTrade: string;
+      scheduledDate: string | null;
+      status: string;
+      assignment: { assignedTo: string | null; assignedAt: string | null } | null;
+    },
+  ): Promise<void> {
+    const { contractorId } = this.tenant(scope, 'edit task');
+    if (taskId.trim() === '') throw new TypeError('taskId is required');
+    if (patch.taskName.trim() === '') throw new TypeError('a task needs a name');
+
+    const values: Record<string, unknown> = {
+      task_name: patch.taskName.trim(),
+      pm_note: patch.pmNote.trim() || null,
+      assigned_trade: patch.assignedTrade.trim() || null,
+      scheduled_date: patch.scheduledDate,
+      status: patch.status,
+      updated_at: new Date().toISOString(),
+    };
+    if (patch.assignment !== null) {
+      values.assigned_to = patch.assignment.assignedTo;
+      values.assigned_at = patch.assignment.assignedAt;
+      values.seen_at = null;
+    }
+
+    await this.client.update({
+      from: 'hub_tasks',
+      filters: { id: `eq.${taskId}`, contractor_id: `eq.${contractorId}`, archived_at: 'is.null' },
+      patch: values,
+    });
+  }
+
+  /** Archive rather than delete, like every other Hub record. */
+  async archiveTask(scope: TenantScope, taskId: string, actor: { name: string }): Promise<void> {
+    const { contractorId } = this.tenant(scope, 'archive task');
+    if (taskId.trim() === '') throw new TypeError('taskId is required');
+    await this.client.update({
+      from: 'hub_tasks',
+      filters: { id: `eq.${taskId}`, contractor_id: `eq.${contractorId}`, archived_at: 'is.null' },
+      patch: {
+        archived_at: new Date().toISOString(),
+        archived_by: actor.name,
+        updated_at: new Date().toISOString(),
+      },
+    });
+  }
+
   async setTaskStatus(scope: TenantScope, taskId: string, status: string): Promise<void> {
     const { filters } = this.tenant(scope, 'update task');
     await this.client.update({

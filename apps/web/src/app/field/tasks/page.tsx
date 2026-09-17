@@ -84,7 +84,8 @@ export default async function FieldTasks() {
                       <span className="text-sm font-semibold text-navy-900">{task.taskName}</span>
                     </div>
                     <div className="mt-0.5 text-xs text-navy-400">
-                      <ContractorProjectRef project={projectOf(task.projectId)} /> · {task.assignedTrade}
+                      <ContractorProjectRef project={projectOf(task.projectId)} />
+                      {task.assignedTrade !== '' && ` · ${task.assignedTrade}`}
                     </div>
                   </div>
                   <Badge tone={TONE[task.status] ?? 'neutral'}>{task.status}</Badge>
@@ -100,7 +101,7 @@ export default async function FieldTasks() {
                 )}
 
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-navy-400">
-                  <span>Scheduled {shortDate(task.scheduledDate)}</span>
+                  <span>{task.scheduledDate === '' ? 'No date set' : `Scheduled ${shortDate(task.scheduledDate.slice(0, 10))}`}</span>
 
                   {isUnseen(task) && (
                     // Marking it seen is what clears the ding. A field user with

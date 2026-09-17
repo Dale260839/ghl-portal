@@ -37,6 +37,7 @@ export const PROJECT_SECTIONS: readonly ProjectSection[] = [
   { seg: '', label: 'Overview' },
   { seg: 'timeline', label: 'Timeline' },
   { seg: 'schedule', label: 'Schedule' },
+  { seg: 'tasks', label: 'Tasks' },
   { seg: 'updates', label: 'Daily Updates' },
   { seg: 'designs', label: 'Designs & Selections' },
   { seg: 'budget', label: 'Budget' },

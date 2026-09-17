@@ -415,6 +415,39 @@ test('the schedule offers people to tag, and the portal never shows a crew addre
   assert.match(withoutComments(gates.text), /trade: portalSafeTrade\(item\.trade\)/);
 });
 
+test('only the contractor hands out work, and only to crew on the project', () => {
+  // John, 2026-09-17: contractors assign tasks to the crew. `update` on a task
+  // is shared with the field (they start and finish their own work), so an
+  // action that ASSIGNS must ask for `create`, which is the contractor's alone —
+  // otherwise a crew member could post a reassignment.
+  const actions = FILES.find((f) => rel(f.path) === 'lib/actions.ts');
+  assert.ok(actions);
+  const body = (name: string) => {
+    const m = actions.text.match(new RegExp(`(?:export )?async function ${name}\\([\\s\\S]*?\\n\\}\\r?\\n`));
+    assert.ok(m, `${name} has moved or been renamed`);
+    return withoutComments(m[0]);
+  };
+
+  for (const name of ['createProjectTask', 'updateProjectTask']) {
+    const b = body(name);
+    assert.match(b, /assertCan\(session\.role, 'create', 'task'\)/, `${name} must require the contractor's permission`);
+    assert.match(b, /taskPeople\(scope, projectId\)/, `${name} must read the project through the contractor's scope`);
+    assert.match(b, /resolveTaskAssignee\(options,/, `${name} must resolve the assignee against the project's crew`);
+  }
+  assert.match(body('updateProjectTask'), /assignmentChange\(existing\.assignedTo,/, 'the stored assignee decides whether it is a new ding');
+
+  // "Got it" must clear the badge on the task the crew member actually sees.
+  const seen = body('markTaskSeen');
+  assert.match(seen, /currentDataSource\(scope\)\)\.listTasks\(scope\)/, 'read from the same source the Tasks screen reads');
+  assert.match(seen, /ownsTask\(session, task\)/);
+});
+
+test('the Tasks section is under every project', () => {
+  const nav = FILES.find((f) => rel(f.path) === 'lib/project-nav.ts');
+  assert.ok(nav);
+  assert.match(nav.text, /\{ seg: 'tasks', label: 'Tasks' \}/);
+});
+
 test('nothing that runs in the browser imports the demo identities as values', () => {
   // `demo-accounts.ts` holds real BuildSuite profile ids. A browser-side file —
   // or a module one imports, like `session-mismatch.ts` for the error page —
