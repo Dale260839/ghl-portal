@@ -37,7 +37,6 @@ import { getHubMedia } from './hub-db/media.ts';
 import { CLIENT_FOLDER, DEFAULT_FOLDER, isFieldFolder } from './document-folders.ts';
 import { getHubSelections } from './hub-db/selections.ts';
 import { requireAccess } from './access.ts';
-import { canChangeFieldTask } from './field-review-policy.ts';
 import { clientProjectsFor } from './client-scope.ts';
 import { hubScopeOfProject } from './tenant-scope.ts';
 import { notifyHomeowner } from './notify/homeowner.ts';
@@ -430,29 +429,6 @@ export async function returnToMyAccount() {
  * timestamp on a task the caller is already assigned to, so it does not widen
  * what the Hub owns.
  */
-export async function setFieldTaskStatus(formData: FormData) {
-  const access = await requireAccess();
-  assertCan(access.role, 'update', 'task');
-  if (!access.can('update', 'task')) throw new Error('not permitted');
-  const status = String(formData.get('status') ?? '');
-  if (status !== 'In Progress' && status !== 'Ready for Review') throw new Error('invalid status');
-  const scope = await actionTenantScope(access.session);
-  const taskId = String(formData.get('taskId') ?? '');
-  const task = (await (await currentDataSource(scope)).listTasks(scope)).find((t) => t.id === taskId);
-  if (!task || !canChangeFieldTask(access.session, access.projectIds, task, status)) {
-    throw new Error('task not assigned');
-  }
-  const writer = currentWriter();
-  await writer.setTaskStatus(scope, taskId, status);
-  if (!writer.persistent) {
-    const fixture = TASKS.find((t) => t.id === taskId);
-    if (fixture) fixture.status = status;
-  }
-  revalidateTasks(task.projectId);
-  revalidatePath('/field');
-  revalidatePath('/field/tasks');
-}
-
 export async function markTaskSeen(formData: FormData) {
   const session = await getSession();
   if (session === null) throw new Error('not signed in');
