@@ -1,4 +1,5 @@
 import { SubmitButton } from '@/components/submit-button';
+import { currentInvoiceUrl } from '@/lib/invoicing/ghl-link';
 import { ContractorProjectCode } from '@/components/project-code';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
@@ -415,7 +416,7 @@ export default async function Invoices({
                             </span>
                             {saved.externalUrl !== null && (
                               <a
-                                href={saved.externalUrl}
+                                href={currentInvoiceUrl(saved.externalUrl)}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="text-xs font-medium text-navy-700 underline"
