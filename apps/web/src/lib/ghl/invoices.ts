@@ -1,4 +1,4 @@
-import { readGhlConfig, withLocation, type GhlConfig  } from './config.ts';
+import { readGhlConfig, withLocationToken, type GhlConfig  } from './config.ts';
 
 /**
  * Invoices, read from GoHighLevel.
@@ -242,7 +242,7 @@ export type InvoicesResult =
 export function getInvoices(sessionLocationId?: string | null): InvoicesResult {
   const result = readGhlConfig();
   if (!result.configured) return { available: false, missing: result.missing };
-  const config = withLocation(result.config, sessionLocationId);
+  const config = withLocationToken(result.config, sessionLocationId);
   if (config.locationId.trim() === '') {
     return { available: false, missing: ['GHL_LOCATION_ID'] };
   }

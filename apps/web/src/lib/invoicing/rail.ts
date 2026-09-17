@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { readGhlConfig, withLocation } from '../ghl/config.ts';
+import { readGhlConfig, withLocationToken } from '../ghl/config.ts';
 import { createGhlInvoiceRail, type InvoiceBusinessDetails } from './ghl-rail.ts';
 import { unconfiguredRail, type DraftInvoice, type InvoiceRail } from './invoice.ts';
 import type { StoredInvoiceDraft } from '../hub-db/invoice-drafts.ts';
@@ -42,7 +42,7 @@ export function resolveInvoiceRail(
 ): InvoiceRail {
   const config = readGhlConfig(env);
   if (!config.configured) return unconfiguredRail;
-  const located = withLocation(config.config, sessionLocationId);
+  const located = withLocationToken(config.config, sessionLocationId, env);
   if (located.locationId.trim() === '') return unconfiguredRail;
 
   return createGhlInvoiceRail({

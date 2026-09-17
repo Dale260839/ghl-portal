@@ -85,6 +85,46 @@ export function withLocation(config: GhlConfig, sessionLocationId?: string | nul
   return config;
 }
 
+/**
+ * Per-sub-account Private Integration tokens, from `GHL_LOCATION_TOKENS`.
+ *
+ * A PIT only opens its own sub-account. Measured 17 Sep: the Alliance For
+ * Contractors token gets `401 This location is not accessible from this token!`
+ * on Alliance Pro Services, and the APS token gets the same on AFC. So
+ * `withLocation` swapping the location while keeping the one env token sends
+ * every other contractor's invoice call to a guaranteed 401.
+ *
+ * Format: `locationId:token`, comma- or newline-separated. Entries whose key is
+ * not a real GHL id are ignored rather than guessed at.
+ */
+export function readLocationTokens(env: NodeJS.ProcessEnv = process.env): Map<string, string> {
+  const tokens = new Map<string, string>();
+  for (const entry of (env.GHL_LOCATION_TOKENS ?? '').split(/[,\n]/)) {
+    const i = entry.indexOf(':');
+    if (i === -1) continue;
+    const locationId = entry.slice(0, i).trim();
+    const token = entry.slice(i + 1).trim();
+    if (isGhlLocationId(locationId) && token !== '') tokens.set(locationId, token);
+  }
+  return tokens;
+}
+
+/**
+ * `withLocation`, plus that location's own token when one is configured.
+ *
+ * Without an entry the default `GHL_PRIVATE_INTEGRATION_TOKEN` stands, exactly
+ * as before — so the sub-account that token belongs to is untouched.
+ */
+export function withLocationToken(
+  config: GhlConfig,
+  sessionLocationId?: string | null,
+  env: NodeJS.ProcessEnv = process.env,
+): GhlConfig {
+  const located = withLocation(config, sessionLocationId);
+  const token = readLocationTokens(env).get(located.locationId);
+  return token === undefined ? located : { ...located, token };
+}
+
 export function canReadProjectObject(config: GhlConfig): boolean {
   return config.projectObjectKey !== '' && config.locationId !== '';
 }
