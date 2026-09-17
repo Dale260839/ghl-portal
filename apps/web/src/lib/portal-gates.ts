@@ -12,6 +12,7 @@
  * had to change.
  */
 
+import { portalSafeTrade } from './schedule-assignees.ts';
 import {
   BUDGET_LINES,
   CHANGE_ORDERS,
@@ -147,7 +148,9 @@ export async function scheduleFor(project: Project): Promise<ClientScheduleItem[
       title: item.title,
       startsAt: item.startsAt,
       endsAt: item.endsAt,
-      trade: item.trade,
+      // A crew member with no name is stored by email; a homeowner is not
+      // given it. See `portalSafeTrade`.
+      trade: portalSafeTrade(item.trade),
       status: item.status,
       // The contractor's own notes are NOT published. A homeowner sees when
       // work is happening and what it is, not the crew instructions.

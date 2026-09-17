@@ -70,7 +70,11 @@ export class GhlEmail {
    * "John Smith" are two people, and picking the wrong one sends somebody else's
    * invitation to a stranger.
    */
-  async findOrCreateContact(email: string, name: string): Promise<string | null> {
+  async findOrCreateContact(
+    email: string,
+    name: string,
+    source = 'Project Hub invitation',
+  ): Promise<string | null> {
     const normalized = email.trim().toLowerCase();
     if (normalized === '') return null;
 
@@ -97,7 +101,7 @@ export class GhlEmail {
       locationId: this.config.locationId,
       email: normalized,
       name: name.trim() === '' ? normalized : name.trim(),
-      source: 'Project Hub invitation',
+      source,
     });
     if (!created.ok) return null;
 
@@ -114,12 +118,14 @@ export class GhlEmail {
     name: string;
     subject: string;
     html: string;
+    /** Recorded on a GoHighLevel contact this send has to create. */
+    source?: string;
   }): Promise<SendResult> {
     if (!emailSendingEnabled()) {
       return { sent: false, reason: 'disabled', detail: 'GHL_SEND_EMAIL is not true' };
     }
 
-    const contactId = await this.findOrCreateContact(input.email, input.name);
+    const contactId = await this.findOrCreateContact(input.email, input.name, input.source);
     if (contactId === null) {
       return { sent: false, reason: 'failed', detail: 'could not find or create the contact' };
     }
@@ -211,6 +217,78 @@ export function passwordResetEmail(input: {
   <p style="font-size:13px;color:#5b6b8c">This link works once and expires in 24 hours. If the button does not open, copy this address into your browser:</p>
   <p style="font-size:12px;color:#5b6b8c;word-break:break-all">${input.resetUrl}</p>
   <p style="font-size:13px;color:#5b6b8c">If you did not expect this, ignore it — your current password keeps working until you choose a new one.</p>
+</div>`.trim(),
+  };
+}
+
+/**
+ * An appointment, for the contractor, the tagged crew member, or the homeowner
+ * (John, 2026-09-17). See `lib/schedule-assignees.ts` for who receives it.
+ *
+ * THE HOMEOWNER'S COPY IS NARROWER, and that is enforced here, not only by the
+ * caller: it never carries the team notes, which the portal does not show a
+ * homeowner either, and it has no link, because the appointment is internal
+ * until the contractor releases it and the portal would show them nothing.
+ *
+ * The project reference is passed in rather than chosen here. A homeowner must
+ * be given `project_code`, never the award code (Sing, 2026-09-12), and this
+ * file is covered by the guardrail that holds every client-facing surface to
+ * that.
+ */
+export function appointmentEmail(input: {
+  audience: 'contractor' | 'crew' | 'homeowner';
+  companyName: string;
+  projectReference: string;
+  title: string;
+  when: string | null;
+  status: string;
+  assigneeLabel: string;
+  notes: string;
+  /** Where the reader opens it. Ignored for a homeowner. */
+  openUrl: string | null;
+}): { subject: string; html: string } {
+  const company = input.companyName.trim() === '' ? 'your contractor' : input.companyName.trim();
+  const when = input.when ?? 'Date to be confirmed';
+  const homeowner = input.audience === 'homeowner';
+
+  const subject = homeowner
+    ? `${company}: ${input.title} — ${when}`
+    : `Appointment: ${input.title} — ${when}${input.projectReference === '' ? '' : ` (${input.projectReference})`}`;
+
+  const intro =
+    input.audience === 'contractor'
+      ? `An appointment was added to the schedule for ${escapeHtml(input.assigneeLabel)}.`
+      : input.audience === 'crew'
+        ? `${escapeHtml(company)} has scheduled you for an appointment.`
+        : `${escapeHtml(company)} has scheduled an appointment on your project.`;
+
+  const row = (label: string, value: string) =>
+    `<tr><td style="padding:4px 16px 4px 0;color:#5b6b8c;white-space:nowrap;vertical-align:top">${label}</td><td style="padding:4px 0">${value}</td></tr>`;
+
+  const rows = [
+    row('What', escapeHtml(input.title)),
+    row('When', escapeHtml(when)),
+    input.projectReference === '' ? '' : row('Project', escapeHtml(input.projectReference)),
+    homeowner ? '' : row('Tagged', escapeHtml(input.assigneeLabel)),
+    row('Status', escapeHtml(input.status)),
+    // Never for a homeowner: these are the crew's instructions.
+    !homeowner && input.notes.trim() !== '' ? row('Notes', escapeHtml(input.notes.trim())) : '',
+  ].join('');
+
+  const button =
+    !homeowner && input.openUrl !== null
+      ? `<p style="margin:24px 0"><a href="${escapeHtml(input.openUrl)}" style="background:#0a1f44;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;display:inline-block;font-weight:600">Open in Project Hub</a></p>`
+      : '';
+
+  return {
+    subject,
+    html: `
+<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#0a1f44;max-width:520px">
+  <p>Hello,</p>
+  <p>${intro}</p>
+  <table style="border-collapse:collapse;font-size:14px">${rows}</table>
+  ${button}
+  <p style="font-size:13px;color:#5b6b8c">${homeowner ? `If this time does not work for you, reply to this email or contact ${escapeHtml(company)}.` : 'Sent by Project Hub.'}</p>
 </div>`.trim(),
   };
 }

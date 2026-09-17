@@ -40,7 +40,7 @@ import { requireAccess } from './access.ts';
 import { clientProjectsFor } from './client-scope.ts';
 import { hubScopeOfProject } from './tenant-scope.ts';
 import { notifyHomeowner } from './notify/homeowner.ts';
-import { MILESTONE_STATUSES, isMilestoneStatus } from './data/types.ts';
+import { MILESTONE_STATUSES, isMilestoneStatus, type Project } from './data/types.ts';
 import { getHubStorage } from './hub-db/storage.ts';
 import { getHubTeam } from './hub-db/team';
 import { getHubInvoiceDrafts } from './hub-db/invoice-drafts';
@@ -52,13 +52,23 @@ import {
   type InvoiceTemplate,
 } from './invoicing/template.ts';
 import { resolveInvoiceRail, draftFromStored } from './invoicing/rail.ts';
-import { resolveContractorProfile } from './buildsuite/contractor-identity.ts';
+import { resolveContractorName, resolveContractorProfile } from './buildsuite/contractor-identity.ts';
 import { getProposalsReader } from './buildsuite/proposals';
 import { paymentScheduleDrafts } from './payment-schedule';
 import { GRANTABLE_RESOURCES } from './permissions';
 import { accountSwitchEnabled, findDevAccount } from './dev-accounts';
 import { appUrl } from './app-url';
-import { getGhlEmail, invitationEmail, passwordResetEmail } from './ghl/email';
+import { appointmentEmail, getGhlEmail, invitationEmail, passwordResetEmail } from './ghl/email';
+import {
+  appointmentRecipients,
+  appointmentWhen,
+  assigneeChoices,
+  resolveAssignee,
+  shouldNotify,
+  type Assignee,
+  type ResolvedAssignee,
+} from './schedule-assignees.ts';
+import { clientCode, contractorCode } from './project-codes.ts';
 import type { Resource } from './permissions';
 
 /** Which permission resource governs each archivable table. */
@@ -1200,7 +1210,131 @@ function optionalDateTime(value: FormDataEntryValue | null): string | null {
   return text === '' ? null : text;
 }
 
-export async function createScheduleItem(formData: FormData) {
+/**
+ * The project, and who on it an appointment can be tagged with.
+ *
+ * Read through the contractor's own scope, so a posted project id that is not
+ * theirs is refused before anything is saved or anyone is emailed. The crew
+ * list is the same one People shows; if the Hub cannot list it, only the
+ * homeowner is offered rather than the save failing.
+ */
+async function schedulePeople(scope: TenantScope, projectId: string) {
+  const project = await (await currentDataSource(scope)).getProject(scope, projectId);
+  if (project === null) throw new Error('that project is not one of yours');
+
+  const team = getHubTeam();
+  const crew = team.available ? await team.team.listForProject(scope, projectId).catch(() => []) : [];
+  return { project, choices: assigneeChoices({ clientName: project.clientName, crew }), crew };
+}
+
+/**
+ * Email an appointment to the contractor and to the person tagged on it.
+ *
+ * Every address comes from a server read — the contractor's BuildSuite record
+ * (falling back to the signed-in contractor), the homeowner's contract, the
+ * crew member's membership. None comes from the form.
+ *
+ * Sending is best-effort and never undoes the save: the appointment is already
+ * stored, and the screen is told what happened so the contractor can pass the
+ * date on themselves when email is off or fails. Returns that sentence.
+ */
+async function emailAppointment(input: {
+  session: Session;
+  scope: TenantScope;
+  project: Project;
+  assignee: Assignee;
+  crew: { id: string; email: string }[];
+  appointment: { title: string; startsAt: string | null; endsAt: string | null; status: string; notes: string };
+}): Promise<string> {
+  const { session, scope, project, assignee, appointment } = input;
+  const who = assignee.kind === 'homeowner' ? 'the homeowner' : assignee.label;
+
+  const mail = getGhlEmail(scope.locationId);
+  if (!mail.available) {
+    return `Saved. Not emailed: GoHighLevel is not configured here, so tell ${who} and yourself directly.`;
+  }
+
+  const assigneeEmail =
+    assignee.kind === 'homeowner'
+      ? await (async () => {
+          const reader = getBuildSuiteReader();
+          return reader.available
+            ? await reader.clientEmailForProject(scope, project.buildsuiteProjectId).catch(() => null)
+            : null;
+        })()
+      : (input.crew.find((m) => m.id === assignee.membershipId)?.email ?? null);
+
+  const profile = await resolveContractorProfile(scope).catch(() => null);
+  const companyName = (await resolveContractorName(scope).catch(() => null)) ?? '';
+  const recipients = appointmentRecipients({
+    contractor: { email: profile?.email ?? realIdentity(session).email, name: companyName || session.name },
+    assignee,
+    assigneeEmail,
+  });
+
+  const base = await appUrl();
+  const when = appointmentWhen(appointment.startsAt, appointment.endsAt);
+  const results: { audience: string; sent: boolean; reason?: string }[] = [];
+  for (const r of recipients) {
+    const { subject, html } = appointmentEmail({
+      audience: r.audience,
+      companyName,
+      // The homeowner is given the code on their contract, never the award code.
+      projectReference:
+        (r.audience === 'homeowner' ? clientCode(project) : contractorCode(project)) ?? '',
+      title: appointment.title,
+      when,
+      status: appointment.status,
+      assigneeLabel: assignee.label,
+      notes: appointment.notes,
+      openUrl:
+        r.audience === 'contractor'
+          ? `${base}/dashboard/projects/${encodeURIComponent(project.buildsuiteProjectId)}/schedule`
+          : r.audience === 'crew'
+            ? `${base}/field`
+            : null,
+    });
+    const sent = await mail.email.send({
+      email: r.email,
+      name: r.name,
+      subject,
+      html,
+      source: 'Project Hub appointment',
+    });
+    results.push(sent.sent ? { audience: r.audience, sent: true } : { audience: r.audience, sent: false, reason: sent.reason });
+  }
+
+  if (results.some((r) => r.reason === 'disabled')) {
+    return `Saved. Not emailed: email sending is off (GHL_SEND_EMAIL), so tell ${who} and yourself directly.`;
+  }
+  const reachedYou = results.some((r) => r.audience === 'contractor' && r.sent);
+  const reachedThem = results.some((r) => r.audience !== 'contractor' && r.sent);
+  const failed = results.filter((r) => !r.sent).length;
+  // No usable address for them at all. (The same address as yours is not this:
+  // they were deduplicated into your copy.)
+  const noAddress = assigneeEmail === null || !assigneeEmail.includes('@');
+
+  const parts: string[] = [];
+  if (reachedYou && reachedThem) parts.push(`Emailed to you and ${who}.`);
+  else if (reachedThem) parts.push(`Emailed to ${who}.`);
+  else if (reachedYou) parts.push('Emailed to you.');
+  if (noAddress) parts.push(`${who === 'the homeowner' ? 'The homeowner has' : `${who} has`} no email address on file, so they were not emailed.`);
+  if (failed > 0) parts.push(`${failed === 1 ? 'One email' : `${failed} emails`} did not send — let them know directly.`);
+  if (!profile?.email && !realIdentity(session).email) parts.push('Your account has no email address, so no copy was sent to you.');
+  return parts.length === 0 ? 'Saved.' : `Saved. ${parts.join(' ')}`;
+}
+
+/** A posted assignee key this contractor was not offered. */
+function refuseUnknownAssignee(resolved: ResolvedAssignee): void {
+  if (resolved.kind === 'unknown') {
+    throw new Error('that person is not on this project any more — reload the schedule and choose again');
+  }
+}
+
+export async function createScheduleItem(
+  _previous: { notice?: string } | undefined,
+  formData: FormData,
+): Promise<{ notice?: string } | undefined> {
   const { session, scope, schedule } = await scheduleContext();
   assertCan(session.role, 'create', 'schedule');
 
@@ -1209,28 +1343,47 @@ export async function createScheduleItem(formData: FormData) {
   if (projectId === '') throw new Error('projectId is required');
   if (title.trim() === '') throw new Error('an appointment needs a title');
 
+  const { project, choices, crew } = await schedulePeople(scope, projectId);
+  const resolved = resolveAssignee(choices, String(formData.get('assignee') ?? ''));
+  refuseUnknownAssignee(resolved);
+
+  const appointment = {
+    title: title.trim(),
+    startsAt: optionalDateTime(formData.get('startsAt')),
+    endsAt: optionalDateTime(formData.get('endsAt')),
+    status: String(formData.get('status') ?? 'Scheduled'),
+    notes: String(formData.get('notes') ?? ''),
+  };
+
   await schedule.create(
     scope,
     {
       projectId,
-      title,
-      startsAt: optionalDateTime(formData.get('startsAt')),
-      endsAt: optionalDateTime(formData.get('endsAt')),
-      trade: String(formData.get('trade') ?? ''),
-      status: String(formData.get('status') ?? 'Scheduled'),
+      ...appointment,
+      // Optional. A readable label, never an address — see schedule-assignees.
+      trade: resolved.kind === 'person' ? resolved.assignee.label : '',
       // Never released on creation. The contractor decides when a homeowner
       // sees a date, and a checkbox that defaults to on would publish work
       // nobody had confirmed.
       clientVisible: false,
-      notes: String(formData.get('notes') ?? ''),
     },
     { name: session.name },
   );
 
+  // Emailed after the save, and reported back to the form rather than through a
+  // redirect — see `components/notice-form.tsx` for why.
+  const notice =
+    resolved.kind === 'person' && shouldNotify(null, resolved)
+      ? await emailAppointment({ session, scope, project, assignee: resolved.assignee, crew, appointment })
+      : undefined;
   revalidatePath(`/dashboard/projects/${projectId}/schedule`);
+  return notice === undefined ? undefined : { notice };
 }
 
-export async function updateScheduleItem(formData: FormData) {
+export async function updateScheduleItem(
+  _previous: { notice?: string } | undefined,
+  formData: FormData,
+): Promise<{ notice?: string } | undefined> {
   const { session, scope, schedule } = await scheduleContext();
   assertCan(session.role, 'update', 'schedule');
 
@@ -1238,24 +1391,46 @@ export async function updateScheduleItem(formData: FormData) {
   const projectId = String(formData.get('projectId') ?? '');
   if (itemId === '') throw new Error('itemId is required');
 
+  const { project, choices, crew } = await schedulePeople(scope, projectId);
+  // The stored row, read through the tenant — what the tag WAS decides whether
+  // anyone is emailed, and a hidden form field would let a stale page decide.
+  const existing = (await schedule.listForProject(scope, projectId)).find((i) => i.id === itemId);
+  if (existing === undefined) throw new Error('that appointment is not on this project');
+
+  const resolved = resolveAssignee(choices, String(formData.get('assignee') ?? ''));
+  refuseUnknownAssignee(resolved);
+
+  const appointment = {
+    title: String(formData.get('title') ?? ''),
+    startsAt: optionalDateTime(formData.get('startsAt')),
+    endsAt: optionalDateTime(formData.get('endsAt')),
+    status: String(formData.get('status') ?? 'Scheduled'),
+    notes: String(formData.get('notes') ?? ''),
+  };
+
   await schedule.update(
     scope,
     itemId,
     {
-      title: String(formData.get('title') ?? ''),
-      startsAt: optionalDateTime(formData.get('startsAt')),
-      endsAt: optionalDateTime(formData.get('endsAt')),
-      trade: String(formData.get('trade') ?? ''),
-      status: String(formData.get('status') ?? 'Scheduled'),
+      ...appointment,
+      // `keep` is a value typed before the dropdown existed: left exactly as it
+      // was, so saving a date change does not wipe it.
+      ...(resolved.kind === 'keep'
+        ? {}
+        : { trade: resolved.kind === 'person' ? resolved.assignee.label : '' }),
       // An unchecked box submits nothing, so this is read as a presence test.
       // Reading only the present keys would make un-releasing a no-op.
       clientVisible: formData.get('clientVisible') !== null,
-      notes: String(formData.get('notes') ?? ''),
     },
     { name: session.name },
   );
 
+  const notice =
+    resolved.kind === 'person' && shouldNotify(existing.trade, resolved)
+      ? await emailAppointment({ session, scope, project, assignee: resolved.assignee, crew, appointment })
+      : undefined;
   revalidatePath(`/dashboard/projects/${projectId}/schedule`);
+  return notice === undefined ? undefined : { notice };
 }
 
 export async function archiveScheduleItem(formData: FormData) {

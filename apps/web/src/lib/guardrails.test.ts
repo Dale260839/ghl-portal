@@ -380,6 +380,41 @@ test('the sign-in delegates its whole decision, and widens nothing', () => {
   );
 });
 
+test('an appointment email goes only to addresses the server looked up, after the save', () => {
+  // John, 2026-09-17: tagging the homeowner or a crew member emails them and
+  // the contractor. The form posts a KEY; if it could post an address, the
+  // Schedule screen would be a way to send mail as the contractor to anyone.
+  const actions = FILES.find((f) => rel(f.path) === 'lib/actions.ts');
+  assert.ok(actions);
+  const body = (name: string) => {
+    const m = actions.text.match(new RegExp(`(?:export )?async function ${name}\\([\\s\\S]*?\\n\\}\\r?\\n`));
+    assert.ok(m, `${name} has moved or been renamed`);
+    return withoutComments(m[0]);
+  };
+
+  const sender = body('emailAppointment');
+  assert.equal(/formData/.test(sender), false, 'the sender must not read the form at all');
+  // The homeowner is given the code on their contract, never the award code.
+  assert.match(sender, /r\.audience === 'homeowner' \? clientCode\(project\) : contractorCode\(project\)/);
+
+  for (const [name, save] of [['createScheduleItem', 'schedule.create('], ['updateScheduleItem', 'schedule.update(']] as const) {
+    const b = body(name);
+    assert.equal(/formData\.get\('(?:email|assigneeEmail|to|recipient)'\)/.test(b), false, `${name} reads an address from the form`);
+    assert.match(b, /resolveAssignee\(/, `${name} must resolve the posted key against what was offered`);
+    assert.ok(b.includes(save) && b.indexOf(save) < b.indexOf('emailAppointment('), `${name} must save before it emails`);
+  }
+});
+
+test('the schedule offers people to tag, and the portal never shows a crew address', () => {
+  const page = FILES.find((f) => rel(f.path) === 'app/dashboard/projects/[id]/schedule/page.tsx');
+  const gates = FILES.find((f) => rel(f.path) === 'lib/portal-gates.ts');
+  assert.ok(page && gates);
+  assert.equal(/name="trade"/.test(page.text), false, 'trade or crew is a dropdown of people now, not free text');
+  assert.match(page.text, /<AssigneeSelect[^>]*current=""/, 'the new-appointment form uses the dropdown');
+  assert.match(page.text, /<AssigneeSelect[^>]*current=\{item\.trade\}/, 'the edit form uses the dropdown');
+  assert.match(withoutComments(gates.text), /trade: portalSafeTrade\(item\.trade\)/);
+});
+
 test('nothing that runs in the browser imports the demo identities as values', () => {
   // `demo-accounts.ts` holds real BuildSuite profile ids. A browser-side file —
   // or a module one imports, like `session-mismatch.ts` for the error page —

@@ -1,4 +1,5 @@
 import { SubmitButton } from '@/components/submit-button';
+import { NoticeForm } from '@/components/notice-form';
 import { NotLinkedToContractor } from '@/components/not-linked';
 import { notFound } from 'next/navigation';
 
@@ -8,6 +9,9 @@ import { getHubSchedule, SCHEDULE_STATUSES, type ScheduleItem } from '@/lib/hub-
 import { archiveScheduleItem, createScheduleItem, updateScheduleItem } from '@/lib/actions';
 import { Badge, Card, CardHeader } from '@/components/ui';
 import { ControlEmpty, ControlHeader, ControlNote, VisibilityTag } from '@/components/control';
+import { getHubTeam } from '@/lib/hub-db/team';
+import { emailSendingEnabled } from '@/lib/ghl/email';
+import { assigneeChoices, currentAssignee, type AssigneeChoices } from '@/lib/schedule-assignees';
 
 /**
  * Schedule — the contractor's control side, and now a real one.
@@ -65,6 +69,51 @@ function whenLabel(item: ScheduleItem): string {
 
 const FIELD = 'rounded-lg border border-navy-200 px-3 py-2 text-sm';
 
+/**
+ * Trade or crew — a dropdown of the people on this project (John, 2026-09-17).
+ *
+ * Optional. Posts a key, not a name or an address; the action turns it back
+ * into a person and emails them. A value typed before this was a dropdown is
+ * offered back as its own option, so editing an old appointment keeps it.
+ */
+function AssigneeSelect({
+  choices,
+  current,
+  className,
+}: {
+  choices: AssigneeChoices;
+  current: string;
+  className: string;
+}) {
+  const { key, earlier } = currentAssignee(choices, current);
+  return (
+    <select name="assignee" defaultValue={key} aria-label="Trade or crew" className={className}>
+      <option value="">Trade or crew (optional)</option>
+      <optgroup label="Homeowner">
+        <option value={choices.homeowner.key}>{choices.homeowner.display}</option>
+      </optgroup>
+      <optgroup label="Crew on this project">
+        {choices.crew.length === 0 ? (
+          <option value="no-crew" disabled>
+            No crew on this project yet — add them under People
+          </option>
+        ) : (
+          choices.crew.map((c) => (
+            <option key={c.key} value={c.key}>
+              {c.display}
+            </option>
+          ))
+        )}
+      </optgroup>
+      {earlier !== null && (
+        <optgroup label="Entered earlier">
+          <option value={earlier.key}>{earlier.display}</option>
+        </optgroup>
+      )}
+    </select>
+  );
+}
+
 export default async function ProjectScheduleControl({
   params,
 }: {
@@ -87,6 +136,14 @@ export default async function ProjectScheduleControl({
   const hub = getHubSchedule();
   const items = hub.available ? await hub.schedule.listForProject(scope, id) : [];
   const scheduleReleased = project.clientPortalEnabled && project.showScheduleToClient;
+
+  // Who an appointment can be tagged with: the homeowner, and the crew People
+  // lists for this project. If the crew cannot be read, the homeowner is still
+  // offered rather than the form failing.
+  const team = getHubTeam();
+  const crew = team.available ? await team.team.listForProject(scope, id).catch(() => []) : [];
+  const choices = assigneeChoices({ clientName: project.clientName, crew });
+  const sending = emailSendingEnabled();
 
   return (
     <div className="space-y-6">
@@ -121,7 +178,11 @@ export default async function ProjectScheduleControl({
       {hub.available && (
         <Card>
           <CardHeader title="New appointment" />
-          <form action={createScheduleItem} className="grid gap-3 px-5 py-4 sm:grid-cols-4">
+          <NoticeForm
+            action={createScheduleItem}
+            className="grid gap-3 px-5 py-4 sm:grid-cols-4"
+            noticeClassName="rounded-lg border border-navy-100 bg-navy-50 px-3 py-2 text-xs leading-relaxed text-navy-700 sm:col-span-4"
+          >
             <input type="hidden" name="projectId" value={id} />
             <input
               name="title"
@@ -129,7 +190,7 @@ export default async function ProjectScheduleControl({
               placeholder="What is happening, e.g. Framing inspection"
               className={`${FIELD} sm:col-span-2`}
             />
-            <input name="trade" placeholder="Trade or crew (optional)" className={FIELD} />
+            <AssigneeSelect choices={choices} current="" className={FIELD} />
             <select name="status" defaultValue="Scheduled" className={FIELD}>
               {SCHEDULE_STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -158,7 +219,10 @@ export default async function ProjectScheduleControl({
               {/* Not released on creation, and it says so rather than offering a
                   checkbox that would publish a date nobody had confirmed. */}
               <p className="text-xs text-navy-400">
-                Saved as internal. Release it to the client with the switch on the appointment.
+                Saved as internal. Release it to the client with the switch on the appointment.{' '}
+                Tag someone and it is emailed to you and to them — the homeowner included, even
+                before it is released.
+                {!sending && ' Email sending is off right now, so nothing is emailed yet.'}
               </p>
               <SubmitButton
                 className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
@@ -166,7 +230,7 @@ export default async function ProjectScheduleControl({
                 Add appointment
               </SubmitButton>
             </div>
-          </form>
+          </NoticeForm>
         </Card>
       )}
 
@@ -201,7 +265,11 @@ export default async function ProjectScheduleControl({
                 <span className="ml-auto text-xs text-navy-400">{whenLabel(item)}</span>
               </div>
 
-              <form action={updateScheduleItem} className="mt-3 grid gap-2 sm:grid-cols-4">
+              <NoticeForm
+                action={updateScheduleItem}
+                className="mt-3 grid gap-2 sm:grid-cols-4"
+                noticeClassName="rounded-lg border border-navy-100 bg-navy-50 px-3 py-2 text-xs leading-relaxed text-navy-700 sm:col-span-4"
+              >
                 <input type="hidden" name="itemId" value={item.id} />
                 <input type="hidden" name="projectId" value={id} />
                 <input
@@ -210,12 +278,7 @@ export default async function ProjectScheduleControl({
                   required
                   className={`${FIELD} sm:col-span-2`}
                 />
-                <input
-                  name="trade"
-                  defaultValue={item.trade}
-                  placeholder="Trade or crew"
-                  className={FIELD}
-                />
+                <AssigneeSelect choices={choices} current={item.trade} className={FIELD} />
                 <select name="status" defaultValue={item.status} className={FIELD}>
                   {SCHEDULE_STATUSES.map((s) => (
                     <option key={s} value={s}>
@@ -264,7 +327,7 @@ export default async function ProjectScheduleControl({
                     added by {item.createdBy ?? 'unknown'}
                   </span>
                 </div>
-              </form>
+              </NoticeForm>
 
               {/* Archive, never delete. A cancelled appointment is a thing that
                   happened, and `HubClient` has no delete method at all. */}
