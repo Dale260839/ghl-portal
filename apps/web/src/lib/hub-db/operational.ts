@@ -371,6 +371,7 @@ export class HubOperational {
       hoursWorked: number;
       weather: string;
       internalNotes: string;
+      suggestedClientSummary?: string;
       blocker?: string;
       safetyConcern?: boolean;
       clientDecisionNeeded?: boolean;
@@ -391,10 +392,9 @@ export class HubOperational {
           hours_worked: input.hoursWorked,
           weather: input.weather,
           internal_notes: input.internalNotes,
-          // Empty, not a copy of the internal note. The PM writes what the
-          // client reads; nothing copies one field into the other, which is why
-          // an internal complaint provably cannot leak.
-          client_summary: '',
+          // A suggestion remains private until the PM explicitly publishes it.
+          // Never derive it from internal_notes.
+          client_summary: input.suggestedClientSummary ?? '',
           manager_approval_status: 'Pending',
           client_visible: false,
           blocker: input.blocker ?? null,

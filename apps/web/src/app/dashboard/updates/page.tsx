@@ -5,6 +5,7 @@ import { reviewUpdate } from '@/lib/actions';
 import { requireTenantScope } from '@/lib/scope';
 import { Badge, Card, CardHeader, InternalNote, shortDate } from '@/components/ui';
 import { currentDataSource } from '@/lib/data/current-source';
+import { pendingReviewCount } from '@/lib/field-review-policy';
 
 /**
  * Daily Update Review (§12.1). The seven verbatim actions, and the one rule
@@ -26,7 +27,7 @@ export default async function ReviewQueue() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight text-navy-900">Field Updates</h1>
         <p className="mt-1 text-sm text-navy-400">
-          {queue.length} awaiting review · nothing reaches the client until you publish it
+          {pendingReviewCount(updates)} awaiting review · nothing reaches the client until you publish it
         </p>
       </div>
 

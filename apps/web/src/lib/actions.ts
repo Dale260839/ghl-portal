@@ -37,6 +37,7 @@ import { getHubMedia } from './hub-db/media.ts';
 import { CLIENT_FOLDER, DEFAULT_FOLDER, isFieldFolder } from './document-folders.ts';
 import { getHubSelections } from './hub-db/selections.ts';
 import { requireAccess } from './access.ts';
+import { canChangeFieldTask } from './field-review-policy.ts';
 import { clientProjectsFor } from './client-scope.ts';
 import { hubScopeOfProject } from './tenant-scope.ts';
 import { notifyHomeowner } from './notify/homeowner.ts';
@@ -331,8 +332,9 @@ export async function updateVisibility(formData: FormData) {
 
 /** Field submits to the PM. Runs **WF3**, which never notifies the client. */
 export async function submitFieldUpdate(formData: FormData) {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const access = await requireAccess();
+  const session = access.session;
+  if (!access.can('create', 'dailyUpdate')) throw new Error('not permitted');
   // §12.2 — the crew writes updates. Note this is `create`, not `publish`.
   assertCan(session.role, 'create', 'dailyUpdate');
 
@@ -344,27 +346,30 @@ export async function submitFieldUpdate(formData: FormData) {
   // submitting an update threw `refusing an unscoped read of submit update`
   // for exactly the people the screen is for.
   const fieldScope = await actionTenantScope(session);
+  if (access.projectIds !== null && !access.projectIds.includes(projectId)) {
+    throw new Error('project not assigned');
+  }
+  const project = await (await currentDataSource(fieldScope)).getProject(fieldScope, projectId);
+  if (project === null) throw new Error('project not found');
 
   // Goes to the Hub's database when there is one. It used to go to an in-memory
   // array that the read path never consulted, so submitting did nothing
   // visible and anything that worked vanished on restart.
   //
-  // NOTE the client summary is NOT taken from this form. A crew member writes
-  // what happened; the PM writes what the homeowner reads. Accepting a
-  // clientSummary here would let the field set client-facing text directly,
-  // which is the one thing the whole approval model exists to prevent.
+  // The suggestion is stored on a Pending, non-client-visible update.
+  // Only the PM's existing publish action can release it.
   const updateId = await currentWriter().createUpdate(fieldScope, {
     projectId,
     submittedBy: session.name,
     workCompleted: String(formData.get('workCompleted') ?? ''),
     internalNotes: String(formData.get('internalNotes') ?? ''),
+    suggestedClientSummary: String(formData.get('clientSummary') ?? ''),
     crewOnsite: Number(formData.get('crewOnsite') ?? 0),
     hoursWorked: Number(formData.get('hoursWorked') ?? 0),
     weather: String(formData.get('weather') ?? ''),
     blocker,
     clientDecisionNeeded: formData.get('clientDecisionNeeded') === 'on',
   });
-  const project = await (await currentDataSource(fieldScope)).getProject(fieldScope, projectId);
 
   const result = await execute(
     planFieldUpdateSubmitted({
@@ -425,6 +430,29 @@ export async function returnToMyAccount() {
  * timestamp on a task the caller is already assigned to, so it does not widen
  * what the Hub owns.
  */
+export async function setFieldTaskStatus(formData: FormData) {
+  const access = await requireAccess();
+  assertCan(access.role, 'update', 'task');
+  if (!access.can('update', 'task')) throw new Error('not permitted');
+  const status = String(formData.get('status') ?? '');
+  if (status !== 'In Progress' && status !== 'Ready for Review') throw new Error('invalid status');
+  const scope = await actionTenantScope(access.session);
+  const taskId = String(formData.get('taskId') ?? '');
+  const task = (await (await currentDataSource(scope)).listTasks(scope)).find((t) => t.id === taskId);
+  if (!task || !canChangeFieldTask(access.session, access.projectIds, task, status)) {
+    throw new Error('task not assigned');
+  }
+  const writer = currentWriter();
+  await writer.setTaskStatus(scope, taskId, status);
+  if (!writer.persistent) {
+    const fixture = TASKS.find((t) => t.id === taskId);
+    if (fixture) fixture.status = status;
+  }
+  revalidateTasks(task.projectId);
+  revalidatePath('/field');
+  revalidatePath('/field/tasks');
+}
+
 export async function markTaskSeen(formData: FormData) {
   const session = await getSession();
   if (session === null) throw new Error('not signed in');
