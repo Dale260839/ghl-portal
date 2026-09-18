@@ -538,6 +538,27 @@ test('every photo on a project is one list, whoever added it', () => {
   assert.match(manager.text, /<img/);
 });
 
+test('anything that acts on another sub-account uses that sub-account’s token', () => {
+  // A GoHighLevel Private Integration token only opens its own sub-account:
+  // measured 17 Sep, the AFC token gets 401 "This location is not accessible
+  // from this token!" on Alliance Pro Services, and the reverse. So a caller
+  // that swaps in the session's location must swap the token with it
+  // (GHL_LOCATION_TOKENS), or every other contractor's call is a guaranteed
+  // 401 — invoices hit exactly that, and email would have next.
+  const callers = ['lib/ghl/email.ts', 'lib/ghl/invoices.ts', 'lib/invoicing/rail.ts'];
+  for (const path of callers) {
+    const file = FILES.find((f) => rel(f.path) === path);
+    assert.ok(file, `${path} has moved`);
+    const text = withoutComments(file.text);
+    assert.match(text, /withLocationToken\(/, `${path} must take the location's own token`);
+    assert.equal(
+      /[^a-zA-Z]withLocation\(/.test(text),
+      false,
+      `${path} still swaps the location while keeping the default token`,
+    );
+  }
+});
+
 test('nothing that runs in the browser imports the demo identities as values', () => {
   // `demo-accounts.ts` holds real BuildSuite profile ids. A browser-side file —
   // or a module one imports, like `session-mismatch.ts` for the error page —

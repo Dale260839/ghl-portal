@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { readGhlConfig, withLocation, type GhlConfig  } from './config.ts';
+import { readGhlConfig, withLocationToken, type GhlConfig  } from './config.ts';
 
 /**
  * Sending email through GoHighLevel.
@@ -308,7 +308,12 @@ export type EmailResult =
 export function getGhlEmail(sessionLocationId?: string | null): EmailResult {
   const result = readGhlConfig();
   if (!result.configured) return { available: false, missing: result.missing };
-  const config = withLocation(result.config, sessionLocationId);
+  // That sub-account's own token when one is configured (GHL_LOCATION_TOKENS).
+  // A Private Integration token only opens its own sub-account, so sending for
+  // another contractor with the default token is a guaranteed 401 — the same
+  // fault the invoice rail hit on 2026-09-17. Without an entry the default
+  // token stands, so the sub-account it belongs to is unaffected.
+  const config = withLocationToken(result.config, sessionLocationId);
   if (config.locationId.trim() === '') {
     return { available: false, missing: ['GHL_LOCATION_ID'] };
   }
