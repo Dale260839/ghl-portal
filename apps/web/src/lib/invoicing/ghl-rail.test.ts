@@ -65,11 +65,18 @@ test('the business block carries the contractor logo and contact, on GHL keys', 
 
   assert.deepEqual(p.businessDetails, {
     name: 'Example Builders',
-    address: '12 Mill Road, Austin, TX, 78701',
+    address: { addressLine1: '12 Mill Road, Austin, TX, 78701' },
     phoneNo: '+1 555 0100',
     website: 'https://example.test',
     logoUrl: 'https://cdn.example/logo.png',
   });
+});
+
+test('a free-form address is preserved inside the GHL address object', () => {
+  const address = '100 N Howard St ste r, Spokane, WA 99201, United States';
+  const details = businessDetailsFor({ name: 'APS', address: `  ${address}  ` });
+  assert.deepEqual(details?.address, { addressLine1: address });
+  assert.equal(businessDetailsFor({ name: 'APS', address: '   ' })?.address, undefined);
 });
 
 test('a blank business field is omitted, not sent as an empty string', () => {

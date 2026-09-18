@@ -104,7 +104,7 @@ interface GhlInvoiceItem {
 /** The business block as GoHighLevel's create-invoice API names its fields. */
 export interface GhlBusinessDetails {
   name: string;
-  address?: string;
+  address?: { addressLine1: string };
   phoneNo?: string;
   website?: string;
   logoUrl?: string;
@@ -134,7 +134,8 @@ export function businessDetailsFor(
 
   return {
     name,
-    ...(address !== undefined ? { address } : {}),
+    // Preserve the free-form address without guessing city/state boundaries.
+    ...(address !== undefined ? { address: { addressLine1: address } } : {}),
     ...(phoneNo !== undefined ? { phoneNo } : {}),
     ...(website !== undefined ? { website } : {}),
     ...(logoUrl !== undefined ? { logoUrl } : {}),
