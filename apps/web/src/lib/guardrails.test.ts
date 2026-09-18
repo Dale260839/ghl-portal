@@ -502,6 +502,42 @@ test('an assigned task opens, and only for the person it is assigned to', () => 
   assert.match(list.text, /href=\{`\/field\/tasks\/\$\{task\.id\}`\}/, 'the Tasks list must link to each task');
 });
 
+test('a homeowner is served a file only through the portal’s own gates', () => {
+  // A homeowner holds no tenant scope, so `?path=` can never answer them: a
+  // released photo showed a grey placeholder and a released document had no
+  // link at all. `?id=&kind=` serves the ROW — and for a client it must be read
+  // through `photosFor` / `documentsFor`, which apply the portal switch, the
+  // section switch and `client_visible`. Anything else would serve an
+  // unreleased photo to the person it was withheld from.
+  const route = FILES.find((f) => rel(f.path) === 'app/api/files/route.ts');
+  assert.ok(route, 'the file route has moved');
+  const text = withoutComments(route.text);
+  const clientBranch = text.match(/session\.role === 'client'[\s\S]*?return NextResponse\.json\(\{ error: 'not found' \}, \{ status: 404 \}\);/);
+  assert.ok(clientBranch, 'the homeowner branch has moved');
+  assert.match(clientBranch[0], /photosFor\(project\)/);
+  assert.match(clientBranch[0], /documentsFor\(project\)/);
+  assert.equal(/actionTenantScope/.test(clientBranch[0]), false, 'a homeowner has no tenant scope to assert');
+
+  // The portal links files by id, never by storage path — a path names a file
+  // and carries no release flag.
+  const offenders = FILES.filter((f) => rel(f.path).startsWith('app/portal/') && /api\/files\?path=/.test(f.text)).map((f) => rel(f.path));
+  assert.deepEqual(offenders, [], 'portal screens must link files by id');
+});
+
+test('every photo on a project is one list, whoever added it', () => {
+  // A task photo, an update photo, a photo the contractor added: all are
+  // hub_photos rows on the project, and the Photos screens list the project's
+  // rows without filtering by who uploaded them.
+  const page = FILES.find((f) => rel(f.path) === 'app/dashboard/projects/[id]/photos/page.tsx');
+  const manager = FILES.find((f) => rel(f.path) === 'components/media-manager.tsx');
+  assert.ok(page && manager);
+  assert.match(page.text, /listForProject\(scope, 'photo', id\)/);
+  const filtered = /uploaded_?[Bb]y\s*===|uploadedBy\s*===/.test(withoutComments(page.text) + withoutComments(manager.text));
+  assert.equal(filtered, false, 'a Photos list must not be narrowed to one uploader');
+  // And it shows the photograph, not only a link to it.
+  assert.match(manager.text, /<img/);
+});
+
 test('nothing that runs in the browser imports the demo identities as values', () => {
   // `demo-accounts.ts` holds real BuildSuite profile ids. A browser-side file —
   // or a module one imports, like `session-mismatch.ts` for the error page —

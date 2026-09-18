@@ -109,7 +109,23 @@ export default async function FieldPhotos({
           <ul className="mt-2 divide-y divide-navy-100">
             {group.photos.map((photo) => (
               <li key={photo.id} className="flex items-center justify-between gap-3 py-2.5">
-                <span className="min-w-0">
+                {(photo.externalUrl !== null || photo.storagePath !== null) && (
+                  <a
+                    href={photo.externalUrl ?? `/api/files?id=${encodeURIComponent(photo.id)}&kind=photo`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.externalUrl ?? `/api/files?id=${encodeURIComponent(photo.id)}&kind=photo`}
+                      alt={photo.label === '' ? 'Site photo' : photo.label}
+                      loading="lazy"
+                      className="h-14 w-14 rounded-lg bg-navy-50 object-cover"
+                    />
+                  </a>
+                )}
+                <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm text-navy-800">
                     {photo.label === '' ? 'Untitled photo' : photo.label}
                   </span>

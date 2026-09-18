@@ -31,6 +31,20 @@ function recording() {
 
 const FILE = { projectId: 'p1', label: 'Permit', storagePath: 'c/p/documents/x.pdf' };
 
+test('one file by id stays inside the tenant, and archived is not served', async () => {
+  // Photos are served by row id now (a homeowner has no tenant scope and the
+  // path route cannot answer them), so this lookup is what stands between one
+  // contractor's photo and another contractor's id.
+  const { calls, media } = recording();
+  await media.getById(SCOPE, 'photo', 'photo-1');
+
+  const filters = calls[0]!.args.filters as Record<string, string>;
+  assert.equal(filters.contractor_id, 'eq.contractor-1');
+  assert.equal(filters.id, 'eq.photo-1');
+  assert.equal(filters.archived_at, 'is.null');
+  assert.equal(await media.getById(SCOPE, 'photo', '  '), null, 'a blank id reads nothing');
+});
+
 test('§ every read and write is filtered on the asserted contractor', async () => {
   const { calls, media } = recording();
   await media.listForProject(SCOPE, 'document', 'p1');

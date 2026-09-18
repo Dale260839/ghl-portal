@@ -50,11 +50,16 @@ export default async function PortalDocuments({
                 <tr key={d.id} className="transition hover:bg-navy-50/60">
                   <td className="px-5 py-3.5 text-sm font-medium text-navy-900">{d.label}</td>
                   <td className="px-5 py-3.5 text-sm text-navy-600">{d.category}</td>
-                  <td className="px-5 py-3.5 text-sm text-navy-400">{shortDate(d.createdAt ?? '')}</td>
+                  <td className="px-5 py-3.5 text-sm text-navy-400">{shortDate((d.createdAt ?? '').slice(0, 10))}</td>
                   <td className="px-5 py-3.5 text-right">
-                    <button type="button" className="text-sm font-medium text-navy-600 hover:underline">
+                    <a
+                      href={d.externalUrl ?? `/api/files?id=${encodeURIComponent(d.id)}&kind=document`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm font-medium text-navy-600 hover:underline"
+                    >
                       Download
-                    </button>
+                    </a>
                   </td>
                 </tr>
               ))}
@@ -66,7 +71,7 @@ export default async function PortalDocuments({
               <li key={d.id} className="px-5 py-3.5">
                 <div className="text-sm font-medium text-navy-900">{d.label}</div>
                 <div className="mt-0.5 text-xs text-navy-400">
-                  {d.category} · {shortDate(d.createdAt ?? '')}
+                  {d.category} · {shortDate((d.createdAt ?? '').slice(0, 10))}
                 </div>
               </li>
             ))}

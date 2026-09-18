@@ -133,6 +133,24 @@ export class HubMedia {
    * listing entry that opens nothing, which is worse than a missing entry
    * because it looks like the file was lost.
    */
+  /**
+   * One file by id, filtered to the tenant — for serving it.
+   *
+   * By id rather than by storage path: a path names a file, an id names a row,
+   * and a row is what carries `client_visible` and the project the gates are
+   * asked about.
+   */
+  async getById(scope: TenantScope, kind: MediaKind, id: string): Promise<MediaItem | null> {
+    const { filters } = this.tenant(scope, `${kind} by id`);
+    if (id.trim() === '') return null;
+    const [row] = await this.client.select<MediaRow>({
+      from: TABLE[kind],
+      filters: { ...filters, id: `eq.${id}`, archived_at: 'is.null' },
+      limit: 1,
+    });
+    return row === undefined ? null : toItem(row, kind);
+  }
+
   async attach(
     scope: TenantScope,
     kind: MediaKind,

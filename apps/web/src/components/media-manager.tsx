@@ -223,8 +223,26 @@ function MediaCard({
   const inFieldFolder = isDoc && isFieldFolder(item.category);
   const inClientFolder = isDoc && isClientFolder(item.category);
 
+  // Every photo on the project, whoever added it — the crew from a task or an
+  // update, or the contractor here — is one of these rows, so the picture
+  // belongs on the row rather than behind an "Open file" link.
+  const fileHref =
+    item.externalUrl ?? `/api/files?id=${encodeURIComponent(item.id)}&kind=${kind}`;
+  const hasFile = item.externalUrl !== null || item.storagePath !== null;
+
   return (
     <Card className="px-5 py-4">
+      {!isDoc && hasFile && (
+        <a href={fileHref} target="_blank" rel="noreferrer" className="mb-3 block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={fileHref}
+            alt={item.label === '' ? 'Site photo' : item.label}
+            loading="lazy"
+            className="h-48 w-full rounded-lg bg-navy-50 object-cover"
+          />
+        </a>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-navy-900">
           {item.label || (isDoc ? 'Untitled document' : 'Untitled photo')}
