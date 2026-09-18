@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { randomUUID } from 'node:crypto';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getBuildSuiteReader } from './buildsuite/projects.ts';
@@ -1166,15 +1167,30 @@ export async function createInvoiceOnRail(formData: FormData) {
     ? await buildsuiteForEmail.clientEmailForProject(scope, draft.projectId)
     : null;
 
-  const invoice = draftFromStored(draft, project);
-  const result = await rail.createDraft(invoice, {
-    ghlContactId: project.primaryContactId,
-    name: project.clientName,
-    // The address is not ours to supply — the rail attaches to the contact,
-    // which already holds it. Passing one here would be a second source of
-    // truth for where an invoice goes.
-    email: clientEmail ?? '',
-  });
+  // A database claim protects across tabs and server instances. Never expire it
+  // automatically: an interrupted request may already have reached GHL.
+  const attemptId = randomUUID();
+  let claimed;
+  try {
+    claimed = await hub.drafts.claimRailCreation(scope, draftId, attemptId);
+  } catch {
+    redirect('/dashboard/invoices?rail=' + encodeURIComponent('Invoice creation could not be safely reserved. No GHL request was made. Check Hub migration 0014 and the existing attempt before retrying.'));
+  }
+  if (claimed === null) {
+    redirect('/dashboard/invoices?uncertain=1&rail=' + encodeURIComponent('This invoice is already created, being created, or awaiting reconciliation. Check GoHighLevel before any retry.'));
+  }
+  let result;
+  try {
+    const invoice = draftFromStored(claimed, project);
+    result = await rail.createDraft(invoice, {
+      ghlContactId: project.primaryContactId,
+      name: project.clientName,
+      // The contact already holds the recipient address.
+      email: clientEmail ?? '',
+    });
+  } catch {
+    redirect('/dashboard/invoices?uncertain=1&rail=' + encodeURIComponent('Creation was interrupted. The invoice remains locked for review; check GoHighLevel before any retry.'));
+  }
 
   if (!result.created) {
     // Land back on the Invoices screen with the reason in plain sight. A thrown
@@ -1185,17 +1201,22 @@ export async function createInvoiceOnRail(formData: FormData) {
     const params = new URLSearchParams({
       rail: result.reason,
       draft: draftId,
-      ...(result.uncertain === true ? { uncertain: '1' } : {}),
+      uncertain: '1',
     });
     redirect(`/dashboard/invoices?${params.toString()}`);
   }
 
-  await hub.drafts.recordRailCreation(
-    scope,
-    draftId,
-    { name: result.rail, externalId: result.externalId, externalUrl: result.editUrl },
-    { name: session.name },
-  );
+  try {
+    await hub.drafts.recordRailCreation(
+      scope,
+      draftId,
+      { name: result.rail, externalId: result.externalId, externalUrl: result.editUrl },
+      { name: session.name },
+      attemptId,
+    );
+  } catch {
+    redirect('/dashboard/invoices?uncertain=1&rail=' + encodeURIComponent('GoHighLevel created invoice ' + result.externalId + ', but its Hub reference could not be saved. The attempt stays locked. Reconcile this ID in GHL; do not create another invoice.'));
+  }
 
   revalidatePath('/dashboard/invoices');
 }

@@ -38,11 +38,11 @@ export interface StoredInvoiceDraft {
   notes: string | null;
   status: DraftStatus;
   /**
-   * The rail's id, once this invoice exists there. Non-null is the ONLY thing
-   * that says "already created" — status does not, because creating a draft in
-   * GoHighLevel is not sending it and the status stays short of `sent`.
+   * The confirmed rail id. A creationAttemptId without an externalId means
+   * creation is in progress or requires reconciliation, never safe to retry.
    */
   externalId: string | null;
+  creationAttemptId?: string | null;
   externalUrl: string | null;
   railCreatedAt: string | null;
   /** Which rail it was created on. Free text, set by `recordRailCreation`. */
@@ -66,6 +66,7 @@ interface DraftRow {
   notes: string | null;
   status: string | null;
   external_id: string | null;
+  creation_attempt_id?: string | null;
   external_url: string | null;
   rail_created_at: string | null;
   sent_via: string | null;
@@ -99,6 +100,7 @@ function toDraft(row: DraftRow): StoredInvoiceDraft {
       ? (status as DraftStatus)
       : 'draft',
     externalId: row.external_id ?? null,
+    creationAttemptId: row.creation_attempt_id ?? null,
     externalUrl: row.external_url ?? null,
     railCreatedAt: row.rail_created_at ?? null,
     sentVia: row.sent_via ?? null,
@@ -221,6 +223,8 @@ export class HubInvoiceDrafts {
         // A sent invoice is no longer a draft. Editing one would change a
         // document a homeowner already has.
         status: 'in.(draft,ready)',
+        external_id: 'is.null',
+        creation_attempt_id: 'is.null',
       },
       patch: { ...patch, updated_at: new Date().toISOString(), updated_by: actor.name },
     });
@@ -238,11 +242,27 @@ export class HubInvoiceDrafts {
    * not been sent to anybody — a person still clicks send there, which is
    * Chris's rule.
    */
+  async claimRailCreation(scope: TenantScope, draftId: string, attemptId: string): Promise<StoredInvoiceDraft | null> {
+    const contractorId = assertContractor(scope, 'claim invoice creation');
+    if (!draftId.trim() || !attemptId.trim()) throw new TypeError('draft and attempt are required');
+    const rows = await this.client.update<DraftRow>({
+      from: 'hub_invoice_drafts',
+      filters: {
+        id: `eq.${draftId}`, contractor_id: `eq.${contractorId}`,
+        external_id: 'is.null', creation_attempt_id: 'is.null',
+        status: 'in.(draft,ready)', amount: 'not.is.null',
+      },
+      patch: { creation_attempt_id: attemptId, creation_started_at: new Date().toISOString() },
+    });
+    return rows.length === 1 ? toDraft(rows[0]!) : null;
+  }
+
   async recordRailCreation(
     scope: TenantScope,
     draftId: string,
     rail: { name: string; externalId: string; externalUrl?: string },
     actor: { name: string },
+    attemptId: string,
   ): Promise<void> {
     const contractorId = assertContractor(scope, 'record invoice creation');
     if (draftId.trim() === '') throw new TypeError('draftId is required');
@@ -250,12 +270,13 @@ export class HubInvoiceDrafts {
       throw new TypeError('a rail reported success without an id — refusing to record it');
     }
 
-    await this.client.update({
+    const rows = await this.client.update({
       from: 'hub_invoice_drafts',
       filters: {
         id: `eq.${draftId}`,
         contractor_id: `eq.${contractorId}`,
         external_id: 'is.null',
+        creation_attempt_id: `eq.${attemptId}`,
       },
       patch: {
         external_id: rail.externalId,
@@ -267,6 +288,7 @@ export class HubInvoiceDrafts {
         updated_by: actor.name,
       },
     });
+    if (rows.length !== 1) throw new Error('invoice reference was not saved; reconcile the claimed attempt before retrying');
   }
 }
 

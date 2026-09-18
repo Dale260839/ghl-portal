@@ -309,6 +309,7 @@ export default async function Invoices({
               <ul className="divide-y divide-navy-100">
                 {drafts.map((draft) => {
                   const saved = byLine.get(draft.line.order);
+                  const locked = saved?.status === 'sent' || saved?.status === 'void' || Boolean(saved?.externalId || saved?.creationAttemptId);
                   const amount = saved?.amount ?? draft.amount;
                   const title = saved?.title ?? draft.line.title;
 
@@ -352,7 +353,7 @@ export default async function Invoices({
                           name="title"
                           defaultValue={title ?? ''}
                           placeholder="What this invoice is for"
-                          disabled={saved?.status === 'sent'}
+                          disabled={locked}
                           className="rounded-lg border border-navy-200 px-3 py-2 text-sm"
                         />
                         <input
@@ -362,11 +363,11 @@ export default async function Invoices({
                           min="0"
                           defaultValue={amount ?? ''}
                           placeholder="Amount"
-                          disabled={saved?.status === 'sent'}
+                          disabled={locked}
                           className="rounded-lg border border-navy-200 px-3 py-2 text-sm"
                         />
                         <SubmitButton
-                          disabled={saved?.status === 'sent'}
+                          disabled={locked}
                           className="rounded-lg border border-navy-200 px-4 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50 disabled:opacity-40"
                         >
                           Save
@@ -377,7 +378,7 @@ export default async function Invoices({
                           defaultValue={saved?.description ?? draft.line.description}
                           rows={2}
                           placeholder="Payment terms shown on the invoice"
-                          disabled={saved?.status === 'sent'}
+                          disabled={locked}
                           className="rounded-lg border border-navy-200 px-3 py-2 text-sm sm:col-span-3"
                         />
                       </form>
@@ -426,11 +427,14 @@ export default async function Invoices({
                             )}
                           </>
                         ) : (
-                          <form action={createInvoiceOnRail} className="flex items-center gap-3">
+                          saved?.creationAttemptId ? <p className="text-sm text-amber-700" role="status">
+                            Creation started or needs review. Check GoHighLevel before retrying.
+                            This invoice is locked to prevent duplicates.
+                          </p> : <form action={createInvoiceOnRail} className="flex items-center gap-3">
                             <input type="hidden" name="draftId" value={saved?.id ?? ''} />
                             <input type="hidden" name="proposalId" value={proposal.id} />
                             <SubmitButton
-                              disabled={saved === undefined || saved.amount === null}
+                              disabled={locked || saved === undefined || saved.amount === null}
                               className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700 disabled:opacity-40"
                             >
                               Create in GoHighLevel
