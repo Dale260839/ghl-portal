@@ -62,6 +62,10 @@ export async function setFieldTaskStatus(_previous: Notice, formData: FormData):
   const { access, scope, task } = await myTask(taskId);
   // The crew starts and finishes their own work — `update` on a task is theirs.
   assertCan(access.role, 'update', 'task');
+  if (!access.can('update', 'task')) throw new Error('not permitted');
+  if (access.projectIds !== null && !access.projectIds.includes(task.projectId)) {
+    throw new Error('project not assigned');
+  }
 
   const status = String(formData.get('status') ?? '');
   if (!isTaskStatus(status)) return { notice: 'Choose a status from the list.' };

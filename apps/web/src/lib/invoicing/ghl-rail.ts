@@ -5,6 +5,7 @@ import type {
   InvoiceRecipient,
 } from './invoice.ts';
 import { readyToSend } from './invoice.ts';
+import { ghlInvoiceEditorUrl } from './ghl-link.ts';
 
 /**
  * The GoHighLevel invoice rail.
@@ -327,7 +328,7 @@ export function createGhlInvoiceRail(config: GhlRailConfig): InvoiceRail {
         created: true,
         rail: 'ghl',
         externalId: id,
-        editUrl: `https://app.gohighlevel.com/location/${config.locationId}/invoices/${id}`,
+        editUrl: ghlInvoiceEditorUrl(config.locationId, id),
       };
     },
   };

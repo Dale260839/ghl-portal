@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { SubmitButton } from '@/components/submit-button';
+import { FieldTaskActions } from '@/components/field-task-actions';
+import { ownsTask } from '@/lib/permissions';
 import { ContractorProjectRef } from '@/components/project-code';
 import { projectById } from '@/lib/project-codes';
 import { getSession } from '@/lib/session';
@@ -40,7 +42,8 @@ export default async function FieldTasks() {
   const db = await currentDataSource(scope);
 
   const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
-  const mine = fieldProjectsFor(await requireAccess(), projects, tasks);
+  const access = await requireAccess();
+  const mine = fieldProjectsFor(access, projects, tasks);
   const assigned = tasksForField(tasks, mine, session?.membershipId ?? '');
   const unseen = unseenCount(assigned);
 
@@ -97,6 +100,9 @@ export default async function FieldTasks() {
                   <Badge tone={TONE[task.status] ?? 'neutral'}>{task.status}</Badge>
                 </div>
 
+                {access.can('update', 'task') && ownsTask(access.session, task) && (
+                  <FieldTaskActions taskId={task.id} />
+                )}
                 {task.pmNote !== '' && (
                   <div className="mt-3 rounded-md border-l-2 border-navy-900 bg-navy-50 px-3 py-2.5">
                     <div className="text-xs font-semibold tracking-wide text-navy-600 uppercase">

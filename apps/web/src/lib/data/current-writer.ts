@@ -45,6 +45,7 @@ export interface OperationalWriter {
       hoursWorked: number;
       weather: string;
       internalNotes: string;
+      suggestedClientSummary?: string;
       blocker?: string;
       clientDecisionNeeded?: boolean;
     },
@@ -85,7 +86,7 @@ class FixtureWriter implements OperationalWriter {
         submittedBy: input.submittedBy,
         workCompleted: input.workCompleted,
         internalNotes: input.internalNotes,
-        clientSummary: '',
+        clientSummary: input.suggestedClientSummary ?? '',
         crewOnsite: input.crewOnsite,
         hoursWorked: input.hoursWorked,
         weather: input.weather,

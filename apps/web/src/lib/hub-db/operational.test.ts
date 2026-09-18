@@ -47,6 +47,32 @@ function recordingOps() {
   return { calls, ops: new HubOperational(client as never) };
 }
 
+test('field suggestion persists without publication or copying internal notes', async () => {
+  const { ops, calls } = recordingOps();
+  const input = {
+    projectId: 'p1', submittedBy: 'crew', workCompleted: 'test work',
+    internalNotes: 'private', crewOnsite: 0, hoursWorked: 0, weather: '',
+  };
+  await ops.createUpdate(SCOPE, { ...input, suggestedClientSummary: 'suggestion for PM' });
+  await ops.createUpdate(SCOPE, input);
+  const first = (calls[0]!.args.rows as Record<string, unknown>[])[0]!;
+  const second = (calls[1]!.args.rows as Record<string, unknown>[])[0]!;
+  assert.equal(first.client_summary, 'suggestion for PM');
+  assert.equal(first.internal_notes, 'private');
+  assert.equal(first.manager_approval_status, 'Pending');
+  assert.equal(first.client_visible, false);
+  assert.equal(second.client_summary, '');
+});
+
+test('task status writes remain tenant scoped', async () => {
+  const { ops, calls } = recordingOps();
+  await ops.setTaskStatus(SCOPE, 'task-1', 'In Progress');
+  assert.equal((calls[0]!.args.patch as Record<string, unknown>).status, 'In Progress');
+  const filters = calls[0]!.args.filters as Record<string, unknown>;
+  assert.equal(filters.id, 'eq.task-1');
+  assert.equal(filters.contractor_id, 'eq.contractor-1');
+});
+
 test('§ a scope with no contractor writes nothing', async () => {
   const { ops } = recordingOps();
   const noContractor: TenantScope = { locationId: 'loc-1', authProfileIds: ['profile-1'] };

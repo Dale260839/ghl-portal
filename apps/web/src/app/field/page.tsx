@@ -1,4 +1,5 @@
-import { submitFieldUpdate } from '@/lib/actions';
+import { FieldTaskActions } from '@/components/field-task-actions';
+import { ownsTask } from '@/lib/permissions';
 
 import { requireTenantScope } from '@/lib/scope';
 import { requireAccess } from '@/lib/access';
@@ -31,7 +32,8 @@ export default async function FieldToday({
   // name, hardcoded, in the screen every crew member lands on. Every real user
   // saw an empty Today list, and the §3.6 violation was invisible because the
   // demo account happened to be Tony.
-  const assigned = fieldProjectsFor(await requireAccess(), projects, tasks);
+  const access = await requireAccess();
+  const assigned = fieldProjectsFor(access, projects, tasks);
   const assignedIds = new Set(assigned.map((p) => p.buildsuiteProjectId));
   const todaysTasks = tasks.filter((t) => assignedIds.has(t.projectId));
 
@@ -69,20 +71,9 @@ export default async function FieldToday({
                     {t.status}
                   </Badge>
                 </div>
-                <div className="mt-2.5 flex gap-2">
-                  <button
-                    type="button"
-                    className="flex-1 rounded-lg bg-navy-900 px-3 py-2.5 text-sm font-semibold text-white"
-                  >
-                    Start
-                  </button>
-                  <button
-                    type="button"
-                    className="flex-1 rounded-lg border border-navy-200 px-3 py-2.5 text-sm font-medium text-navy-700"
-                  >
-                    Complete
-                  </button>
-                </div>
+                {access.can('update', 'task') && ownsTask(access.session, t) && (
+                  <FieldTaskActions taskId={t.id} />
+                )}
               </li>
             );
           })}
