@@ -559,6 +559,43 @@ test('anything that acts on another sub-account uses that sub-account’s token'
   }
 });
 
+test('a homeowner writes only into their own project, and only where the switch is on', () => {
+  // John, 2026-09-19: the portal's "Raise an issue" and "Upload File" now work.
+  // Both are writes by the least-trusted role in the system, so each must read
+  // the project from the homeowner's OWN memberships and check the portal
+  // master switch and that project's own permission — never trust the form
+  // beyond which project id it names.
+  const files = FILES.find((f) => rel(f.path) === 'lib/actions/client-files.ts');
+  const issues = FILES.find((f) => rel(f.path) === 'lib/actions/issues.ts');
+  assert.ok(files && issues, 'the client write actions have moved');
+
+  const upload = withoutComments(files.text);
+  assert.match(upload, /access\.role !== 'client'/, 'only a homeowner uploads here');
+  assert.match(upload, /clientProjectsFor\(access, db\)/, 'the project comes from their own memberships');
+  assert.match(upload, /!project\.clientPortalEnabled \|\| !project\.allowFileUploads/);
+  // Filed where a homeowner's file belongs, and visible to the person who sent it.
+  assert.match(upload, /category: CLIENT_FOLDER/);
+  assert.match(upload, /clientVisible: true/);
+
+  const raise = withoutComments(issues.text).match(/export async function raiseClientIssue\([\s\S]*?\n\}\r?\n/);
+  assert.ok(raise, 'raiseClientIssue has moved');
+  assert.match(raise[0], /clientProjectsFor\(access, db\)/);
+  assert.match(raise[0], /!project\.clientPortalEnabled \|\| !project\.allowIssueSubmission/);
+  assert.match(raise[0], /raisedByRole: 'client'/, 'the contractor must see who asked');
+});
+
+test('no screen in the portal has a control that does nothing', () => {
+  // Every `type="button"` in the portal was a placeholder: Raise an issue,
+  // Upload File, Pay now, Acknowledge, Comment, Request Change, Sync Calendar,
+  // Confirm Access, Ask Question. A homeowner clicking one learned nothing.
+  // The portal's screens are server components, so a real control is a form or
+  // a link; a bare button cannot do anything at all.
+  const offenders = FILES.filter(
+    (f) => rel(f.path).startsWith('app/portal/') && /type="button"/.test(f.text),
+  ).map((f) => rel(f.path));
+  assert.deepEqual(offenders, [], 'use a form (server action) or a link');
+});
+
 test('nothing that runs in the browser imports the demo identities as values', () => {
   // `demo-accounts.ts` holds real BuildSuite profile ids. A browser-side file —
   // or a module one imports, like `session-mismatch.ts` for the error page —

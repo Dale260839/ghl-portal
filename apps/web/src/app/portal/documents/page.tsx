@@ -1,3 +1,5 @@
+import { ClientFileUploader } from '@/components/client-file-uploader';
+import { uploadClientFile } from '@/lib/actions/client-files';
 import { currentPortalProject, documentsFor } from '@/lib/portal-data';
 import { Card, PortalEmpty, shortDate } from '@/components/ui';
 
@@ -23,9 +25,7 @@ export default async function PortalDocuments({
           </p>
         </div>
         {project.allowFileUploads && (
-          <button type="button" className="rounded-lg bg-navy-900 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-navy-800">
-            Upload File
-          </button>
+          <ClientFileUploader upload={uploadClientFile} projectId={project.buildsuiteProjectId} />
         )}
       </div>
 

@@ -354,7 +354,16 @@ export async function issuesFor(project: Project): Promise<ClientIssue[]> {
   );
 
   return rows
-    .filter((i) => !isPunchItem(i) && i.clientVisible && i.clientUpdate.trim() !== '')
+    .filter(
+      (i) =>
+        !isPunchItem(i) &&
+        i.clientVisible &&
+        // A contractor's issue reaches the homeowner only once someone has
+        // written them something: the client update IS the message. One the
+        // homeowner raised themselves is different — it is their own words,
+        // and a request that vanishes on submission looks like it was lost.
+        (i.clientUpdate.trim() !== '' || i.raisedByRole === 'client'),
+    )
     .map(toClientIssue)
     .sort((a, b) => b.submittedDate.localeCompare(a.submittedDate));
 }

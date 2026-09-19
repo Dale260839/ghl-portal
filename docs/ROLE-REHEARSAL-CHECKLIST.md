@@ -61,7 +61,8 @@ Sign in from the BuildSuite menu in GoHighLevel.
       **Trade or crew**. Expect "Saved. Emailed to you and …", or a line saying
       email sending is off. *(writes, may send email)*
 - [ ] **Tasks** — assign a task to your test crew member with a note and a
-      date. It should show **Not opened yet**. *(writes)*
+      date. It should show **Not opened yet**. *(writes)* Later, after §2, the
+      photos the crew sent from that task appear on the task itself.
 - [ ] **People** — the homeowner's email and their project code (their
       password) are shown, and the crew member is listed.
 - [ ] **Budget / Payments** — the contract amount matches the signed proposal,
@@ -75,8 +76,9 @@ Sign in from the BuildSuite menu in GoHighLevel.
       picture itself, who added it and whether the client can see it.
 - [ ] **Visibility** — note which switches are on: Client Portal, Budget,
       Detailed Pricing, Schedule, Assigned Team, Documents, Photos, Daily
-      Updates, Change Orders, messaging, issue submission, file uploads. You
-      will check the client side against exactly these.
+      Updates, Change Orders, **Allow Issue Submission**, **Allow File
+      Uploads**. You will check the client side against exactly these. The last
+      two need migration 0015; until it is run they stay off whatever you set.
 
 ## 2 · Field crew — they see only what is theirs
 
@@ -103,19 +105,19 @@ Sign in from the BuildSuite menu in GoHighLevel.
 
 Back in your contractor window (reopen from GoHighLevel if it was replaced).
 
+- [ ] **You were emailed.** Each submission emails the contractor's address
+      on file — the project, who sent it, what they wrote, how many photos, and
+      a link to the queue. A blocker leads the subject line.
 - [ ] **Field Updates** lists both submissions, marked **Pending**, with the
-      count of those awaiting review. **No notification is sent** — nothing
-      emails or pings the PM, so the queue is the only signal today.
+      count of those awaiting review.
 - [ ] Each shows what the crew wrote, their internal notes, and their suggested
       client summary — the crew's suggestion is saved but not published.
 - [ ] **Return for Revision** on one: it goes back to the crew. *(writes)*
 - [ ] **Approve Internally** on one: kept off the client portal. *(writes)*
 - [ ] **Approve and Publish** the last one, after editing the client summary in
       your own words. *(writes — this is what a homeowner will read)*
-- [ ] **The blocker** appears on the update itself. **It does not create an
-      Issue** — the field form says "raises an issue for your PM", but that
-      step only writes a line to the server log today. Expect nothing new on
-      the Issues page, and treat the wording as a gap to fix, not a failure.
+- [ ] **The blocker** appears on the update itself **and** as a new entry on
+      the project's Issues page, raised by the crew member.
 - [ ] **The photo** is under the project's Photos, shown as a picture,
       internal, captioned "Task: …" if it came from a task. Release the ones
       worth showing with the switch on the row.
@@ -141,6 +143,14 @@ Back in your contractor window (reopen from GoHighLevel if it was replaced).
       internal pricing breakdown.
 - [ ] **They can ask.** Send a message as the homeowner and confirm it arrives
       on your side. Approving a selection or a change order also works. *(writes)*
+- [ ] **Raise an issue** — with *Allow Issue Submission* on for the project,
+      the portal's Issues screen has a form. What they send appears on your
+      Issues page marked as raised by the client, and stays visible to them
+      with its status. *(writes)*
+- [ ] **Upload a file** — with *Allow File Uploads* on, they can send a photo
+      or a PDF. It lands in the project's **Client** folder on your Documents
+      page, labelled "From <their name>". *(writes, uploads)*
+- [ ] **Both switches off** means neither form appears at all.
 - [ ] **Photos:** the released ones appear as pictures they can open; the
       internal ones are not listed, and their links do not work even if
       someone has one.
@@ -162,11 +172,14 @@ Back in your contractor window (reopen from GoHighLevel if it was replaced).
 
 | Where | What |
 |---|---|
-| Portal → Issues | **"Raise an issue"** is a button with nothing behind it. A homeowner cannot raise one yet; the switch only shows the button. |
-| Portal → Documents | **"Upload File"** likewise, and the underlying switch is hardcoded off, so a homeowner cannot upload anything. |
-| Portal → Schedule, Dashboard | A few buttons are still placeholders. |
-| Daily update → blocker | Records the blocker, but does not open an Issue. |
-| Field update submitted | Nothing notifies the PM; the review queue is the only signal. |
+| Portal → any screen | Acknowledging or commenting on an individual update. Both tables exist and nothing uses them; those buttons now link to Messages, where a homeowner can reply. |
+| Portal → Schedule | Calendar sync. The button that promised it is gone. |
+| Portal → Payments | Paying. Nothing can be paid until a payment gateway is connected in GoHighLevel. |
+
+**Needs migration 0015** (`supabase/hub/0015_task_links_and_client_actions.sql`)
+before the client switches can be turned on and before a task lists its own
+photos and updates. Without it the app still runs: both switches read as off
+and photos are saved unlinked.
 
 ## Before real payments
 

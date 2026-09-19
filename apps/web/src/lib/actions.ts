@@ -387,6 +387,32 @@ export async function submitFieldUpdate(formData: FormData) {
   // eslint-disable-next-line no-console
   console.log(describe(result));
 
+  // A blocker becomes a real Issue, which is what the form has always said it
+  // does ("raises an issue for your PM"). WF3 planned the effect from the
+  // start and the fixture port only wrote it to the log, so the Issues page
+  // never showed one. Same shape as the plan: §6.7 category, and a safety
+  // concern arrives already prioritised rather than waiting on triage.
+  if (blocker.trim() !== '') {
+    const hub = getHubOperational();
+    if (hub.available) {
+      try {
+        await hub.ops.createIssue(fieldScope, {
+          projectId,
+          issueTitle: `Blocker reported on ${project?.projectName ?? projectId}`,
+          category: 'Other',
+          description: blocker,
+          priority: 'Normal',
+          raisedBy: session.name,
+          raisedByRole: session.role,
+        });
+      } catch (error) {
+        // The update is already filed; losing the issue is bad, losing the
+        // update would be worse. It is in the email and on the update itself.
+        console.error('[field] blocker did not become an issue', error);
+      }
+    }
+  }
+
   // The PM is told. Nothing announced a submission before: it landed in the
   // review queue and the only way to learn of it was to go and look.
   const notified = await notifyPmOfFieldSubmission(fieldScope, {

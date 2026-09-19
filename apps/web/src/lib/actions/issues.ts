@@ -6,6 +6,8 @@ import { requireAccess, type Access } from '../access.ts';
 import { assertCan } from '../permissions.ts';
 import { actionTenantScope } from '../scope.ts';
 import { currentDataSource } from '../data/current-source.ts';
+import { clientProjectsFor } from '../client-scope.ts';
+import { hubScopeOfProject } from '../tenant-scope.ts';
 import { fieldProjectsFor } from '../field-scope.ts';
 import {
   getHubOperational,
@@ -155,6 +157,68 @@ export async function raiseIssue(formData: FormData): Promise<void> {
   });
 
   revalidateIssue(projectId);
+}
+
+/**
+ * A homeowner reports a problem or asks for something (John, 2026-09-19).
+ *
+ * The portal had a "Raise an issue" button with nothing behind it, and the
+ * switch that shows it had nowhere to be stored until migration 0015 — so a
+ * homeowner could never raise anything, however the contractor set it.
+ *
+ * Three gates, in order: the portal master switch, this project's own
+ * `Allow Issue Submission`, and the project being one of theirs. The issue is
+ * filed client-visible — it is their own words, and a request that disappears
+ * on submission looks like it was lost — and marked as raised by the client so
+ * the contractor can see at a glance who asked.
+ */
+export async function raiseClientIssue(
+  _previous: { notice?: string } | undefined,
+  formData: FormData,
+): Promise<{ notice?: string } | undefined> {
+  const access = await requireAccess();
+  assertCan(access.role, 'create', 'issue');
+
+  const hub = getHubOperational();
+  if (!hub.available) {
+    return { notice: 'We could not send that just now. Please try again in a moment.' };
+  }
+
+  const projectId = required(formData, 'projectId');
+  // A homeowner's session carries no tenant of its own, so the scope comes
+  // from the PROJECT — and the project comes from their own memberships, never
+  // from the form. Same shape as client messaging.
+  const db = await currentDataSource();
+  const mine = await clientProjectsFor(access, db);
+  const project = mine.find((p) => p.buildsuiteProjectId === projectId);
+  if (project === undefined) throw new Error('that project is not yours');
+  if (!project.clientPortalEnabled || !project.allowIssueSubmission) {
+    return { notice: 'Your contractor has not turned on requests for this project.' };
+  }
+
+  const scope = await hubScopeOfProject(project);
+  if (scope === null) {
+    return { notice: 'This project is not linked to a contractor, so nothing can be filed under it.' };
+  }
+  const ops = hub.ops;
+
+  const title = String(formData.get('issueTitle') ?? '').trim();
+  if (title === '') return { notice: 'Say in a few words what the problem or request is.' };
+
+  await ops.createIssue(scope, {
+    projectId,
+    issueTitle: title,
+    category: 'Client Request',
+    description: String(formData.get('description') ?? '').trim(),
+    priority: 'Normal',
+    clientVisible: true,
+    raisedBy: access.session.name,
+    raisedByRole: 'client',
+  });
+
+  revalidateIssue(projectId);
+  revalidatePath('/portal/issues');
+  return { notice: 'Sent to your contractor. It is listed below with its status.' };
 }
 
 /**

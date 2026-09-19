@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { currentPortalProject, scheduleFor } from '@/lib/portal-data';
 import { Badge, Card, PortalEmpty } from '@/components/ui';
 
@@ -51,12 +52,15 @@ export default async function PortalSchedule({
           <p className="mt-1 text-sm text-navy-400">Upcoming work dates and appointments.</p>
         </div>
         <div className="flex gap-2">
-          <button type="button" className="rounded-lg border border-navy-200 px-3.5 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50">
-            Request Change
-          </button>
-          <button type="button" className="rounded-lg bg-navy-900 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-navy-800">
-            Sync Calendar
-          </button>
+          {/* Each of these used to be a button that did nothing. They now go to
+              the screen that actually does the job; "Sync Calendar" is gone
+              because nothing behind it exists. */}
+          <Link href="/portal/issues" className="rounded-lg border border-navy-200 px-3.5 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50">
+            Request a change
+          </Link>
+          <Link href="/portal/messages" className="rounded-lg bg-navy-900 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-navy-800">
+            Ask about the schedule
+          </Link>
         </div>
       </div>
 
@@ -109,19 +113,16 @@ export default async function PortalSchedule({
                     </div>
                   </div>
 
-                  <div className="hidden shrink-0 flex-col gap-2">
-                    {false ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3.5 py-2 text-sm font-medium text-emerald-700">
-                        Access confirmed
-                      </span>
-                    ) : (
-                      <button type="button" className="rounded-lg border border-navy-200 px-3.5 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50">
-                        Confirm Access
-                      </button>
-                    )}
-                    <button type="button" className="text-sm font-medium text-navy-600 hover:underline">
-                      Ask Question
-                    </button>
+                  {/* This column was `hidden`, so "Confirm Access" and "Ask
+                      Question" never appeared at all — and neither did
+                      anything. One link that works, and visible. */}
+                  <div className="shrink-0">
+                    <Link
+                      href="/portal/messages"
+                      className="rounded-lg border border-navy-200 px-3.5 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50"
+                    >
+                      Message about this
+                    </Link>
                   </div>
                 </div>
               </Card>

@@ -10,6 +10,7 @@ import { ControlEmpty, ControlHeader, ControlNote } from '@/components/control';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getHubOperational } from '@/lib/hub-db/operational';
+import { getHubMedia } from '@/lib/hub-db/media';
 import { getHubTeam, type Membership } from '@/lib/hub-db/team';
 import { projectSectionPath } from '@/lib/project-nav';
 import {
@@ -105,6 +106,20 @@ export default async function ProjectTasksControl({ params }: { params: Promise<
   }
   const options = assignableCrew(onProject);
   const tasks = hub.available ? await hub.ops.listTasks(scope, id) : [];
+
+  // Each task's own photos — what the crew sent back from it. Empty until
+  // migration 0015 links them.
+  const media = getHubMedia();
+  const photosByTask = new Map(
+    media.available
+      ? await Promise.all(
+          tasks.map(
+            async (task) =>
+              [task.id, await media.media.listForTask(scope, 'photo', task.id).catch(() => [])] as const,
+          ),
+        )
+      : [],
+  );
   const peopleHref = projectSectionPath(id, 'people');
 
   return (
@@ -196,6 +211,29 @@ export default async function ProjectTasksControl({ params }: { params: Promise<
                     {task.scheduledDate !== '' && ` · ${shortDate(task.scheduledDate.slice(0, 10))}`}
                   </span>
                 </div>
+
+                {(photosByTask.get(task.id) ?? []).length > 0 && (
+                  <ul className="mt-3 flex flex-wrap gap-2">
+                    {(photosByTask.get(task.id) ?? []).map((photo) => (
+                      <li key={photo.id}>
+                        <a
+                          href={`/api/files?id=${encodeURIComponent(photo.id)}&kind=photo`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={photo.label}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`/api/files?id=${encodeURIComponent(photo.id)}&kind=photo`}
+                            alt={photo.label === '' ? 'Task photo' : photo.label}
+                            loading="lazy"
+                            className="h-16 w-16 rounded-lg bg-navy-50 object-cover"
+                          />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
                 <NoticeForm
                   action={updateProjectTask}

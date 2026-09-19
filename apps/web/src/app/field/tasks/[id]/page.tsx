@@ -15,6 +15,8 @@ import { requireAccess } from '@/lib/access';
 import { fieldProjectsFor } from '@/lib/field-scope';
 import { tasksForField } from '@/lib/field-data';
 import { markTaskSeen } from '@/lib/actions';
+import { getHubMedia } from '@/lib/hub-db/media';
+import { getHubOperational } from '@/lib/hub-db/operational';
 import { postTaskUpdate, setFieldTaskStatus, uploadTaskPhoto } from '@/lib/actions/field-tasks';
 
 /**
@@ -48,6 +50,15 @@ export default async function FieldTask({ params }: { params: Promise<{ id: stri
   const task = tasksForField(tasks, mine, session?.membershipId ?? '').find((t) => t.id === id);
   if (task === undefined) notFound();
   const project = mine.find((p) => p.buildsuiteProjectId === task.projectId);
+
+  // What this task already carries. Empty until migration 0015 links them —
+  // see `column-support.ts` — which is what the screen showed before.
+  const media = getHubMedia();
+  const ops = getHubOperational();
+  const [photos, updates] = await Promise.all([
+    media.available ? media.media.listForTask(scope, 'photo', task.id).catch(() => []) : [],
+    ops.available ? ops.ops.listUpdatesForTask(scope, task.id).catch(() => []) : [],
+  ]);
 
   return (
     <div className="space-y-4">
@@ -96,6 +107,44 @@ export default async function FieldTask({ params }: { params: Promise<{ id: stri
           </div>
         </NoticeForm>
       </Card>
+
+      {(photos.length > 0 || updates.length > 0) && (
+        <Card className="px-4 py-4">
+          <h2 className="text-sm font-semibold text-navy-900">Already on this task</h2>
+
+          {photos.length > 0 && (
+            <ul className="mt-3 grid grid-cols-3 gap-2">
+              {photos.map((photo) => (
+                <li key={photo.id}>
+                  <a
+                    href={`/api/files?id=${encodeURIComponent(photo.id)}&kind=photo`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/api/files?id=${encodeURIComponent(photo.id)}&kind=photo`}
+                      alt={photo.label === '' ? 'Task photo' : photo.label}
+                      loading="lazy"
+                      className="aspect-square w-full rounded-lg bg-navy-50 object-cover"
+                    />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {updates.map((update) => (
+            <div key={update.id} className="mt-3 border-t border-navy-100 pt-2.5 first:border-0 first:pt-0">
+              <div className="text-xs text-navy-400">
+                {shortDate(update.updateDate.slice(0, 10))} ·{' '}
+                {update.managerApprovalStatus === 'Pending' ? 'waiting for your PM' : update.managerApprovalStatus}
+              </div>
+              <p className="mt-0.5 text-sm leading-relaxed text-navy-700">{update.workCompleted}</p>
+            </div>
+          ))}
+        </Card>
+      )}
 
       <Card className="px-4 py-4">
         <h2 className="text-sm font-semibold text-navy-900">Send an update</h2>

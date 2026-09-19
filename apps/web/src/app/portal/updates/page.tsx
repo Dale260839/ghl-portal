@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { currentPortalProject, photosFor } from '@/lib/portal-data';
 
 import { scopeOfProject } from '@/lib/scope';
@@ -88,13 +89,13 @@ export default async function PortalUpdates({
                   </div>
                 )}
 
-                <div className="mt-4 flex gap-4 border-t border-navy-100 pt-3.5">
-                  <button type="button" className="text-sm font-medium text-navy-600 hover:underline">
-                    Acknowledge
-                  </button>
-                  <button type="button" className="text-sm font-medium text-navy-600 hover:underline">
-                    Comment
-                  </button>
+                {/* "Acknowledge" and "Comment" did nothing. The tables for both
+                    exist and nothing reads or writes either, so this goes where
+                    a homeowner can actually reply today. */}
+                <div className="mt-4 border-t border-navy-100 pt-3.5">
+                  <Link href="/portal/messages" className="text-sm font-medium text-navy-600 hover:underline">
+                    Reply about this update
+                  </Link>
                 </div>
               </Card>
             );

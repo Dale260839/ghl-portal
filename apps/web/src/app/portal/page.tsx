@@ -168,12 +168,16 @@ export default async function ClientPortal({
             There&apos;s an item waiting on your approval. Approvals and payments open in your
             secure portal account.
           </p>
-          <button
-            type="button"
-            className="mt-3 rounded-lg bg-amber-accent px-3.5 py-2 text-sm font-semibold text-white"
-          >
-            Review and approve
-          </button>
+          {/* Was a button with no handler. The two screens where a decision is
+              actually recorded. */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link href="/portal/designs" className="rounded-lg bg-navy-900 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-navy-800">
+              Review selections
+            </Link>
+            <Link href="/portal/change-orders" className="rounded-lg border border-navy-200 px-3.5 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50">
+              Review change orders
+            </Link>
+          </div>
         </div>
       )}
 
@@ -294,12 +298,9 @@ export default async function ClientPortal({
                     {shortDate(view.budget.nextPaymentDueDate)}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="rounded-lg bg-navy-900 px-3.5 py-2 text-sm font-semibold text-white"
-                >
-                  Pay now
-                </button>
+                <Link href="/portal/payments" className="rounded-lg bg-navy-900 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-navy-800">
+                  See payments
+                </Link>
               </div>
               <p className="mt-2.5 text-xs text-navy-400">
                 Invoices and payments are handled in your secure GoHighLevel portal account.
@@ -325,19 +326,17 @@ export default async function ClientPortal({
             <li key={u.id} className="px-5 py-4">
               <div className="text-xs text-navy-400">{shortDate(u.updateDate)}</div>
               <p className="mt-1.5 text-sm leading-relaxed text-navy-700">{u.clientSummary}</p>
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
+              {/* "Acknowledge" and "Comment" were buttons with nothing behind
+                  them. `hub_update_acknowledgements` and `hub_update_comments`
+                  exist and nothing reads or writes either, so rather than half
+                  a feature this goes where a homeowner can actually reply. */}
+              <div className="mt-3">
+                <Link
+                  href="/portal/messages"
                   className="rounded-md border border-navy-100 px-2.5 py-1 text-xs font-medium text-navy-600 transition hover:bg-navy-50"
                 >
-                  Acknowledge
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-navy-100 px-2.5 py-1 text-xs font-medium text-navy-600 transition hover:bg-navy-50"
-                >
-                  Comment
-                </button>
+                  Reply about this
+                </Link>
               </div>
             </li>
           ))}
