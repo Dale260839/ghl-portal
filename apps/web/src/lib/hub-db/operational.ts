@@ -2,6 +2,7 @@ import 'server-only';
 
 import { getHubClient, type HubClient } from './client.ts';
 import { assertContractor, type TenantScope } from '../tenancy.ts';
+import { columnSupport } from './column-support.ts';
 import type { DailyUpdate, Issue, Milestone, PunchListItem, Task } from '../data/types.ts';
 
 /**
@@ -330,6 +331,24 @@ export class HubOperational {
     return rows.map(toTask);
   }
 
+  /**
+   * The updates sent from one task. Empty before migration 0015, which is what
+   * the screen showed before the link existed.
+   */
+  async listUpdatesForTask(scope: TenantScope, taskId: string): Promise<DailyUpdate[]> {
+    const { filters } = this.tenant(scope, 'task updates');
+    if (taskId.trim() === '') return [];
+    if (!(await columnSupport(this.client, 'hub_daily_updates', ['task_id']))) return [];
+
+    const rows = await this.client.select<UpdateRow>({
+      from: 'hub_daily_updates',
+      filters: this.live({ ...filters, task_id: `eq.${taskId}` }),
+      order: 'created_at.desc',
+      limit: 50,
+    });
+    return rows.map(toUpdate);
+  }
+
   async listDailyUpdates(scope: TenantScope, projectId?: string): Promise<DailyUpdate[]> {
     const { filters } = this.tenant(scope, 'daily updates');
     const rows = await this.client.select<UpdateRow>({
@@ -372,6 +391,8 @@ export class HubOperational {
       weather: string;
       internalNotes: string;
       suggestedClientSummary?: string;
+      /** The task this update was sent from, when it was. */
+      taskId?: string | null;
       blocker?: string;
       safetyConcern?: boolean;
       clientDecisionNeeded?: boolean;
@@ -379,10 +400,19 @@ export class HubOperational {
   ): Promise<DailyUpdate> {
     const { filters: _f, contractorId } = this.tenant(scope, 'submit update');
 
+    const row_: Record<string, unknown> = {};
+    // Only when the column is there (migration 0015). Without it the update is
+    // still filed — unlinked, as before — rather than refused.
+    const taskId = input.taskId?.trim();
+    if (taskId !== undefined && taskId !== '' && (await columnSupport(this.client, 'hub_daily_updates', ['task_id']))) {
+      row_.task_id = taskId;
+    }
+
     const [row] = await this.client.insert<UpdateRow>({
       from: 'hub_daily_updates',
       rows: [
         {
+          ...row_,
           project_id: input.projectId,
           contractor_id: contractorId,
           update_date: new Date().toISOString().slice(0, 10),

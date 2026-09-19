@@ -63,6 +63,11 @@ export const VISIBILITY_SWITCHES = [
   'showPhotos',
   'showDailyUpdates',
   'showChangeOrders',
+  // What a homeowner may DO, rather than see. Stored since migration 0015;
+  // before it they were permanently off, so the portal's "Raise an issue" and
+  // "Upload File" could never be turned on for anybody.
+  'allowIssueSubmission',
+  'allowFileUploads',
 ] as const satisfies readonly (keyof Project)[];
 
 export type VisibilitySwitch = (typeof VISIBILITY_SWITCHES)[number];
@@ -104,6 +109,14 @@ export const VISIBILITY_LABELS: Record<VisibilitySwitch, { label: string; help: 
   showChangeOrders: {
     label: 'Show Change Orders',
     help: 'Change orders sent to this client for a decision.',
+  },
+  allowIssueSubmission: {
+    label: 'Allow Issue Submission',
+    help: 'They can report a problem or request from their portal. It arrives on your Issues page.',
+  },
+  allowFileUploads: {
+    label: 'Allow File Uploads',
+    help: 'They can send you photos and documents. Theirs are marked as from the homeowner.',
   },
 };
 

@@ -19,9 +19,9 @@ import { currentDataSource } from '@/lib/data/current-source';
 export default async function FieldToday({
   searchParams,
 }: {
-  searchParams: Promise<{ submitted?: string }>;
+  searchParams: Promise<{ submitted?: string; pm?: string }>;
 }) {
-  const { submitted } = await searchParams;
+  const { submitted, pm } = await searchParams;
   const scope = await requireTenantScope();
   const db = await currentDataSource(scope);
   const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
@@ -41,7 +41,12 @@ export default async function FieldToday({
     <div className="space-y-5">
       {submitted === '1' && (
         <div className="rounded-lg border border-emerald-600/20 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          Update submitted to your project manager for review.
+          Update submitted to your project manager for review.{' '}
+          {/* Whether anyone was actually told. "Saved" and "they know" are
+              different facts, and the crew deserve the true one. */}
+          {pm === 'sent'
+            ? 'They have been emailed.'
+            : 'Nobody was emailed — tell them if it is urgent.'}
         </div>
       )}
 

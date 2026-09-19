@@ -41,6 +41,8 @@ import { requireAccess } from './access.ts';
 import { clientProjectsFor } from './client-scope.ts';
 import { hubScopeOfProject } from './tenant-scope.ts';
 import { notifyHomeowner } from './notify/homeowner.ts';
+import { notifyPmOfFieldSubmission } from './notify/pm.ts';
+import { contractorCode as codeForContractor } from './project-codes.ts';
 import { MILESTONE_STATUSES, isMilestoneStatus, type Project } from './data/types.ts';
 import { getHubStorage } from './hub-db/storage.ts';
 import { getHubTeam } from './hub-db/team';
@@ -385,10 +387,24 @@ export async function submitFieldUpdate(formData: FormData) {
   // eslint-disable-next-line no-console
   console.log(describe(result));
 
+  // The PM is told. Nothing announced a submission before: it landed in the
+  // review queue and the only way to learn of it was to go and look.
+  const notified = await notifyPmOfFieldSubmission(fieldScope, {
+    kind: 'daily',
+    projectId,
+    projectName: project?.projectName ?? projectId,
+    projectReference: project === null ? '' : (codeForContractor(project) ?? ''),
+    submittedBy: session.name,
+    workCompleted: String(formData.get('workCompleted') ?? ''),
+    blocker,
+    photoCount: 0,
+    clientDecisionNeeded: formData.get('clientDecisionNeeded') === 'on',
+  });
+
   revalidatePath('/field');
   revalidatePath('/dashboard/updates');
   revalidatePath('/dashboard');
-  redirect('/field?submitted=1');
+  redirect(`/field?submitted=1&pm=${notified.sent ? 'sent' : 'no'}`);
 }
 
 /**

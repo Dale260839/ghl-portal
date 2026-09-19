@@ -2,6 +2,7 @@ import 'server-only';
 
 import { getHubClient, type HubClient } from './client.ts';
 import { assertContractor, type TenantScope } from '../tenancy.ts';
+import { columnSupport } from './column-support.ts';
 
 /**
  * Documents and photos — the files hanging off a project.
@@ -33,6 +34,9 @@ import { assertContractor, type TenantScope } from '../tenancy.ts';
  */
 
 export type MediaKind = 'document' | 'photo';
+
+/** The columns 0015 adds. Absent until the migration is run; see column-support. */
+const TASK_LINK = ['task_id'] as const;
 
 export interface MediaItem {
   id: string;
@@ -162,6 +166,8 @@ export class HubMedia {
       externalUrl?: string | null;
       takenAt?: string | null;
       clientVisible?: boolean;
+      /** The task this was taken on, when it was. */
+      taskId?: string | null;
     },
     actor: { name: string },
   ): Promise<MediaItem> {
@@ -191,13 +197,38 @@ export class HubMedia {
       uploaded_by: actor.name,
     };
 
-    const row =
+    const row: Record<string, unknown> =
       kind === 'document'
         ? { ...base, title: label, category: input.category?.trim() || null }
         : { ...base, caption: label || null, taken_at: input.takenAt ?? null };
 
+    // Only when the column is there. Before migration 0015 a photo is still
+    // saved — unlinked, as it was yesterday — rather than lost.
+    const taskId = input.taskId?.trim();
+    if (taskId !== undefined && taskId !== '' && (await columnSupport(this.client, TABLE[kind], TASK_LINK))) {
+      row.task_id = taskId;
+    }
+
     const [created] = await this.client.insert<MediaRow>({ from: TABLE[kind], rows: [row] });
     return toItem(created!, kind);
+  }
+
+  /**
+   * The files filed against one task. Empty before migration 0015, which is
+   * the same thing the screen showed before the link existed.
+   */
+  async listForTask(scope: TenantScope, kind: MediaKind, taskId: string): Promise<MediaItem[]> {
+    const { filters } = this.tenant(scope, `${kind}s for task`);
+    if (taskId.trim() === '') return [];
+    if (!(await columnSupport(this.client, TABLE[kind], TASK_LINK))) return [];
+
+    const rows = await this.client.select<MediaRow>({
+      from: TABLE[kind],
+      filters: { ...filters, task_id: `eq.${taskId}`, archived_at: 'is.null' },
+      order: 'created_at.desc',
+      limit: 100,
+    });
+    return rows.map((row) => toItem(row, kind));
   }
 
   /** Edit the label, category and release state. The file itself never moves. */

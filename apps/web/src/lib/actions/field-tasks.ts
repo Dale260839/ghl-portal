@@ -13,6 +13,7 @@ import { getHubMedia } from '../hub-db/media.ts';
 import { getHubStorage } from '../hub-db/storage.ts';
 import { isTaskStatus } from '../task-assignment.ts';
 import { acceptablePhoto, taskPhotoCaption, taskUpdateText } from '../field-task.ts';
+import { notifyPmOfFieldSubmission } from '../notify/pm.ts';
 import { execute, describe } from '../workflows/executor.ts';
 import { fixturePorts } from '../workflows/fixture-ports.ts';
 import { planFieldUpdateSubmitted } from '../workflows/wf3-update-submitted.ts';
@@ -104,6 +105,7 @@ export async function postTaskUpdate(_previous: Notice, formData: FormData): Pro
 
   const updateId = await writer.createUpdate(scope, {
     projectId: task.projectId,
+    taskId: task.id,
     submittedBy: access.session.name,
     workCompleted: taskUpdateText({ taskName: task.taskName, text, photoCount, newStatus }),
     internalNotes: '',
@@ -125,9 +127,25 @@ export async function postTaskUpdate(_previous: Notice, formData: FormData): Pro
   );
   console.log(describe(result));
 
+  const notified = await notifyPmOfFieldSubmission(scope, {
+    kind: 'task',
+    projectId: task.projectId,
+    projectName: projectName || task.projectId,
+    projectReference: '',
+    submittedBy: access.session.name,
+    taskName: task.taskName,
+    workCompleted: text,
+    blocker: '',
+    photoCount,
+  });
+
   revalidateTask(task.id, task.projectId);
+  const withPhotos = photoCount > 0 ? ` with ${photoCount} photo${photoCount === 1 ? '' : 's'}` : '';
+  const withStatus = newStatus !== null ? `, and the status is now ${newStatus}` : '';
   return {
-    notice: `Update sent to your PM${photoCount > 0 ? ` with ${photoCount} photo${photoCount === 1 ? '' : 's'}` : ''}${newStatus !== null ? `, and the status is now ${newStatus}` : ''}.`,
+    notice: notified.sent
+      ? `Sent to your PM${withPhotos}${withStatus}. They have been emailed.`
+      : `Saved for your PM${withPhotos}${withStatus}. Nobody was emailed — tell them if it is urgent.`,
   };
 }
 
@@ -137,6 +155,8 @@ async function storePhoto(input: {
   file: FormDataEntryValue | null;
   projectId: string;
   caption: string;
+  /** The task it was taken on, so the task can list its own photos. */
+  taskId?: string | null;
   scope: Awaited<ReturnType<typeof actionTenantScope>>;
   uploadedBy: string;
 }): Promise<UploadResult> {
@@ -168,6 +188,7 @@ async function storePhoto(input: {
         label: input.caption,
         storagePath: stored.path,
         clientVisible: false,
+        taskId: input.taskId ?? null,
       },
       { name: input.uploadedBy },
     );
@@ -193,6 +214,7 @@ export async function uploadTaskPhoto(formData: FormData): Promise<UploadResult>
     file: formData.get('file'),
     projectId: context.task.projectId,
     caption: taskPhotoCaption(context.task.taskName),
+    taskId: context.task.id,
     scope: context.scope,
     uploadedBy: context.access.session.name,
   });

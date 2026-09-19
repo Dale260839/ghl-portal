@@ -6,6 +6,7 @@ import { getHubClient, type HubClient } from './client.ts';
 import type { Actor } from './records.ts';
 import { assertContractor, type TenantScope } from '../tenancy.ts';
 import type { VisibilitySwitch } from '../data/mutations.ts';
+import { columnSupport } from './column-support.ts';
 import {
   isUuid,
   overlayFromRow,
@@ -32,6 +33,20 @@ import {
  * switch stays off, and the homeowner sees nothing — the safe direction.
  */
 
+const VISIBILITY_COLUMNS = [
+  'project_id',
+  'client_portal_enabled',
+  'show_schedule',
+  'show_budget',
+  'show_documents',
+  'show_photos',
+  'show_daily_updates',
+  'show_change_orders',
+] as const;
+
+/** Added by migration 0015; see `column-support.ts`. */
+const CLIENT_ACTION_COLUMNS = ['allow_issue_submission', 'allow_file_uploads'] as const;
+
 type StoredRow = VisibilityRow & { contractor_id: string };
 
 export class HubVisibility implements VisibilityOverlaySource {
@@ -46,16 +61,13 @@ export class HubVisibility implements VisibilityOverlaySource {
     try {
       return await this.client.select<VisibilityRow>({
         from: 'hub_visibility_settings',
-        columns: [
-          'project_id',
-          'client_portal_enabled',
-          'show_schedule',
-          'show_budget',
-          'show_documents',
-          'show_photos',
-          'show_daily_updates',
-          'show_change_orders',
-        ],
+        // The 0015 columns only when the database has them: asking for a
+        // column that does not exist fails the whole read, and a failed read
+        // here means every switch reads as off — the portal would go dark on a
+        // deployment that simply had not run the migration yet.
+        columns: (await columnSupport(this.client, 'hub_visibility_settings', CLIENT_ACTION_COLUMNS))
+          ? [...VISIBILITY_COLUMNS, ...CLIENT_ACTION_COLUMNS]
+          : [...VISIBILITY_COLUMNS],
         filters: { project_id: `in.(${idsKey})` },
         limit: 500,
       });
@@ -96,6 +108,15 @@ export class HubVisibility implements VisibilityOverlaySource {
       updated_at: new Date().toISOString(),
       updated_by: actor.name,
     };
+
+    // Saved only where 0015 has been run. Writing a column that is not there
+    // would fail the whole save, so a contractor would lose seven working
+    // switches over two that their database does not know about yet.
+    if (await columnSupport(this.client, 'hub_visibility_settings', CLIENT_ACTION_COLUMNS)) {
+      row.allow_issue_submission = switches.allowIssueSubmission;
+      row.allow_file_uploads = switches.allowFileUploads;
+    }
+
     await this.client.upsert<StoredRow>({ from: 'hub_visibility_settings', rows: [row] }, 'project_id');
   }
 }

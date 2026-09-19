@@ -33,6 +33,10 @@ export interface VisibilityRow {
   show_photos?: boolean;
   show_daily_updates?: boolean;
   show_change_orders?: boolean;
+  // Migration 0015. Absent on a database that has not run it yet, which reads
+  // as off — exactly what they were before the columns existed.
+  allow_issue_submission?: boolean;
+  allow_file_uploads?: boolean;
 }
 
 export type VisibilityOverlay = Pick<
@@ -45,6 +49,8 @@ export type VisibilityOverlay = Pick<
   | 'showDailyUpdates'
   | 'showChangeOrders'
   | 'allowClientMessaging'
+  | 'allowIssueSubmission'
+  | 'allowFileUploads'
 >;
 
 export interface VisibilityOverlaySource {
@@ -73,6 +79,9 @@ export function overlayFromRow(row: VisibilityRow): VisibilityOverlay {
     // homeowner has a thread at all, so messaging follows it: portal on means
     // they can write to their contractor, portal off means they cannot.
     allowClientMessaging: row.client_portal_enabled === true,
+    // Both fail closed: a missing column, or a row written before 0015, is off.
+    allowIssueSubmission: row.allow_issue_submission === true,
+    allowFileUploads: row.allow_file_uploads === true,
   };
 }
 

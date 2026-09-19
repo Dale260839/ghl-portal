@@ -46,6 +46,7 @@ export interface OperationalWriter {
       weather: string;
       internalNotes: string;
       suggestedClientSummary?: string;
+      taskId?: string | null;
       blocker?: string;
       clientDecisionNeeded?: boolean;
     },
