@@ -4,7 +4,7 @@
 No Private Integration token to request, paste, or rotate. Ever.
 
 **Status:** **built and switched off**, 2026-09-22. Steps 1–7 below are written
-and tested (1,145 tests green, build clean); steps 8–9 need the Marketplace app
+and tested (1,146 tests green, build clean); steps 8–9 need the Marketplace app
 to exist. Nothing changes for anyone until `GHL_OAUTH_ENABLED=true`.
 **Rollback:** `docs/ROLLBACK-GHL-OAUTH.md`. The state before this work is tagged
 `pre-ghl-oauth` on both remotes.
@@ -107,7 +107,7 @@ with a comment saying a different resolver returns that location's OAuth token
 | 3 | **Agency token manager** — refresh behind a single-writer claim, so two instances cannot rotate at once and invalidate each other. Same pattern as 0014. | Done |
 | 4 | **`OauthTokenResolver`** — `POST /oauth/locationToken` per sub-account, cached until shortly before expiry, refusing anything that is not the location asked for. | Done |
 | 5 | **Wire the call sites** — invoices, email, the invoicing rail, and sign-in verification, all through one function with the PIT fallback. | Done (8 call sites) |
-| 6 | **Tests** — 23, including the rollback asserted against `withLocationToken` itself. Seven bugs reintroduced on purpose; each caught by the test meant for it. | Done |
+| 6 | **Tests** — 24, including the rollback asserted against `withLocationToken` itself. Eight bugs reintroduced on purpose; each caught by the test meant for it. | Done |
 | 7 | **Install and prove it** — create the app, install at agency level, switch on, watch one contractor, then a second sub-account. | **Needs the app to exist** |
 | 8 | **Delete the PIT path** — after both pass, and not the same day. | Not started |
 
@@ -134,7 +134,7 @@ dead code and production behaves exactly as it does today.
 | `lib/ghl/oauth-location.ts` | `OauthTokenResolver` — a sub-account's own token. |
 | `lib/ghl/resolve-config.ts` | The one decision point, with the PIT fallback. |
 | `app/api/ghl/oauth/start`, `/callback` | The install flow, contractor-only, signed state. |
-| `lib/ghl/oauth.test.ts`, `resolve-config.test.ts` | 23 tests. Seven deliberate breaks, each caught. |
+| `lib/ghl/oauth.test.ts`, `resolve-config.test.ts` | 24 tests. Eight deliberate breaks, each caught. |
 
 ### The variables to set
 
