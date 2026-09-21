@@ -252,6 +252,39 @@ test('a sub-account token is minted and reused within its life', async () => {
   assert.equal(mints, 1, 'the second call came from the cache');
 });
 
+test('§ a cached token is never trusted for more than an hour', async () => {
+  // A token can die before the expiry it was issued with — the app uninstalled
+  // from that sub-account, the agency credential revoked — and nothing tells
+  // us. Capping the cache bounds that to an hour instead of a day.
+  let mints = 0;
+  resetLocationTokens();
+  let clock = 0;
+  const fetchImpl = (async (url: string) => {
+    if (String(url).endsWith('/oauth/locationToken')) {
+      mints += 1;
+      return new Response(
+        JSON.stringify({ access_token: `token-${mints}`, expires_in: 86_400 }),
+        { status: 200 },
+      );
+    }
+    throw new Error(`unexpected ${url}`);
+  }) as unknown as typeof fetch;
+
+  const resolver = new OauthTokenResolver({
+    config: config(),
+    store: fakeStore(install({ accessToken: 'agency-access', accessExpiresAt: new Date(86_400_000).toISOString() })),
+    fetchImpl,
+    now: () => clock,
+  });
+
+  assert.equal(await resolver.resolve(AFC), 'token-1');
+  clock = 59 * 60_000;
+  assert.equal(await resolver.resolve(AFC), 'token-1', 'still cached within the hour');
+  clock = 61 * 60_000;
+  assert.equal(await resolver.resolve(AFC), 'token-2', 'past the cap, minted again');
+  assert.equal(mints, 2);
+});
+
 test('§ a location the app is not installed on gets NULL — never another location’s token', async () => {
   // The whole reason D-013 put a resolver here: the fallback for an unresolved
   // location must never be a credential that opens somebody else's data.

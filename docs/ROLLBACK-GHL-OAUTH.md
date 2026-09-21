@@ -138,6 +138,17 @@ contains a token:
 - `hub_ghl_oauth has no company_id yet — run the migration` — 0016 has not been
   run. Harmless; the app is using PITs.
 
+## How long a fault lasts if you do nothing
+
+A minted token is cached in each instance's memory, and never trusted for more
+than **an hour** however long GoHighLevel says it is good for. So if a token
+dies early — the app uninstalled from a sub-account, the agency credential
+revoked — the worst case is an hour of 401s for that contractor before the
+process re-mints and discovers the truth. That is the reason for the cap; the
+tokens themselves live about a day.
+
+Level 1 is still faster, and does not wait for anything to expire.
+
 ## What is NOT reversible
 
 Nothing in this change alters or deletes existing data. The only one-way door is

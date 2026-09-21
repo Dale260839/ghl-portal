@@ -36,6 +36,16 @@ interface CachedToken {
 /** Location tokens live ~24h. Re-minting costs one call, so expire early. */
 const EXPIRY_SKEW_MS = 10 * 60_000;
 /**
+ * And never trust one for longer than an hour, whatever GoHighLevel says.
+ *
+ * A token can die before its stated expiry — the app uninstalled from that
+ * sub-account, the agency credential revoked — and nothing tells us. Without a
+ * cap, a process would keep presenting a dead token for the rest of the day and
+ * every call would 401. An hour bounds that to an hour, at a cost of one extra
+ * mint per sub-account per hour, which is nothing.
+ */
+const MAX_CACHE_MS = 60 * 60_000;
+/**
  * How long a refusal is remembered. Short on purpose: the usual cause is an
  * install that has not happened yet, and nobody should have to wait out a long
  * cache after clicking Install.
@@ -108,7 +118,8 @@ async function mint(
     typeof body.expires_in === 'number' && Number.isFinite(body.expires_in)
       ? body.expires_in
       : 86_400;
-  return { token, goodUntil: now + Math.max(0, seconds * 1000 - EXPIRY_SKEW_MS) };
+  const life = Math.min(Math.max(0, seconds * 1000 - EXPIRY_SKEW_MS), MAX_CACHE_MS);
+  return { token, goodUntil: now + life };
 }
 
 export interface OauthResolverDeps {
