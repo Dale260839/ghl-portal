@@ -1,6 +1,7 @@
 import 'server-only';
 
-import { readGhlConfig, withLocationToken } from '../ghl/config.ts';
+import { readGhlConfig } from '../ghl/config.ts';
+import { configForLocation } from '../ghl/resolve-config.ts';
 import { createGhlInvoiceRail, type InvoiceBusinessDetails } from './ghl-rail.ts';
 import { unconfiguredRail, type DraftInvoice, type InvoiceRail } from './invoice.ts';
 import type { StoredInvoiceDraft } from '../hub-db/invoice-drafts.ts';
@@ -19,7 +20,7 @@ import type { Project } from '../data/types.ts';
  * is a decision, not a configuration, and adding the seam before the decision
  * would invite someone to flip it by accident.
  */
-export function resolveInvoiceRail(
+export async function resolveInvoiceRail(
   env: NodeJS.ProcessEnv = process.env,
   /**
    * The contractor's own details for the top of the invoice, resolved by the
@@ -39,10 +40,10 @@ export function resolveInvoiceRail(
    * absent means the rail's defaults, exactly as before templates existed.
    */
   template?: { dueInDays?: number; standingTerms?: string | null },
-): InvoiceRail {
+): Promise<InvoiceRail> {
   const config = readGhlConfig(env);
   if (!config.configured) return unconfiguredRail;
-  const located = withLocationToken(config.config, sessionLocationId, env);
+  const located = await configForLocation(config.config, sessionLocationId, env);
   if (located.locationId.trim() === '') return unconfiguredRail;
 
   return createGhlInvoiceRail({

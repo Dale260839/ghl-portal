@@ -758,7 +758,7 @@ export async function inviteToProject(formData: FormData) {
   // A new person: the same delivery as a Team invitation — GoHighLevel when
   // sending is on, and the link handed back either way.
   let delivery = 'none';
-  const mail = getGhlEmail(scope.locationId);
+  const mail = await getGhlEmail(scope.locationId);
   if (mail.available) {
     const { subject, html } = invitationEmail({
       inviterName: actor.name,
@@ -818,7 +818,7 @@ export async function resetMemberPassword(formData: FormData) {
   const isReset = reset.membership.activated;
   const companyName = String(formData.get('companyName') ?? '');
   let delivery = 'none';
-  const mail = getGhlEmail(scope.locationId);
+  const mail = await getGhlEmail(scope.locationId);
   if (mail.available) {
     const { subject, html } = isReset
       ? passwordResetEmail({ inviterName: actor.name, companyName, resetUrl: reset.resetUrl })
@@ -1195,7 +1195,7 @@ export async function createInvoiceOnRail(formData: FormData) {
       console.warn('[invoice] template unavailable, using the BuildSuite profile:', (err as Error).message);
     }
   }
-  const rail = resolveInvoiceRail(
+  const rail = await resolveInvoiceRail(
     process.env,
     mergeLetterhead(profile, template),
     scope.locationId,
@@ -1334,7 +1334,7 @@ async function emailAppointment(input: {
   const { session, scope, project, assignee, appointment } = input;
   const who = assignee.kind === 'homeowner' ? 'the homeowner' : assignee.label;
 
-  const mail = getGhlEmail(scope.locationId);
+  const mail = await getGhlEmail(scope.locationId);
   if (!mail.available) {
     return `Saved. Not emailed: GoHighLevel is not configured here, so tell ${who} and yourself directly.`;
   }

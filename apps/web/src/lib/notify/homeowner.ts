@@ -45,7 +45,7 @@ export async function notifyHomeowner(
     // to somebody who cannot open it.
     if (!project.clientPortalEnabled) return { sent: false, reason: 'portal off' };
 
-    const mail = getGhlEmail(scope.locationId);
+    const mail = await getGhlEmail(scope.locationId);
     if (!mail.available) return { sent: false, reason: `email unconfigured: ${mail.missing.join(', ')}` };
 
     const reader = getBuildSuiteReader();

@@ -90,10 +90,10 @@ test('line 1 is the deposit and later lines are not', () => {
 
 // ── Which rail, and what happens without credentials ─────────────────────────
 
-test('§ no credentials means a rail that REFUSES, never one that pretends', () => {
+test('§ no credentials means a rail that REFUSES, never one that pretends', async () => {
   // A composed invoice that silently reaches nobody is worse than one that
   // fails loudly: the contractor would believe a homeowner had been invoiced.
-  const rail = resolveInvoiceRail({} as NodeJS.ProcessEnv);
+  const rail = await resolveInvoiceRail({} as NodeJS.ProcessEnv);
   assert.equal(rail.name, 'unconfigured');
 
   return rail
@@ -107,9 +107,9 @@ test('§ no credentials means a rail that REFUSES, never one that pretends', () 
     });
 });
 
-test('a blank location id is treated as unconfigured, not as a location', () => {
+test('a blank location id is treated as unconfigured, not as a location', async () => {
   // An empty locationId would post the invoice to whatever the API defaults to.
-  const rail = resolveInvoiceRail({
+  const rail = await resolveInvoiceRail({
     GHL_API_TOKEN: 'tok',
     GHL_LOCATION_ID: '   ',
   } as unknown as NodeJS.ProcessEnv);

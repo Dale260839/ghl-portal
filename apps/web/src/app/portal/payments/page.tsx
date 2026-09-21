@@ -170,7 +170,7 @@ export default async function Payments({
     project.ownerAuthProfileId.trim() === ''
       ? null
       : await locationForAuthProfiles([project.ownerAuthProfileId]);
-  const reader = getInvoices(ownerLocation);
+  const reader = await getInvoices(ownerLocation);
   const contact = project.primaryContactId.trim();
 
   if (!reader.available) {

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { describeRejection, verifyLanding } from '@/lib/auth/ghl-landing';
 import { verifyGhlLocation } from '@/lib/auth/ghl-verify';
 import { readGhlConfig } from '@/lib/ghl/config';
+import { configForLocation } from '@/lib/ghl/resolve-config';
 import { getBuildSuiteReader } from '@/lib/buildsuite/projects';
 import { homeFor, setSession, type Role } from '@/lib/session';
 
@@ -118,7 +119,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   // ── Prove the location ────────────────────────────────────────────────────
   if (landing.proof !== 'signature' && ghlConfig.configured) {
-    const check = await verifyGhlLocation(locationId, ghlConfig.config);
+    // Verified with THAT sub-account's own credential, not with whichever token
+    // happens to be the default. With the Marketplace install switched on this
+    // is the token minted for the location, so the check becomes "is the app
+    // installed there" — which is the honest question. Without it, this is the
+    // per-location Private Integration token exactly as before.
+    const check = await verifyGhlLocation(
+      locationId,
+      await configForLocation(ghlConfig.config, locationId),
+    );
     if (!check.verified) {
       console.warn(`[auth] Location verification failed for ${locationId}: ${check.reason}`);
       return reject(request, LOCATION_ERRORS[check.reason]);

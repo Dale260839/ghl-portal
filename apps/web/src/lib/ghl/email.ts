@@ -1,6 +1,7 @@
 import 'server-only';
 
-import { readGhlConfig, withLocationToken, type GhlConfig  } from './config.ts';
+import { readGhlConfig, type GhlConfig  } from './config.ts';
+import { configForLocation } from './resolve-config.ts';
 
 /**
  * Sending email through GoHighLevel.
@@ -305,15 +306,15 @@ export type EmailResult =
   | { available: true; email: GhlEmail }
   | { available: false; missing: string[] };
 
-export function getGhlEmail(sessionLocationId?: string | null): EmailResult {
+export async function getGhlEmail(sessionLocationId?: string | null): Promise<EmailResult> {
   const result = readGhlConfig();
   if (!result.configured) return { available: false, missing: result.missing };
-  // That sub-account's own token when one is configured (GHL_LOCATION_TOKENS).
-  // A Private Integration token only opens its own sub-account, so sending for
-  // another contractor with the default token is a guaranteed 401 — the same
-  // fault the invoice rail hit on 2026-09-17. Without an entry the default
-  // token stands, so the sub-account it belongs to is unaffected.
-  const config = withLocationToken(result.config, sessionLocationId);
+  // That sub-account's own credential. A Private Integration token only opens
+  // its own sub-account, so sending for another contractor with the default
+  // token is a guaranteed 401 — the same fault the invoice rail hit on
+  // 2026-09-17. With the Marketplace install switched on this is that
+  // sub-account's minted token instead, and no PIT is needed at all.
+  const config = await configForLocation(result.config, sessionLocationId);
   if (config.locationId.trim() === '') {
     return { available: false, missing: ['GHL_LOCATION_ID'] };
   }

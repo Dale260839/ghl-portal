@@ -23,7 +23,7 @@ export async function notifyPmOfFieldSubmission(
   input: Omit<FieldSubmission, 'companyName' | 'reviewUrl'> & { projectId: string },
 ): Promise<{ sent: boolean; reason: string }> {
   try {
-    const mail = getGhlEmail(scope.locationId);
+    const mail = await getGhlEmail(scope.locationId);
     if (!mail.available) return { sent: false, reason: `email unconfigured: ${mail.missing.join(', ')}` };
 
     const profile = await resolveContractorProfile(scope).catch(() => null);

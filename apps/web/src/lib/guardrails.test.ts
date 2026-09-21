@@ -550,13 +550,26 @@ test('anything that acts on another sub-account uses that sub-account’s token'
     const file = FILES.find((f) => rel(f.path) === path);
     assert.ok(file, `${path} has moved`);
     const text = withoutComments(file.text);
-    assert.match(text, /withLocationToken\(/, `${path} must take the location's own token`);
+    // Either the token map directly, or `configForLocation`, which is that map
+    // plus the agency Marketplace install (2026-09-22). What is forbidden is
+    // unchanged: swapping the location while keeping somebody else's token.
+    assert.match(
+      text,
+      /withLocationToken\(|configForLocation\(/,
+      `${path} must take the location's own token`,
+    );
     assert.equal(
       /[^a-zA-Z]withLocation\(/.test(text),
       false,
       `${path} still swaps the location while keeping the default token`,
     );
   }
+
+  // And the function they now go through must itself be built on the token map,
+  // so that switching the Marketplace install off lands back on today's path.
+  const resolver = FILES.find((f) => rel(f.path) === 'lib/ghl/resolve-config.ts');
+  assert.ok(resolver, 'lib/ghl/resolve-config.ts has moved');
+  assert.match(withoutComments(resolver.text), /withLocationToken\(/);
 });
 
 test('a homeowner writes only into their own project, and only where the switch is on', () => {

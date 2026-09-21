@@ -1,4 +1,5 @@
-import { readGhlConfig, withLocationToken, type GhlConfig  } from './config.ts';
+import { readGhlConfig, type GhlConfig  } from './config.ts';
+import { configForLocation } from './resolve-config.ts';
 
 /**
  * Invoices, read from GoHighLevel.
@@ -239,10 +240,13 @@ export type InvoicesResult =
   | { available: true; invoices: GhlInvoices }
   | { available: false; missing: string[] };
 
-export function getInvoices(sessionLocationId?: string | null): InvoicesResult {
+export async function getInvoices(sessionLocationId?: string | null): Promise<InvoicesResult> {
   const result = readGhlConfig();
   if (!result.configured) return { available: false, missing: result.missing };
-  const config = withLocationToken(result.config, sessionLocationId);
+  // The agency Marketplace install when it is on and healthy, the sub-account's
+  // own Private Integration token otherwise. `configForLocation` is async only
+  // because minting the first is a network call.
+  const config = await configForLocation(result.config, sessionLocationId);
   if (config.locationId.trim() === '') {
     return { available: false, missing: ['GHL_LOCATION_ID'] };
   }
