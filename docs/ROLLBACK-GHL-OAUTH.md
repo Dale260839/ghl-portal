@@ -1,4 +1,4 @@
-# Rollback — the agency Marketplace install
+# Rollback — the GoHighLevel Marketplace install
 
 **What this covers:** getting back to per-sub-account Private Integration
 tokens if the Marketplace install misbehaves. Written 2026-09-22, alongside the
@@ -35,7 +35,7 @@ Marketplace install produces something better:
 | Set, Hub database unreachable | The PIT, with a warning. |
 | Set, migration 0016 not run | The PIT, with a warning. |
 | Set, app not installed on that sub-account | **That sub-account's own PIT**, with a warning naming the location. |
-| Set, install healthy | The minted token. |
+| Set, install healthy | That sub-account's own token. |
 
 Four tests in `lib/ghl/resolve-config.test.ts` assert those rows, including one
 that compares the switched-off result against `withLocationToken` itself rather
@@ -74,7 +74,7 @@ git log --oneline pre-ghl-oauth..main
 
 # Undo those commits, keeping the history honest
 git revert --no-commit pre-ghl-oauth..main
-git commit -m "Revert the agency OAuth work"
+git commit -m "Revert the Marketplace install work"
 git push origin main && git push company main   # this deploys
 ```
 
@@ -98,17 +98,19 @@ drop table if exists public.hub_ghl_oauth;
 ```
 
 **Do not run this while the flag is on** — the app would fall back to the PITs
-correctly, but you would be removing the one copy of the agency refresh token,
-which means re-installing to get it back.
+correctly, but you would be removing the only copy of every sub-account's
+refresh token, which means installing on each of them again.
 
 ## Level 4 · Uninstall from GoHighLevel
 
-In the agency's Marketplace settings, uninstall the app. This invalidates the
-refresh token immediately.
+In each connected sub-account, uninstall the app. That invalidates its tokens
+immediately.
 
-Do this if the install itself is the problem — wrong agency, wrong scopes, or a
-credential you believe has been exposed. It is also the correct response to a
-leaked client secret, together with rotating the secret on the app.
+Do this if an install itself is the problem — wrong sub-account, wrong scopes,
+or a credential you believe has been exposed. It is also the correct response to
+a leaked client secret, together with rotating the secret on the app — note that
+rotating the secret invalidates **every** sub-account's tokens at once, so each
+one has to be installed again.
 
 ---
 
@@ -117,10 +119,10 @@ leaked client secret, together with rotating the secret on the app.
 | Symptom | Level |
 |---|---|
 | Invoices or emails failing for one contractor | **None yet.** Check the log for `no Marketplace token for <location>` — that says the app is not installed on their sub-account, and they are already falling back to their PIT. If they have no PIT either, that is the same 401 they had yesterday. |
-| Failing for *everyone*, at once | **1.** Then read the log for `agency token refresh failed`. |
-| `refreshed the agency token but could not store it` | **1**, then re-install. Two instances refreshed together and the stored refresh token is stale. |
+| Failing for *everyone*, at once | **1.** That points at the app or its secret, not at one install. |
+| `refreshed <location> but could not store it` | Install the app on that sub-account again. Two instances refreshed together and the stored refresh token is stale. |
 | A build or deploy failure | **2.** |
-| Wrong agency, or a secret exposed | **4**, then **1**. |
+| Wrong sub-account, or a secret exposed | **4**, then **1**. |
 | Just clearing up after abandoning the idea | **1 → 2 → 3 → 4**, in that order. |
 
 ## What to grep for in the logs
@@ -130,28 +132,27 @@ contains a token:
 
 - `no Marketplace token for <location> — falling back` — expected until the app
   is installed on that sub-account. Once per location per instance.
-- `no location token for <location>: 401` — GoHighLevel refused; the app is not
-  installed there.
-- `agency token refresh failed` — the serious one. Everyone is on PITs now.
-- `asked for X and was given Y — refusing` — should never appear. It means
-  GoHighLevel returned another sub-account's token and the app threw it away.
-- `hub_ghl_oauth has no company_id yet — run the migration` — 0016 has not been
+- `token refresh failed for <location>` — that sub-account is back on its PIT.
+- `refreshed X and was given Y — refusing` — should never appear. It means
+  GoHighLevel answered for another sub-account and the app threw it away rather
+  than storing it.
+- `hub_ghl_oauth has no location_id yet — run the migration` — 0016 has not been
   run. Harmless; the app is using PITs.
 
 ## How long a fault lasts if you do nothing
 
-A minted token is cached in each instance's memory, and never trusted for more
-than **an hour** however long GoHighLevel says it is good for. So if a token
-dies early — the app uninstalled from a sub-account, the agency credential
-revoked — the worst case is an hour of 401s for that contractor before the
-process re-mints and discovers the truth. That is the reason for the cap; the
-tokens themselves live about a day.
+A token is cached in each instance's memory, and never trusted for more than
+**an hour** however long GoHighLevel says it is good for. So if one dies early —
+the app uninstalled from that sub-account, or re-installed — the worst case is
+an hour of 401s for that one contractor before the process re-reads the row and
+discovers the truth. That is the reason for the cap; the tokens themselves live
+about a day.
 
 Level 1 is still faster, and does not wait for anything to expire.
 
 ## What is NOT reversible
 
 Nothing in this change alters or deletes existing data. The only one-way door is
-the refresh token itself: once GoHighLevel issues a new one, the previous one is
-dead. If the stored copy is lost, the recovery is to install again — which takes
-a minute and breaks nothing, because the PITs are still there.
+a refresh token: once GoHighLevel issues a new one, the previous one is dead. If
+a stored copy is lost, the recovery is to install the app on that sub-account
+again — one click, breaking nothing, because the PITs are still there.

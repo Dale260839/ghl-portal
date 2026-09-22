@@ -2,22 +2,23 @@ import 'server-only';
 
 import type { TokenResolver } from './location.ts';
 import type { GhlOauthConfig } from './oauth-config.ts';
-import { agencyAccessToken } from './oauth-agency.ts';
+import { locationAccessToken } from './oauth-tokens.ts';
 import { isGhlLocationId } from './config.ts';
 import type { HubGhlOauth } from '../hub-db/ghl-oauth.ts';
 
 /**
- * A sub-account's own short-lived token, minted from the agency install.
+ * A sub-account's credential, from its Marketplace install.
  *
  * This is the file that replaces `GHL_LOCATION_TOKENS`. Where that map needed a
- * human to create a Private Integration token per contractor and paste it into
- * the environment, this asks GoHighLevel for one, per location, on demand.
+ * person to create a Private Integration token per contractor and paste it into
+ * the environment, this reads the tokens that sub-account handed us when the
+ * app was installed on it, and keeps them alive.
  *
  * ---------------------------------------------------------------------------
  * THE RULE THIS FILE MUST NEVER BREAK
  *
- * It returns a token for the location it was asked about, or null. Never
- * another location's token, and never the default Private Integration token —
+ * It returns a credential for the location it was asked about, or null. Never
+ * another location's, and never the default Private Integration token —
  * because the fallback for an unresolved location is another tenant's data,
  * which is the entire reason D-013 put a resolver here in the first place.
  *
@@ -29,20 +30,18 @@ import type { HubGhlOauth } from '../hub-db/ghl-oauth.ts';
 
 interface CachedToken {
   token: string;
-  /** Epoch ms, already reduced by the safety margin. */
+  /** Epoch ms. */
   goodUntil: number;
 }
 
-/** Location tokens live ~24h. Re-minting costs one call, so expire early. */
-const EXPIRY_SKEW_MS = 10 * 60_000;
 /**
- * And never trust one for longer than an hour, whatever GoHighLevel says.
+ * How long a token is trusted from cache, whatever life GoHighLevel gave it.
  *
  * A token can die before its stated expiry — the app uninstalled from that
- * sub-account, the agency credential revoked — and nothing tells us. Without a
- * cap, a process would keep presenting a dead token for the rest of the day and
- * every call would 401. An hour bounds that to an hour, at a cost of one extra
- * mint per sub-account per hour, which is nothing.
+ * sub-account, the install replaced — and nothing tells us. Without a cap a
+ * process would keep presenting a dead token and every call would 401. An hour
+ * bounds that to an hour, at a cost of one small database read per sub-account
+ * per hour, which is nothing.
  */
 const MAX_CACHE_MS = 60 * 60_000;
 /**
@@ -59,67 +58,6 @@ const refusals = new Map<string, number>();
 export function resetLocationTokens(): void {
   tokens.clear();
   refusals.clear();
-}
-
-interface RawLocationToken {
-  access_token?: unknown;
-  expires_in?: unknown;
-  locationId?: unknown;
-}
-
-/**
- * POST /oauth/locationToken. Form-encoded like the token endpoint, and it
- * wants the AGENCY token in the header and the location in the body.
- */
-async function mint(
-  config: GhlOauthConfig,
-  agencyToken: string,
-  companyId: string,
-  locationId: string,
-  fetchImpl: typeof fetch,
-  now: number,
-): Promise<CachedToken | null> {
-  const response = await fetchImpl(`${config.apiBase}/oauth/locationToken`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${agencyToken}`,
-      Version: '2021-07-28',
-      Accept: 'application/json',
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ companyId, locationId }).toString(),
-  });
-
-  if (!response.ok) {
-    // 401 here means the app is not installed on that sub-account — the normal,
-    // expected answer for a location we do not serve. Warn rather than error.
-    console.warn(
-      `[ghl-oauth] no location token for ${locationId}: ${response.status}`,
-    );
-    return null;
-  }
-
-  const body = (await response.json()) as RawLocationToken;
-  const token = typeof body.access_token === 'string' ? body.access_token : '';
-  if (token === '') return null;
-
-  // If GoHighLevel names a location in the response, it must be the one we
-  // asked for. A mismatch is a bug worth failing on, not worth papering over:
-  // handing back a token for another sub-account is precisely the leak this
-  // resolver exists to prevent.
-  if (typeof body.locationId === 'string' && body.locationId !== locationId) {
-    console.error(
-      `[ghl-oauth] asked for ${locationId} and was given ${body.locationId} — refusing`,
-    );
-    return null;
-  }
-
-  const seconds =
-    typeof body.expires_in === 'number' && Number.isFinite(body.expires_in)
-      ? body.expires_in
-      : 86_400;
-  const life = Math.min(Math.max(0, seconds * 1000 - EXPIRY_SKEW_MS), MAX_CACHE_MS);
-  return { token, goodUntil: now + life };
 }
 
 export interface OauthResolverDeps {
@@ -155,50 +93,34 @@ export class OauthTokenResolver implements TokenResolver {
     const refusedAt = refusals.get(id);
     if (refusedAt !== undefined && now - refusedAt < NEGATIVE_TTL_MS) return null;
 
-    const install = await this.deps.store.read(this.deps.config.clientId);
-    if (install === null) return null;
-
-    const agencyToken = await agencyAccessToken({
-      config: this.deps.config,
-      store: this.deps.store,
-      ...(this.deps.fetchImpl !== undefined ? { fetchImpl: this.deps.fetchImpl } : {}),
-      ...(this.deps.now !== undefined ? { now: this.deps.now } : {}),
-    });
-    if (agencyToken === null) return null;
-
-    const companyId = install.companyId || this.deps.config.companyId;
-    if (companyId === '') {
-      console.error('[ghl-oauth] the install carries no companyId — cannot mint location tokens');
-      return null;
-    }
-
-    let minted: CachedToken | null = null;
+    let token: string | null = null;
     try {
-      minted = await mint(
-        this.deps.config,
-        agencyToken,
-        companyId,
+      token = await locationAccessToken(
+        {
+          config: this.deps.config,
+          store: this.deps.store,
+          ...(this.deps.fetchImpl !== undefined ? { fetchImpl: this.deps.fetchImpl } : {}),
+          ...(this.deps.now !== undefined ? { now: this.deps.now } : {}),
+        },
         id,
-        this.deps.fetchImpl ?? fetch,
-        now,
       );
     } catch (error) {
-      console.warn(`[ghl-oauth] minting a token for ${id} failed`, error);
+      console.warn(`[ghl-oauth] resolving a token for ${id} failed`, error);
     }
 
-    if (minted === null) {
+    if (token === null) {
       refusals.set(id, now);
       return null;
     }
 
     refusals.delete(id);
-    tokens.set(id, minted);
-    return minted.token;
+    tokens.set(id, { token, goodUntil: now + MAX_CACHE_MS });
+    return token;
   }
 
   /**
-   * Throw away a location's cached token — for the 401-and-retry path, where
-   * the token was accepted by the cache but rejected by GoHighLevel.
+   * Throw away a location's cached token — for the case where a token was
+   * accepted by the cache but rejected by GoHighLevel.
    */
   forget(locationId: string): void {
     tokens.delete(locationId.trim());

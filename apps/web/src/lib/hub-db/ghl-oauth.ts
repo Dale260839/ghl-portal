@@ -4,19 +4,20 @@ import { getHubClient, type HubClient } from './client.ts';
 import { columnSupport } from './column-support.ts';
 
 /**
- * The agency's GoHighLevel Marketplace install — one row, in the Hub database.
+ * A sub-account's GoHighLevel Marketplace install — one row per location.
  *
  * ---------------------------------------------------------------------------
  * WHY THIS TABLE TAKES NO TENANT SCOPE
  *
  * Every other module in this folder demands a `TenantScope` and refuses without
- * one, because every other table holds one contractor's data. This one does
- * not: it holds the deployment's own connection to GoHighLevel, which belongs
- * to the agency, not to any contractor. Scoping it to a contractor would be
- * theatre — and worse, would imply a contractor could read it.
+ * one, because every other table holds one contractor's *data*. This one holds
+ * the *connection* — the credential the server uses to talk to GoHighLevel on
+ * that sub-account's behalf. It is keyed by the location id, which is itself
+ * the tenant boundary: a caller asking for location X can only ever be handed
+ * location X's row.
  *
  * Nothing here is ever returned to a page, a component, or a response body.
- * The only consumers are `ghl/oauth-agency.ts` and the install callback.
+ * The only consumers are `ghl/oauth-tokens.ts` and the install callback.
  *
  * WHY IT IS SAFE BEFORE THE MIGRATION IS RUN
  *
@@ -30,41 +31,39 @@ import { columnSupport } from './column-support.ts';
 
 const TABLE = 'hub_ghl_oauth';
 
-export interface OauthInstall {
-  companyId: string;
+export interface LocationInstall {
+  locationId: string;
+  companyId: string | null;
   clientId: string;
   refreshToken: string;
   accessToken: string | null;
   accessExpiresAt: string | null;
-  installedLocations: string[];
-  installedRefreshedAt: string | null;
+  scopes: string | null;
   claimId: string | null;
   claimedAt: string | null;
 }
 
 interface InstallRow {
-  company_id: string;
+  location_id: string;
+  company_id: string | null;
   client_id: string;
   refresh_token: string;
   access_token: string | null;
   access_expires_at: string | null;
-  installed_locations: unknown;
-  installed_refreshed_at: string | null;
+  scopes: string | null;
   claim_id: string | null;
   claimed_at: string | null;
 }
 
-function toInstall(row: InstallRow): OauthInstall {
+function toInstall(row: InstallRow): LocationInstall {
   return {
+    locationId: row.location_id,
     companyId: row.company_id,
     clientId: row.client_id,
     refreshToken: row.refresh_token,
     accessToken: row.access_token,
     accessExpiresAt: row.access_expires_at,
-    installedLocations: Array.isArray(row.installed_locations)
-      ? row.installed_locations.filter((v): v is string => typeof v === 'string')
-      : [],
-    installedRefreshedAt: row.installed_refreshed_at,
+    scopes: row.scopes,
     claimId: row.claim_id,
     claimedAt: row.claimed_at,
   };
@@ -79,35 +78,56 @@ export class HubGhlOauth {
 
   /** Whether migration 0016 has been run on this deployment's database. */
   private available(): Promise<boolean> {
-    return columnSupport(this.client, TABLE, ['company_id']);
+    return columnSupport(this.client, TABLE, ['location_id']);
   }
 
   /**
-   * The install, if there is one.
+   * One sub-account's install, if it has one.
    *
-   * `clientId` is required by the caller and checked here: an install made by a
-   * previous Marketplace app holds a refresh token that the current app's
-   * secret cannot redeem, and trying would produce a confusing 401 rather than
-   * an obvious "not installed".
+   * Filtered on the client id as well as the location: a row left by a previous
+   * Marketplace app holds a refresh token the current app's secret cannot
+   * redeem, and trying would produce a confusing 401 rather than an obvious
+   * "not installed".
    */
-  async read(clientId: string): Promise<OauthInstall | null> {
+  async read(clientId: string, locationId: string): Promise<LocationInstall | null> {
+    if (locationId.trim() === '') return null;
     if (!(await this.available())) return null;
+
     const rows = await this.client.select<InstallRow>({
       from: TABLE,
-      filters: { client_id: `eq.${clientId}` },
+      filters: { location_id: `eq.${locationId}`, client_id: `eq.${clientId}` },
       limit: 1,
     });
     const row = rows[0];
     return row === undefined ? null : toInstall(row);
   }
 
-  /** Records a fresh install, replacing any previous one for the same agency. */
+  /** Which sub-accounts are connected. For the install page, never for access. */
+  async connectedLocations(clientId: string): Promise<string[]> {
+    if (!(await this.available())) return [];
+    const rows = await this.client.select<{ location_id: string }>({
+      from: TABLE,
+      columns: ['location_id'],
+      filters: { client_id: `eq.${clientId}` },
+      limit: 500,
+    });
+    return rows.map((r) => r.location_id);
+  }
+
+  /**
+   * Records an install, replacing any previous one for the same sub-account.
+   *
+   * Re-installing is a normal thing to do — after a scope change, or when a
+   * refresh token has been lost — so this overwrites rather than refusing.
+   */
   async save(install: {
-    companyId: string;
+    locationId: string;
+    companyId: string | null;
     clientId: string;
     refreshToken: string;
     accessToken: string | null;
     accessExpiresAt: string | null;
+    scopes: string | null;
     installedBy: string | null;
   }): Promise<boolean> {
     if (!(await this.available())) return false;
@@ -116,11 +136,13 @@ export class HubGhlOauth {
         from: TABLE,
         rows: [
           {
+            location_id: install.locationId,
             company_id: install.companyId,
             client_id: install.clientId,
             refresh_token: install.refreshToken,
             access_token: install.accessToken,
             access_expires_at: install.accessExpiresAt,
+            scopes: install.scopes,
             claim_id: null,
             claimed_at: null,
             updated_at: new Date().toISOString(),
@@ -128,32 +150,38 @@ export class HubGhlOauth {
           },
         ],
       },
-      'company_id',
+      'location_id',
     );
     return true;
   }
 
   /**
-   * Take the refresh claim, or find that someone else holds it.
+   * Take the refresh claim for one sub-account, or find that someone else
+   * holds it.
    *
    * GoHighLevel invalidates the old refresh token the moment a new one is
-   * issued, so two instances refreshing together would leave one of them
-   * holding a dead token — and with it, every contractor's API access. This is
+   * issued, so two instances refreshing the same row together would leave one
+   * holding a dead token — and with it, that contractor's API access. This is
    * the same durable single-winner pattern as the invoice claim (0014): the
    * update itself is the lock, because only one PATCH can match a row whose
    * claim is free.
    *
    * Unlike the invoice claim, this one EXPIRES. A refresh that never completes
-   * must not lock the agency out permanently; a repeated refresh costs one
-   * wasted token, where a repeated invoice would cost a homeowner a second
-   * bill.
+   * must not lock a contractor out for ever; a repeated refresh costs one
+   * wasted token, where a repeated invoice would cost a homeowner a second bill.
    */
-  async claim(clientId: string, claimId: string, staleAfterMs: number): Promise<boolean> {
+  async claim(
+    clientId: string,
+    locationId: string,
+    claimId: string,
+    staleAfterMs: number,
+  ): Promise<boolean> {
     if (!(await this.available())) return false;
     const cutoff = new Date(Date.now() - staleAfterMs).toISOString();
     const updated = await this.client.update<InstallRow>({
       from: TABLE,
       filters: {
+        location_id: `eq.${locationId}`,
         client_id: `eq.${clientId}`,
         or: `(claim_id.is.null,claimed_at.lt.${cutoff})`,
       },
@@ -171,13 +199,18 @@ export class HubGhlOauth {
    */
   async saveRefreshed(
     clientId: string,
+    locationId: string,
     claimId: string,
     tokens: { refreshToken: string; accessToken: string; accessExpiresAt: string },
   ): Promise<boolean> {
     if (!(await this.available())) return false;
     const updated = await this.client.update<InstallRow>({
       from: TABLE,
-      filters: { client_id: `eq.${clientId}`, claim_id: `eq.${claimId}` },
+      filters: {
+        location_id: `eq.${locationId}`,
+        client_id: `eq.${clientId}`,
+        claim_id: `eq.${claimId}`,
+      },
       patch: {
         refresh_token: tokens.refreshToken,
         access_token: tokens.accessToken,
@@ -191,25 +224,16 @@ export class HubGhlOauth {
   }
 
   /** Give the claim back without changing anything — a refresh that failed. */
-  async releaseClaim(clientId: string, claimId: string): Promise<void> {
+  async releaseClaim(clientId: string, locationId: string, claimId: string): Promise<void> {
     if (!(await this.available())) return;
     await this.client.update({
       from: TABLE,
-      filters: { client_id: `eq.${clientId}`, claim_id: `eq.${claimId}` },
-      patch: { claim_id: null, claimed_at: null },
-    });
-  }
-
-  /** The cached list of sub-accounts this app is installed on. */
-  async saveInstalledLocations(clientId: string, locationIds: readonly string[]): Promise<void> {
-    if (!(await this.available())) return;
-    await this.client.update({
-      from: TABLE,
-      filters: { client_id: `eq.${clientId}` },
-      patch: {
-        installed_locations: [...locationIds],
-        installed_refreshed_at: new Date().toISOString(),
+      filters: {
+        location_id: `eq.${locationId}`,
+        client_id: `eq.${clientId}`,
+        claim_id: `eq.${claimId}`,
       },
+      patch: { claim_id: null, claimed_at: null },
     });
   }
 }

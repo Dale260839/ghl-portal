@@ -6,9 +6,14 @@
  *
  * `GHL_LOCATION_TOKENS` — a `locationId:token` map that somebody has to extend
  * by hand for every new contractor, because a Private Integration token only
- * opens the sub-account it was made in. This is the agency-level alternative:
- * one app, installed once, able to mint a short-lived token for any sub-account
- * it is installed on.
+ * opens the sub-account it was made in. Installing this app on a sub-account
+ * hands us that sub-account's tokens instead: one click, no credential ever
+ * touched by a person, and it refreshes itself from then on.
+ *
+ * It was designed as a single agency-level install, which would have been
+ * zero-click. GoHighLevel does not allow it — the scopes the Hub needs are
+ * issued to location-level tokens only, and are greyed out on an
+ * agency-targeted app (scope picker, 2026-09-23).
  *
  * WHAT IS AND IS NOT A SECRET HERE
  *
@@ -36,17 +41,6 @@ export interface GhlOauthConfig {
   apiBase: string;
   /** Where the agency is sent to approve the install. */
   authorizeBase: string;
-  /**
-   * The Marketplace app id, needed only by `GET /oauth/installedLocations`.
-   * Optional: without it we simply do not cache an install list, and a
-   * location either mints a token or does not.
-   */
-  appId: string;
-  /**
-   * The agency's company id. Optional because the token response carries it —
-   * this is only a check that we installed into the agency we meant to.
-   */
-  companyId: string;
 }
 
 export type GhlOauthResult =
@@ -79,8 +73,6 @@ export function readOauthConfig(env: NodeJS.ProcessEnv = process.env): GhlOauthR
       authorizeBase: (env.GHL_OAUTH_AUTHORIZE_BASE ?? DEFAULT_AUTHORIZE_BASE)
         .trim()
         .replace(/\/+$/, ''),
-      appId: (env.GHL_OAUTH_APP_ID ?? '').trim(),
-      companyId: (env.GHL_AGENCY_COMPANY_ID ?? '').trim(),
     },
   };
 }
@@ -100,29 +92,31 @@ export function oauthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 
 /**
  * The scopes the app asks for: exactly what the Hub already calls, and nothing
- * else. An unused scope on an agency-wide install is permission granted for no
- * reason.
+ * else. Each one is traced to the endpoint that needs it, below.
  *
- * Kept here rather than in the app's Marketplace settings so the list is
- * reviewable in the repository — GoHighLevel's own scope picker is the
- * authority on the exact strings, and these are confirmed against it at install
- * time (§5 of docs/PLAN-GHL-AGENCY-OAUTH.md).
+ * Deliberately absent: anything under Objects. The custom-object data source
+ * has never been switched on (`GHL_PROJECT_OBJECT_KEY` is unset) and needs a
+ * tenancy fix before it is — see the note in the plan. A scope we do not use
+ * is permission held for no reason, and every one of these is granted by a
+ * contractor over their own CRM.
+ *
+ * Kept here rather than only in the app's Marketplace settings so the list is
+ * reviewable in the repository. GoHighLevel's scope picker is the authority on
+ * the exact strings.
  */
 export const OAUTH_SCOPES = [
+  // GET /locations/{id} — proving a sub-account at sign-in.
   'locations.readonly',
+  // POST /contacts/search, POST /contacts/ — finding or creating the person an
+  // email is addressed to.
   'contacts.readonly',
   'contacts.write',
-  'conversations.readonly',
+  // POST /conversations/messages — sending it.
   'conversations.write',
-  'conversations/message.readonly',
   'conversations/message.write',
-  'objects/schema.readonly',
-  'objects/record.readonly',
-  'objects/record.write',
+  // GET /invoices/ and POST /invoices/ — the Payments screen and the rail.
   'invoices.readonly',
   'invoices.write',
-  'invoices/template.readonly',
-  'invoices/template.write',
 ] as const;
 
 /** Where to send the agency owner to approve the install. */

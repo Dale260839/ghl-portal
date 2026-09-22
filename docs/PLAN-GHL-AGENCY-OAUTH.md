@@ -1,16 +1,14 @@
 # Plan — remove the per-contractor PIT keys
 
-**Goal:** a contractor's sub-account works the moment it exists in the agency.
-No Private Integration token to request, paste, or rotate. Ever.
+**Goal:** onboarding a contractor stops involving a credential. No Private
+Integration token to create, copy, paste into the deployment, or rotate.
 
-**Status:** **built and switched off**, 2026-09-22. Steps 1–7 below are written
-and tested (1,146 tests green, build clean); steps 8–9 need the Marketplace app
-to exist. Nothing changes for anyone until `GHL_OAUTH_ENABLED=true`.
+**Status:** **built and switched off**, 2026-09-23. Nothing changes for anyone
+until `GHL_OAUTH_ENABLED=true`. 1,147 tests green, typecheck and build clean.
 **Rollback:** `docs/ROLLBACK-GHL-OAUTH.md`. The state before this work is tagged
 `pre-ghl-oauth` on both remotes.
 **Decision it completes:** D-013 option B — *"Recommending a GHL Marketplace app
-(OAuth) over per-sub-account keys before the second client."* The second client
-already exists (Alliance Pro Services), so this is overdue rather than early.
+(OAuth) over per-sub-account keys before the second client."*
 
 ---
 
@@ -22,73 +20,68 @@ Contractors token gets `401 This location is not accessible from this token!` on
 Alliance Pro Services, and the APS token gets the same on AFC.
 
 So `GHL_LOCATION_TOKENS` exists — a `locationId:token` map in the environment
-(`lib/ghl/config.ts`, `readLocationTokens`). It works. It also means:
-
-- Every new contractor is a **manual step**: someone opens their sub-account,
-  creates a PIT, and pastes it into the host's environment variables.
-- Forget it, and that contractor's invoice and email calls 401 — with no sign
-  anything is wrong until they try.
-- Every token is full API access to a sub-account, sitting in an env var, rotated
-  by hand. We rotated one on 19 Sep because it had been shared.
-- It does not scale past a handful of contractors, and the agency will have more.
+(`lib/ghl/config.ts`, `readLocationTokens`). It works, and it means every new
+contractor is **four manual steps**: create a token in their sub-account, copy
+it, add it to the deployment, redeploy. Miss one and their invoices 401 with
+nothing to say so. Every entry is full API access to somebody's CRM, sitting in
+an environment variable, rotated by hand. We rotated one on 19 Sep because it
+had been shared.
 
 ## 2 · What replaces it
 
-One **agency-level Marketplace app**, installed once by the agency owner. It
-mints a short-lived access token for *any* sub-account it is installed on:
+A **Marketplace app**, installed on each sub-account. Installing it hands us
+that sub-account's own tokens, which then refresh themselves forever.
 
-```
-agency refresh token  ──▶  POST /oauth/token          ──▶  agency access token
-agency access token   ──▶  POST /oauth/locationToken  ──▶  that location's token
-                                                            (short-lived, ~24h)
-```
-
-Nothing above the token layer changes. The call sites already ask for "this
-location's credential" and are handed one.
-
-There are **two halves**, and they are independent:
-
-| | What it fixes | Needed for the ask |
+| | Today | After |
 |---|---|---|
-| **Half 1 — agency OAuth** | API access to every sub-account with no PIT | **Yes. This is the whole ask.** |
-| **Half 2 — Marketplace SSO** | *Who* the contractor is — named people instead of one session per sub-account | No. Separate decision, §9. |
+| Create a PIT in the sub-account | yes | no |
+| Copy a key into the deployment | yes | no |
+| Redeploy to pick it up | yes | no |
+| Click install once | — | **yes** |
 
-This plan builds **Half 1**. Half 2 is described so the shape is known before we
-commit to it, not so it ships with this.
+Four manual steps involving a live credential become one click, done by an
+agency admin from inside the sub-account.
+
+### Why not one agency install — the zero-click version
+
+That was the original plan, and GoHighLevel does not allow it. The scopes the
+Hub needs — contacts, conversations, invoices — are greyed out on an
+agency-targeted app, with the tooltip:
+
+> **Requires Sub-Account token.** This scope works with Location-level tokens
+> only, which are issued when a Sub-Account installs your app.
+
+Confirmed in the scope picker on 2026-09-23, after the agency app had been
+created. The agency app is left as a draft: if GoHighLevel ever opens those
+scopes to agency installs, `POST /oauth/locationToken` is the zero-click version
+and the code is shaped to take it.
+
+One consolation: the per-sub-account design is **simpler** — no agency token, no
+token minting, one row keyed by the sub-account it belongs to, which is the
+tenant boundary anyway.
 
 ## 3 · What changes, and what does not
 
 **For contractors: nothing visible.** Same menu item in their own sub-account,
-same landing, same data. That is the point.
+same landing, same data.
 
-**For whoever runs the accounts:**
+**For whoever onboards them:** one click instead of four steps and a key.
+`GHL_LOCATION_TOKENS` stops growing, then gets deleted once the install is
+proven.
 
-- Adding a contractor becomes zero configuration.
-- `GHL_LOCATION_TOKENS` stops growing, then gets deleted once the install is
-  proven.
-- A contractor added to the agency is covered automatically.
+**For the system:** tokens move into the Hub database, because they rotate. A
+row there is as sensitive as an env var is now, and there is one per contractor
+rather than one credential covering everyone — the same blast radius as today,
+which the agency design would have widened.
 
-**For the system:**
-
-- One agency credential replaces N per-sub-account keys. That is the trade:
-  fewer moving parts, but that credential can reach every sub-account, so the
-  app's own tenancy checks become the only wall between contractors. They exist
-  and are tested — they simply become more load-bearing. See §7.
-- Live tokens move into the Hub database, because they rotate. That table is as
-  sensitive as the env vars are now.
-- **Failure modes shift.** Today a bad key breaks one contractor. After, a broken
-  refresh breaks everyone. Hence the fallback in §6 and the alerting in §7.
-- Location verification at sign-in changes from *"can we fetch this location with
-  our token"* to *"is this location one the app is installed on"* — which is a
-  stronger check, not a weaker one.
-
-**What does not change at all:** BuildSuite reads (Supabase, read-only forever),
-the field-crew password sign-in, the homeowner code sign-in, the session cookie
+**What does not change at all:** BuildSuite reads (read-only forever), the
+field-crew password sign-in, the homeowner code sign-in, the session cookie
 format, the permissions matrix, and every visibility rule.
 
 ## 4 · The build
 
-The seam is already there. `lib/ghl/location.ts` declares:
+The seam was already there. `lib/ghl/location.ts` has declared this since
+August:
 
 ```ts
 export interface TokenResolver {
@@ -97,44 +90,42 @@ export interface TokenResolver {
 }
 ```
 
-with a comment saying a different resolver returns that location's OAuth token
-"and nothing above this file changes". This plan writes that resolver.
+— with a comment saying a different resolver would return that location's OAuth
+token and nothing above it would change. It does, and nothing did.
 
 | # | Step | State |
 |---|---|---|
-| 1 | **Migration 0016** — the agency install row, with the claim columns. Additive; creates a table and touches nothing that exists. | Written. **You run it.** |
-| 2 | **Install routes** — `/api/connect/start` and `/api/connect/callback`. Contractor-only, signed `state`, and the callback stores the refresh token without switching anything on. | Done |
-| 3 | **Agency token manager** — refresh behind a single-writer claim, so two instances cannot rotate at once and invalidate each other. Same pattern as 0014. | Done |
-| 4 | **`OauthTokenResolver`** — `POST /oauth/locationToken` per sub-account, cached until shortly before expiry, refusing anything that is not the location asked for. | Done |
-| 5 | **Wire the call sites** — invoices, email, the invoicing rail, and sign-in verification, all through one function with the PIT fallback. | Done (8 call sites) |
-| 6 | **Tests** — 24, including the rollback asserted against `withLocationToken` itself. Eight bugs reintroduced on purpose; each caught by the test meant for it. | Done |
-| 7 | **Install and prove it** — create the app, install at agency level, switch on, watch one contractor, then a second sub-account. | **Needs the app to exist** |
+| 1 | **Migration 0016** — one row per sub-account, with the refresh claim. Additive; creates a table and touches nothing that exists. | Written. **You run it.** |
+| 2 | **Install routes** — `/api/connect/start` and `/api/connect/callback`. Contractor-only, signed `state`, and the callback stores the tokens without switching anything on. | Done |
+| 3 | **Token keeper** — refresh behind a single-writer claim, so two instances cannot rotate one row at once and invalidate each other. Same pattern as 0014. | Done |
+| 4 | **`OauthTokenResolver`** — that sub-account's token, cached for at most an hour, refusing anything that is not the location asked for. | Done |
+| 5 | **Wire the call sites** — invoices, email, the invoicing rail and sign-in verification, all through one function with the PIT fallback. | Done (8 call sites) |
+| 6 | **Tests** — 25, including the rollback asserted against `withLocationToken` itself. Nine bugs reintroduced on purpose; each caught by the test meant for it. | Done |
+| 7 | **Install and prove it** — install on one sub-account, switch on, watch a real invoice, then do the second sub-account. | **Next** |
 | 8 | **Delete the PIT path** — after both pass, and not the same day. | Not started |
 
 **One thing deliberately left alone:** `lib/data/source.ts` swaps in the
 session's location while keeping the default token — the very pattern the
-guardrail forbids in the other three callers. It is behind
-`canReadProjectObject`, which needs `GHL_PROJECT_OBJECT_KEY`, and that has never
-been set: the Project custom-object read was never turned on, and BuildSuite is
-the data source. Making it async would ripple through every page for a branch
-nothing reaches. **If that key is ever set, this needs the same treatment
-first** — otherwise it reads one contractor's location with another's token.
+guardrail forbids in the other three callers. It is behind `canReadProjectObject`,
+which needs `GHL_PROJECT_OBJECT_KEY`, and that has never been set: the Project
+custom-object read was never turned on, and BuildSuite is the data source.
+Making it async would ripple through every page for a branch nothing reaches.
+**If that key is ever set, this needs the same treatment first** — otherwise it
+reads one contractor's location with another's token. The Objects scopes are not
+requested for the same reason.
 
-Steps 1–7 are additive. Until `GHL_OAUTH_ENABLED=true`, every one of them is
-dead code and production behaves exactly as it does today.
+### What is in the repo
 
-### What is in the repo now
-
-| Written | |
+| | |
 |---|---|
-| `supabase/hub/0016_ghl_oauth_tokens.sql` | The install row. Not yet run. |
+| `supabase/hub/0016_ghl_oauth_tokens.sql` | One row per sub-account. Not yet run. |
 | `lib/ghl/oauth-config.ts` | App credentials, the switch, the scope list. |
 | `lib/hub-db/ghl-oauth.ts` | The row, and the refresh claim. Probes for the table. |
-| `lib/ghl/oauth-agency.ts` | Code exchange, refresh, installed locations. |
+| `lib/ghl/oauth-tokens.ts` | Code exchange and refresh. |
 | `lib/ghl/oauth-location.ts` | `OauthTokenResolver` — a sub-account's own token. |
 | `lib/ghl/resolve-config.ts` | The one decision point, with the PIT fallback. |
 | `app/api/connect/start`, `/callback` | The install flow, contractor-only, signed state. |
-| `lib/ghl/oauth.test.ts`, `resolve-config.test.ts` | 24 tests. Eight deliberate breaks, each caught. |
+| `lib/ghl/oauth.test.ts`, `resolve-config.test.ts` | 25 tests. |
 
 ### The variables to set
 
@@ -142,120 +133,63 @@ dead code and production behaves exactly as it does today.
 |---|---|
 | `GHL_OAUTH_CLIENT_ID` | From the Marketplace app. Public. |
 | `GHL_OAUTH_CLIENT_SECRET` | From the Marketplace app. **Secret.** |
-| `GHL_OAUTH_REDIRECT_URI` | `https://<the live domain>/api/connect/callback` — must match the app exactly. **No "ghl" in this path:** GoHighLevel refuses a redirect URL containing a reference to itself when the app is white-labelled (hit on 2026-09-23). |
-| `GHL_OAUTH_APP_ID` | Optional. Only for reading the installed-location list. |
-| `GHL_AGENCY_COMPANY_ID` | Optional. A check that we installed into the right agency. |
+| `GHL_OAUTH_REDIRECT_URI` | `https://<the live domain>/api/connect/callback`. **No "ghl" in this path:** a white-labelled app refuses a redirect URL that names the platform (hit on 2026-09-23). |
 | `GHL_OAUTH_ENABLED` | `true` to use it. **Set this last, on its own.** |
 
-To install once the variables are in place: sign in as a contractor and open
-`/api/connect/start`. The callback page says what happened and changes nothing
-by itself.
+To install: sign in as a contractor in the sub-account, open `/api/connect/start`,
+approve. The callback page says what happened and changes nothing by itself.
 
-### The table (sketch — final form in the migration)
+## 5 · The app, as configured
 
-| Column | Why |
-|---|---|
-| `company_id` | The agency. One row. |
-| `refresh_token` | Rotates on every refresh. The only long-lived secret. |
-| `access_token`, `expires_at` | Agency-level, short-lived. |
-| `claimed_at`, `claimed_by` | Single-writer lock during refresh. |
-| `installed_locations` | Cached list; refreshed on a schedule and on install. |
-
-Location tokens are cached **in memory per instance**, not in the database — they
-live ~24h, cost one call to re-mint, and keeping them out of the database keeps
-the blast radius to one row.
-
-## 5 · Scopes
-
-The app needs exactly what the Hub already calls. From the source:
-
-| Call | Where |
-|---|---|
-| `GET /locations/{id}` | sign-in verification |
-| `GET /contacts/…`, `POST /contacts/…` | client and crew records |
-| `POST /conversations/messages`, `/emails` | appointment and PM email |
-| `/objects/{key}/records/search` | the Project custom object |
-| `/invoices`, `/invoices/{id}/send`, `/invoices/template` | the invoice rail |
-
-I will list the exact scope strings against the app's scope picker before you
-approve them — GHL's names do not always match the endpoint paths, and a guess
-here costs a re-install. **A missing scope is a 401 on that one endpoint and
-nothing worse**, so this is recoverable, not fatal.
+- **Private**, **Sub-Account** target, **Agency only** may install, white-label.
+- Redirect URL as above.
+- **Seven scopes**, each traced to a call in the code:
+  `locations.readonly` (verify a sub-account at sign-in), `contacts.readonly` +
+  `contacts.write` (find or create the person an email goes to),
+  `conversations.write` + `conversations/message.write` (send it),
+  `invoices.readonly` + `invoices.write` (the Payments screen and the rail).
+- Nothing under Objects, for the reason in §4.
 
 ## 6 · Rollout
 
-1. App created, installed on the agency, `GHL_OAUTH_ENABLED` **off**. Nothing
-   changes. Verify the install landed and the installed-locations list is right.
-2. Flag on. The resolver is tried first; **on any failure it falls back to the
-   PIT for that location** and logs loudly. Both paths live, so a bad refresh is
-   an alert rather than an outage.
-3. Watch one contractor through a real invoice send.
-4. Watch the second sub-account (APS) — the one that proves cross-tenant access
-   actually works, since that is what PITs cannot do.
-5. Fallback removed, `GHL_LOCATION_TOKENS` emptied, PIT env vars deleted.
+1. App created, variables set, `GHL_OAUTH_ENABLED` **off**. Nothing changes.
+2. Install on one sub-account. Still nothing changes.
+3. Flag on. The install is tried first; **on any failure it falls back to that
+   sub-account's PIT** and logs which. Both paths live, so a bad install is an
+   alert rather than an outage.
+4. Watch that contractor send a real invoice.
+5. Install on the second sub-account (APS) and repeat — the cross-sub-account
+   case is the one PITs cannot do.
+6. Fallback removed, `GHL_LOCATION_TOKENS` emptied, PIT env vars deleted.
 
-Step 5 is a separate, deliberate change. Not the same day as step 2.
+Step 6 is a separate, deliberate change. Not the same day as step 3.
 
 ## 7 · The risks, stated plainly
 
 | Risk | What we do about it |
 |---|---|
-| **One credential reaches every sub-account.** The agency refresh token is more powerful than any PIT it replaces. | It lives in one database row, never in an env var, never in the repo. The app's tenancy checks (`tenantScopeFor`, `hubScopeOfProject`) are unchanged and are what actually separate contractors — they always were. |
-| **A broken refresh breaks everyone**, not one contractor. | Single-writer claim so instances cannot fight; PIT fallback through step 4; a refresh failure logs at error level with the agency id so it is findable. |
-| **Refresh tokens rotate.** Losing one means re-installing. | The claim pattern, plus we never discard the old token until the new one is written. |
-| **Tokens in the database.** | Same handling as everything else in the Hub: service-role access only, never returned to a client, never logged. |
-| **The app is installed on sub-accounts we do not serve.** | Install list is the gate at sign-in; a location with no BuildSuite `auth_profiles` still gets no session, exactly as today. |
+| **Refresh tokens rotate.** Two instances refreshing one row leave one holding a dead token — that contractor's whole API access. | A database claim, so only one instance refreshes; the others wait and read the winner's token. The claim expires, so a crash cannot lock a contractor out for ever. |
+| **Tokens in the database.** | Service-role access only, RLS on with no policies, never returned to a client, never logged. |
+| **A token dies before its stated expiry** (uninstalled, re-installed). | The cache is capped at an hour whatever GoHighLevel says, so the worst case self-heals in an hour. |
+| **An install answering for the wrong sub-account.** | Refused and not stored, both at install and at refresh. Two tests. |
+| **A contractor uninstalls the app.** | Their calls fall back to their PIT if one exists, or 401 exactly as they would today. Logged by location. |
 
 ## 8 · What I can verify, and what I cannot
 
-I can build and test all of it against a stand-in GHL server, including refresh,
-the single-writer claim, the location-token exchange, 401-and-retry, and every
-guardrail. That is how the rest of the Hub is tested.
+Everything above is tested against a stand-in GoHighLevel and a stand-in Hub,
+including refresh, the claim, cross-tenant refusal, and every fallback.
 
-**I cannot test the real handshake until the app exists** — it needs the client
-secret and one live install. So the last step is you and me doing one install
-together and watching a single contractor's invoice call succeed on the new
-path. I will not report this working on the strength of the fake.
+**The real handshake cannot be tested until the app exists** — it needs the
+client secret and one live install. The last step is doing one install together
+and watching a single contractor's invoice succeed on the new path.
 
-## 9 · Half 2 — SSO, for later
+## 9 · Later, and separately — SSO
 
-Half 1 removes the keys. It does **not** answer *who* a contractor is: today the
-identity is the sub-account, so everyone on a contractor's staff shares one
-session and nothing is attributable to a person. That is the largest gap in
-`AUTHENTICATION-AUDIT.md`.
+This removes the keys. It does not answer *who* a contractor is: the identity is
+the sub-account, so everyone on their staff shares one session and nothing is
+attributable to a person. That is the largest gap in `AUTHENTICATION-AUDIT.md`.
 
-GoHighLevel's Marketplace SSO fixes it — the app receives encrypted user data
-(name, email, user id, role) for whoever is signed in. Two conditions come with
-it:
-
-- The Hub has to be embedded **as a Custom Page inside GoHighLevel**, not opened
-  as a menu link to an external site. SSO only reaches an embedded app.
-- Cookies in an iframe need `SameSite=None; Secure`, which is a change to
-  `lib/session.ts` (`sameSite: 'lax'` today) and affects every role, not just
-  contractors.
-
-Worth doing. Not worth bundling into the change that removes the keys.
-
----
-
-## 10 · What I need from you
-
-1. **The Marketplace app created** in the agency, by whoever owns it. Client id,
-   client secret and (later) SSO key go straight into the host's environment
-   variables. **Do not paste the secret into a chat or the repo.** Alternatively,
-   give me agency access and I will create it.
-2. **Where this runs.** Railway or Vercel? The redirect URL is baked into the app
-   and must match the live domain, so this is decided *before* the app is
-   created, not after.
-3. **Who clicks Install**, at agency level — and whether it installs to all
-   sub-accounts or a chosen list.
-4. **Migration 0016 run**, the same way you ran 0012, 0014 and 0015.
-5. **Scope approval**, once I put the exact list in front of you (§5).
-6. **A decision on the fallback:** keep the PIT path behind the flag until the
-   first contractor is proven. I recommend yes.
-
-## 11 · Also still open, unrelated to this
-
-- Migration `0015_task_links_and_client_actions.sql` has not been run.
-- A payment gateway connected in GoHighLevel, before any real payment.
-- `docs/AUTHENTICATION-AUDIT.md`, four EODs and this file are uncommitted.
+GoHighLevel's Marketplace SSO fixes it, at two costs: the Hub has to be embedded
+as a Custom Page inside GoHighLevel, and iframe cookies need
+`SameSite=None; Secure` — a change to the *shared* session in `lib/session.ts`,
+so it touches crew and homeowners too. Worth doing. Not worth bundling with this.

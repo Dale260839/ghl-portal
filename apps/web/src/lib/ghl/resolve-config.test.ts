@@ -89,19 +89,19 @@ test('§ the switch on and the Hub unreachable falls back to the PIT, loudly', a
 interface FakeOptions {
   /** 0016 has not been run. */
   tableMissing?: boolean;
-  /** The app is not installed on this sub-account. */
-  refuseLocation?: boolean;
+  /** The app is installed nowhere at all. */
+  notInstalled?: boolean;
 }
 
 function installedRow() {
   return {
+    location_id: AFC,
     company_id: 'comp-1',
     client_id: 'client-1',
     refresh_token: 'refresh-1',
-    access_token: 'agency-access',
-    access_expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-    installed_locations: [AFC],
-    installed_refreshed_at: null,
+    access_token: 'stored-token',
+    access_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+    scopes: null,
     claim_id: null,
     claimed_at: null,
   };
@@ -124,12 +124,11 @@ async function withFakeWorld<T>(options: FakeOptions, run: () => Promise<T>): Pr
     if (url.includes('/rest/v1/hub_ghl_oauth')) {
       if (options.tableMissing) return new Response('relation does not exist', { status: 404 });
       if (url.includes('limit=0')) return new Response('[]', { status: 200 });
-      return new Response(JSON.stringify([installedRow()]), { status: 200 });
-    }
-
-    if (url.endsWith('/oauth/locationToken')) {
-      if (options.refuseLocation) return new Response('not installed', { status: 401 });
-      return new Response(JSON.stringify({ access_token: 'minted-token', expires_in: 86_400 }), { status: 200 });
+      // The store filters on the sub-account, so a location with no install
+      // reads back nothing — exactly as the database would answer.
+      const wanted = /location_id=eq\.([A-Za-z0-9]+)/.exec(url)?.[1];
+      const rows = !options.notInstalled && wanted === AFC ? [installedRow()] : [];
+      return new Response(JSON.stringify(rows), { status: 200 });
     }
 
     throw new Error(`unexpected request: ${url}`);
@@ -159,10 +158,10 @@ test('§ installed and fully configured, but NOT switched on: nothing changes', 
   });
 });
 
-test('§ switched on and installed: the sub-account’s own minted token, not the PIT', async () => {
+test('§ switched on and installed: the sub-account’s own token, not the PIT', async () => {
   await withFakeWorld({}, async () => {
     const resolved = await configForLocation(base, AFC, process.env);
-    assert.equal(resolved.token, 'minted-token');
+    assert.equal(resolved.token, 'stored-token');
     assert.equal(resolved.locationId, AFC);
   });
 });
@@ -175,8 +174,10 @@ test('§ switched on, but 0016 has not been run: the PIT, and nothing breaks', a
   });
 });
 
-test('§ switched on, installed, but not on THIS sub-account: that contractor’s own PIT', async () => {
-  await withFakeWorld({ refuseLocation: true }, async () => {
+test('§ switched on, but not installed on THIS sub-account: that contractor’s own PIT', async () => {
+  // AFC is connected, APS is not. The one that is not must not borrow the
+  // one that is — it falls back to its own Private Integration token.
+  await withFakeWorld({}, async () => {
     assert.equal((await configForLocation(base, APS, { ...process.env, ...PIT_ENV })).token, 'aps-pit');
   });
 });
@@ -185,7 +186,7 @@ test('a sub-account with neither an install nor a PIT is left exactly as it is t
   // Which is the default token and a 401 that names the problem. Inventing a
   // credential here would be a cross-tenant leak; inventing silence would be a
   // contractor believing an invoice went out.
-  await withFakeWorld({ refuseLocation: true }, async () => {
+  await withFakeWorld({}, async () => {
     assert.equal((await configForLocation(base, APS, process.env)).token, 'default-pit');
   });
 });

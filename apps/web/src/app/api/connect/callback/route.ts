@@ -3,29 +3,30 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { currentAccess } from '@/lib/access';
 import { verify } from '@/lib/auth/session-crypto';
 import { readOauthConfig } from '@/lib/ghl/oauth-config';
-import { exchangeCode, installedLocations } from '@/lib/ghl/oauth-agency';
+import { exchangeCode } from '@/lib/ghl/oauth-tokens';
 import { resetLocationTokens } from '@/lib/ghl/oauth-location';
 import { resetResolvedConfig } from '@/lib/ghl/resolve-config';
+import { isGhlLocationId } from '@/lib/ghl/config';
 import { getHubGhlOauth } from '@/lib/hub-db/ghl-oauth';
 
 /**
- * Step two: GoHighLevel returns here with a one-time code, which becomes the
- * agency refresh token.
+ * Step two: GoHighLevel returns here with a one-time code, which becomes that
+ * sub-account's tokens.
  *
  * ---------------------------------------------------------------------------
  * WHAT THIS PAGE MUST NEVER DO
  *
  * Show a token. Not in the HTML, not in an error, not in a log line. Everything
- * below reports counts and ids; the secrets go straight into the database row
+ * below reports ids and counts; the secrets go straight into the database row
  * and are never read back out to a response.
  *
  * WHY IT DOES NOT SWITCH ITSELF ON
  *
- * Completing the install changes nothing about how requests resolve
- * credentials. That still takes `GHL_OAUTH_ENABLED=true`, set deliberately,
- * separately, by a person who is watching. An install that silently redirected
- * every contractor's API calls onto a brand-new path the moment somebody
- * clicked Approve is exactly the kind of change that cannot be undone calmly.
+ * Completing an install changes nothing about how requests resolve credentials.
+ * That still takes `GHL_OAUTH_ENABLED=true`, set deliberately, separately, by a
+ * person who is watching. An install that silently redirected a contractor's
+ * API calls onto a brand-new path the moment somebody clicked Approve is
+ * exactly the kind of change that cannot be undone calmly.
  * ---------------------------------------------------------------------------
  */
 
@@ -100,39 +101,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // A Location-level install holds a token for ONE sub-account, which is what
-  // we already have in the form of Private Integration tokens. Accepting it
-  // would look like success and change nothing.
-  if (tokens.userType !== '' && tokens.userType !== 'Company') {
+  // The whole install hangs on which sub-account this is for. GoHighLevel names
+  // it in the token response; without a real one there is nothing to key the
+  // row on, and guessing — from the installer's session, say — would file one
+  // contractor's credential under another's location.
+  if (!isGhlLocationId(tokens.locationId)) {
     return page(
-      'That was installed on a single sub-account',
-      `<p>This app has to be installed at <strong>agency</strong> level to serve every contractor. Received a <code>${escapeHtml(tokens.userType)}</code> install. Nothing was stored.</p>`,
-      400,
-    );
-  }
-
-  const companyId = tokens.companyId || oauth.config.companyId;
-  if (companyId === '') {
-    return page(
-      'No agency id came back',
-      '<p>Without the company id no sub-account token can be minted. Nothing was stored.</p>',
+      'GoHighLevel did not say which sub-account this is',
+      '<p>The install came back without a location id, so there is nothing to file it under. Nothing was stored. Check the app is installed on a sub-account rather than at agency level.</p>',
       502,
-    );
-  }
-  if (oauth.config.companyId !== '' && tokens.companyId !== '' && tokens.companyId !== oauth.config.companyId) {
-    return page(
-      'That is a different agency',
-      '<p>The install came back for an agency other than the one this deployment expects. Nothing was stored.</p>',
-      400,
     );
   }
 
   const stored = await hub.store.save({
-    companyId,
+    locationId: tokens.locationId,
+    companyId: tokens.companyId === '' ? null : tokens.companyId,
     clientId: oauth.config.clientId,
     refreshToken: tokens.refreshToken,
     accessToken: tokens.accessToken,
     accessExpiresAt: tokens.expiresAt,
+    scopes: tokens.scopes === '' ? null : tokens.scopes,
     installedBy: access.access.session.name,
   });
 
@@ -144,21 +132,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // A previous install's cached tokens are worthless now.
+  // A previous install's cached token for this sub-account is worthless now.
   resetLocationTokens();
   resetResolvedConfig();
 
-  const locations = await installedLocations(oauth.config, tokens.accessToken, companyId);
-  if (locations !== null) await hub.store.saveInstalledLocations(oauth.config.clientId, locations);
-
-  const count =
-    locations === null
-      ? '<p>The installed sub-account list could not be read, which is only a display detail — set <code>GHL_OAUTH_APP_ID</code> if you want it.</p>'
-      : `<p>Installed on <strong>${locations.length}</strong> sub-account${locations.length === 1 ? '' : 's'}.</p>`;
+  const connected = await hub.store.connectedLocations(oauth.config.clientId).catch(() => []);
+  const others =
+    connected.length > 1
+      ? `<p>${connected.length} sub-accounts are now connected.</p>`
+      : '';
 
   return page(
-    'Installed',
-    `${count}<p>Nothing has changed yet for anyone. To start using it, set <code>GHL_OAUTH_ENABLED=true</code> and redeploy. The Private Integration tokens stay as a fallback until you remove them.</p>`,
+    'Connected',
+    `<p>Sub-account <code>${escapeHtml(tokens.locationId)}</code> is connected.</p>${others}` +
+      '<p>Nothing has changed yet for anyone. To start using it, set <code>GHL_OAUTH_ENABLED=true</code> and redeploy. The Private Integration tokens stay as a fallback until you remove them.</p>',
     200,
   );
 }

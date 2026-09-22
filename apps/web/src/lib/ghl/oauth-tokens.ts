@@ -3,26 +3,26 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 
 import type { GhlOauthConfig } from './oauth-config.ts';
-import type { HubGhlOauth, OauthInstall } from '../hub-db/ghl-oauth.ts';
+import type { HubGhlOauth, LocationInstall } from '../hub-db/ghl-oauth.ts';
 
 /**
- * The agency-level half of the Marketplace install: the refresh token, and the
- * short-lived agency access token minted from it.
+ * The token half of the Marketplace install: turning the install code into a
+ * sub-account's tokens, and keeping the access token alive afterwards.
  *
  * ---------------------------------------------------------------------------
  * THE ONE HAZARD IN THIS FILE
  *
  * GoHighLevel rotates the refresh token: every refresh returns a new one and
  * kills the old. On a platform that runs many instances at once (Vercel does),
- * two simultaneous refreshes mean one instance ends up holding a token that is
- * already dead — and since this single credential is what every contractor's
- * API access now depends on, that is an outage for all of them rather than one.
+ * two simultaneous refreshes of the same row mean one instance ends up holding
+ * a token that is already dead — and that is the contractor's whole API access.
  *
  * So a refresh is claimed in the database first, and only the winner calls
  * GoHighLevel. The losers wait and re-read the row, which by then holds the
  * winner's token. The claim expires (unlike the invoice claim in 0014) because
- * a crashed refresh must not lock the agency out for ever; a duplicate refresh
- * wastes a token, where a duplicate invoice would cost a homeowner real money.
+ * a crashed refresh must not lock a contractor out for ever; a duplicate
+ * refresh wastes a token, where a duplicate invoice would cost a homeowner
+ * real money.
  *
  * NOTHING HERE THROWS ITS WAY TO A USER. Every failure returns null, and the
  * caller falls back to the Private Integration token that serves that location
@@ -41,16 +41,21 @@ export interface TokenResponse {
   accessToken: string;
   refreshToken: string;
   expiresAt: string;
+  /** The sub-account this install is for. GoHighLevel names it in the response. */
+  locationId: string;
   companyId: string;
   userType: string;
+  scopes: string;
 }
 
 interface RawToken {
   access_token?: unknown;
   refresh_token?: unknown;
   expires_in?: unknown;
+  locationId?: unknown;
   companyId?: unknown;
   userType?: unknown;
+  scope?: unknown;
 }
 
 function parseToken(raw: RawToken, now: number): TokenResponse | null {
@@ -60,16 +65,17 @@ function parseToken(raw: RawToken, now: number): TokenResponse | null {
 
   // GHL sends seconds. A missing or nonsensical value is treated as one hour,
   // which is short enough to be safe and long enough not to hammer the endpoint.
-  const seconds = typeof raw.expires_in === 'number' && Number.isFinite(raw.expires_in)
-    ? raw.expires_in
-    : 3600;
+  const seconds =
+    typeof raw.expires_in === 'number' && Number.isFinite(raw.expires_in) ? raw.expires_in : 3600;
 
   return {
     accessToken,
     refreshToken,
     expiresAt: new Date(now + seconds * 1000).toISOString(),
+    locationId: typeof raw.locationId === 'string' ? raw.locationId : '',
     companyId: typeof raw.companyId === 'string' ? raw.companyId : '',
     userType: typeof raw.userType === 'string' ? raw.userType : '',
+    scopes: typeof raw.scope === 'string' ? raw.scope : '',
   };
 }
 
@@ -98,9 +104,7 @@ async function postToken(
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    console.error(
-      `[ghl-oauth] token endpoint refused: ${response.status} ${detail.slice(0, 200)}`,
-    );
+    console.error(`[ghl-oauth] token endpoint refused: ${response.status} ${detail.slice(0, 200)}`);
     return null;
   }
 
@@ -109,7 +113,16 @@ async function postToken(
   return parsed;
 }
 
-/** The install handshake: the one-time code becomes the agency refresh token. */
+/**
+ * The install handshake: the one-time code becomes that sub-account's tokens.
+ *
+ * `user_type: 'Location'` because the scopes we need — contacts, conversations,
+ * invoices — are issued only to location-level tokens. GoHighLevel greys them
+ * out entirely on an agency-targeted app: *"This scope works with Location-level
+ * tokens only, which are issued when a Sub-Account installs your app"*
+ * (confirmed in the scope picker, 2026-09-23). An agency install would have
+ * been zero-click; it is not available to us.
+ */
 export function exchangeCode(
   config: GhlOauthConfig,
   code: string,
@@ -120,10 +133,7 @@ export function exchangeCode(
     {
       grant_type: 'authorization_code',
       code,
-      // Agency-level, not a single sub-account. This is the whole point of the
-      // change: `Location` would install into one sub-account and we would be
-      // back to a key per contractor.
-      user_type: 'Company',
+      user_type: 'Location',
       redirect_uri: config.redirectUri,
     },
     options.fetchImpl ?? fetch,
@@ -131,7 +141,7 @@ export function exchangeCode(
   );
 }
 
-export interface AgencyTokenDeps {
+export interface LocationTokenDeps {
   config: GhlOauthConfig;
   store: HubGhlOauth;
   fetchImpl?: typeof fetch;
@@ -139,7 +149,7 @@ export interface AgencyTokenDeps {
   sleep?: (ms: number) => Promise<void>;
 }
 
-function fresh(install: OauthInstall, now: number): string | null {
+function fresh(install: LocationInstall, now: number): string | null {
   if (install.accessToken === null || install.accessExpiresAt === null) return null;
   const expires = Date.parse(install.accessExpiresAt);
   if (Number.isNaN(expires)) return null;
@@ -147,114 +157,86 @@ function fresh(install: OauthInstall, now: number): string | null {
 }
 
 /**
- * A usable agency access token, or null if there is no working install.
+ * A usable access token for one sub-account, or null if it has no working
+ * install.
  *
  * Reads the row every time rather than trusting a process-local cache: the row
  * is the only place that knows whether another instance has rotated the token,
- * and one small database read is cheaper than an outage.
+ * and one small database read is cheaper than an outage. (The caller keeps a
+ * short-lived cache of its own — see `oauth-location.ts`.)
  */
-export async function agencyAccessToken(deps: AgencyTokenDeps): Promise<string | null> {
+export async function locationAccessToken(
+  deps: LocationTokenDeps,
+  locationId: string,
+): Promise<string | null> {
   const { config, store } = deps;
   const fetchImpl = deps.fetchImpl ?? fetch;
   const now = deps.now ?? Date.now;
   const sleep = deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
 
-  const install = await store.read(config.clientId);
+  const install = await store.read(config.clientId, locationId);
   if (install === null) return null;
 
   const existing = fresh(install, now());
   if (existing !== null) return existing;
 
   const claimId = randomUUID();
-  if (!(await store.claim(config.clientId, claimId, CLAIM_STALE_MS))) {
-    // Another instance is refreshing this very second. Wait for it rather than
+  if (!(await store.claim(config.clientId, locationId, claimId, CLAIM_STALE_MS))) {
+    // Another instance is refreshing this very row. Wait for it rather than
     // starting a second refresh that would invalidate whichever token loses.
     await sleep(LOSER_WAIT_MS);
-    const after = await store.read(config.clientId);
+    const after = await store.read(config.clientId, locationId);
     return after === null ? null : fresh(after, now());
   }
 
   try {
     const tokens = await postToken(
       config,
-      { grant_type: 'refresh_token', refresh_token: install.refreshToken, user_type: 'Company' },
+      {
+        grant_type: 'refresh_token',
+        refresh_token: install.refreshToken,
+        user_type: 'Location',
+      },
       fetchImpl,
       now(),
     );
 
     if (tokens === null) {
-      await store.releaseClaim(config.clientId, claimId);
+      await store.releaseClaim(config.clientId, locationId, claimId);
       return null;
     }
 
-    const saved = await store.saveRefreshed(config.clientId, claimId, {
+    // If GoHighLevel names a location in the response it must be the one we
+    // refreshed. Storing another sub-account's token against this row would be
+    // a cross-tenant leak with a very long life.
+    if (tokens.locationId !== '' && tokens.locationId !== locationId) {
+      console.error(
+        `[ghl-oauth] refreshed ${locationId} and was given ${tokens.locationId} — refusing`,
+      );
+      await store.releaseClaim(config.clientId, locationId, claimId);
+      return null;
+    }
+
+    const saved = await store.saveRefreshed(config.clientId, locationId, claimId, {
       refreshToken: tokens.refreshToken,
       accessToken: tokens.accessToken,
       accessExpiresAt: tokens.expiresAt,
     });
 
     if (!saved) {
-      // Our claim expired and someone else took over mid-refresh. The token in
-      // hand still works for this request, but the refresh token we were given
-      // is now the only live one and we could not store it. Loud, because the
-      // fix is a re-install and nothing else will say so.
+      // Our claim expired and another instance took over mid-refresh. The token
+      // in hand still works for this request, but the refresh token we were
+      // given is now the only live one and we could not store it. Loud, because
+      // the fix is a re-install of that sub-account and nothing else will say so.
       console.error(
-        '[ghl-oauth] refreshed the agency token but could not store it — the claim was taken. ' +
-          'If API calls start failing, re-install the Marketplace app.',
+        `[ghl-oauth] refreshed ${locationId} but could not store it — the claim was taken. ` +
+          'If that sub-account starts failing, install the app on it again.',
       );
     }
     return tokens.accessToken;
   } catch (error) {
-    console.error('[ghl-oauth] agency token refresh failed', error);
-    await store.releaseClaim(config.clientId, claimId).catch(() => undefined);
-    return null;
-  }
-}
-
-interface InstalledLocationsResponse {
-  locations?: { _id?: unknown; id?: unknown }[];
-}
-
-/**
- * Which sub-accounts the app is installed on.
- *
- * Used for the install confirmation screen and as a cache. It is never the
- * authority on who may sign in — that stays with BuildSuite's auth profiles,
- * exactly as it is today. A location on this list with no profile still gets no
- * session.
- */
-export async function installedLocations(
-  config: GhlOauthConfig,
-  agencyToken: string,
-  companyId: string,
-  options: { fetchImpl?: typeof fetch } = {},
-): Promise<string[] | null> {
-  if (config.appId === '') return null;
-  const fetchImpl = options.fetchImpl ?? fetch;
-
-  const url = new URL(`${config.apiBase}/oauth/installedLocations`);
-  url.searchParams.set('companyId', companyId);
-  url.searchParams.set('appId', config.appId);
-  url.searchParams.set('limit', '500');
-
-  try {
-    const response = await fetchImpl(url.toString(), {
-      headers: {
-        Authorization: `Bearer ${agencyToken}`,
-        Version: '2021-07-28',
-        Accept: 'application/json',
-      },
-    });
-    if (!response.ok) {
-      console.warn(`[ghl-oauth] installedLocations returned ${response.status}`);
-      return null;
-    }
-    const body = (await response.json()) as InstalledLocationsResponse;
-    return (body.locations ?? [])
-      .map((l) => (typeof l._id === 'string' ? l._id : typeof l.id === 'string' ? l.id : ''))
-      .filter((id) => id !== '');
-  } catch (error) {
-    console.warn('[ghl-oauth] installedLocations failed', error);
+    console.error(`[ghl-oauth] token refresh failed for ${locationId}`, error);
+    await store.releaseClaim(config.clientId, locationId, claimId).catch(() => undefined);
     return null;
   }
 }

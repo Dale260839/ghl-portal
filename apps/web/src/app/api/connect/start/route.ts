@@ -5,16 +5,16 @@ import { authorizeUrl, readOauthConfig } from '@/lib/ghl/oauth-config';
 import { sign } from '@/lib/auth/session-crypto';
 
 /**
- * Step one of installing the agency Marketplace app: send the agency owner to
- * GoHighLevel to approve it.
+ * Step one of connecting a sub-account: send whoever is installing to
+ * GoHighLevel to approve it, and let them pick the sub-account.
  *
  * ---------------------------------------------------------------------------
  * WHO MAY START AN INSTALL
  *
- * A signed-in contractor, and nobody else. The install writes the agency's
- * refresh token into the Hub — the single most powerful credential this system
- * holds — so an anonymous visitor finding this URL must not be able to begin
- * the flow, let alone replace a working install with one of their own.
+ * A signed-in contractor, and nobody else. The install writes that
+ * sub-account's refresh token into the Hub — full API access to a contractor's
+ * CRM — so an anonymous visitor finding this URL must not be able to begin the
+ * flow, let alone replace a working install with one of their own.
  *
  * The `state` is a signed token rather than a random string in a cookie: the
  * callback can then prove the flow started here, with the same HMAC that
