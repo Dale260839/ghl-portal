@@ -11,6 +11,8 @@ import { AccountSwitcher } from '@/components/account-switcher';
 import { listDevAccounts } from '@/lib/dev-accounts';
 import { viewAsEnabled } from '@/lib/view-as';
 import { DataModeBanner } from '@/components/ui';
+import { ConnectBanner } from '@/components/connect-banner';
+import { hasFallbackToken, locationConnected } from '@/lib/ghl/resolve-config';
 import { getHubClient } from '@/lib/hub-db/client';
 import { currentDataSource, currentSourceKind } from '@/lib/data/current-source';
 import {
@@ -125,12 +127,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </>
       }
       banner={
-        <DataModeBanner
-          kind={await currentSourceKind()}
-          hubConnected={hub.available}
-          // Contractor screens only — see `hubProblem` on DataModeBanner.
-          hubProblem={hub.available ? undefined : hub.missing.join(', ')}
-        />
+        <>
+          <DataModeBanner
+            kind={await currentSourceKind()}
+            hubConnected={hub.available}
+            // Contractor screens only — see `hubProblem` on DataModeBanner.
+            hubProblem={hub.available ? undefined : hub.missing.join(', ')}
+          />
+          {/* Asks this sub-account to install the app, if it has not. Renders
+              nothing at all when the app is switched off or already connected. */}
+          <ConnectBanner
+            connected={await locationConnected(scope.locationId)}
+            hasFallback={hasFallbackToken(scope.locationId)}
+          />
+        </>
       }
     >
       {children}

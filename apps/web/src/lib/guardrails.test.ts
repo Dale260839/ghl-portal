@@ -572,6 +572,38 @@ test('anything that acts on another sub-account uses that sub-account’s token'
   assert.match(withoutComments(resolver.text), /withLocationToken\(/);
 });
 
+test('the connect prompt is on a contractor screen and nowhere else', () => {
+  // John, 2026-09-23: a sub-account's GoHighLevel token exists only if that
+  // sub-account installed the app, so somebody has to click once. This banner
+  // is where that click lives. Two things must stay true.
+  const layout = FILES.find((f) => rel(f.path) === 'app/dashboard/layout.tsx');
+  assert.ok(layout, 'the dashboard layout has moved');
+  // Catches the prompt being dropped in a refactor of the banner slot, which is
+  // the realistic regression. It cannot catch it being neutered in place — a
+  // source scan cannot tell `{false && <ConnectBanner …>}` from the real thing.
+  assert.match(layout.text, /<ConnectBanner/, 'the contractor shell must offer the connect prompt');
+
+  // 1 · Never on a homeowner's or a crew member's screen. Installing is an
+  // account-owner action, and the prompt names an integration they have no
+  // business in.
+  for (const path of ['app/portal/layout.tsx', 'app/field/layout.tsx']) {
+    const file = FILES.find((f) => rel(f.path) === path);
+    if (file === undefined) continue;
+    assert.equal(
+      /ConnectBanner/.test(file.text),
+      false,
+      `${path} must not ask a client or crew member to connect GoHighLevel`,
+    );
+  }
+
+  // 2 · It renders nothing unless the answer is a definite "not connected".
+  // `null` means the app is switched off here, and a banner about a feature
+  // that is not live teaches people to ignore banners.
+  const banner = FILES.find((f) => rel(f.path) === 'components/connect-banner.tsx');
+  assert.ok(banner, 'components/connect-banner.tsx has moved');
+  assert.match(withoutComments(banner.text), /connected !== false.*return null/s);
+});
+
 test('a homeowner writes only into their own project, and only where the switch is on', () => {
   // John, 2026-09-19: the portal's "Raise an issue" and "Upload File" now work.
   // Both are writes by the least-trusted role in the system, so each must read

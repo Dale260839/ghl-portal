@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { configForLocation, resetResolvedConfig } from './resolve-config.ts';
+import {
+  configForLocation,
+  hasFallbackToken,
+  locationConnected,
+  resetResolvedConfig,
+} from './resolve-config.ts';
 import { resetLocationTokens } from './oauth-location.ts';
 import { withLocationToken, type GhlConfig } from './config.ts';
 import { resetHubClient } from '../hub-db/client.ts';
@@ -189,4 +194,42 @@ test('a sub-account with neither an install nor a PIT is left exactly as it is t
   await withFakeWorld({}, async () => {
     assert.equal((await configForLocation(base, APS, process.env)).token, 'default-pit');
   });
+});
+
+// ── The prompt that asks a sub-account to connect ───────────────────────────
+
+test('§ nothing is asked of anyone while the app is switched off', async () => {
+  // `null`, not `false`. A banner asking someone to connect to a feature that
+  // is not live teaches people to ignore banners.
+  clean();
+  assert.equal(await locationConnected(AFC, PIT_ENV), null);
+
+  // The case that matters, and the one a weaker test missed: everything is in
+  // place — app configured, Hub reachable, this sub-account even installed —
+  // and the only thing missing is the switch. Still silence.
+  await withFakeWorld({}, async () => {
+    const off = { ...process.env } as unknown as NodeJS.ProcessEnv;
+    delete off.GHL_OAUTH_ENABLED;
+    assert.equal(await locationConnected(AFC, off), null);
+  });
+});
+
+test('§ connected is true; not connected is false, per sub-account', async () => {
+  await withFakeWorld({}, async () => {
+    assert.equal(await locationConnected(AFC, process.env), true);
+    assert.equal(await locationConnected(APS, process.env), false);
+  });
+});
+
+test('a blank or missing location is never asked to connect', async () => {
+  await withFakeWorld({}, async () => {
+    assert.equal(await locationConnected('', process.env), null);
+    assert.equal(await locationConnected(null, process.env), null);
+  });
+});
+
+test('the fallback check only changes the wording, and reads the token map', () => {
+  assert.equal(hasFallbackToken(AFC, PIT_ENV), true);
+  assert.equal(hasFallbackToken('kL9ozQ3dTdKcwMfUeXtY', PIT_ENV), false);
+  assert.equal(hasFallbackToken(null, PIT_ENV), false);
 });

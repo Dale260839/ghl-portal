@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { withLocationToken, type GhlConfig } from './config.ts';
+import { readLocationTokens, withLocationToken, type GhlConfig } from './config.ts';
 import { oauthEnabled, readOauthConfig } from './oauth-config.ts';
 import { OauthTokenResolver } from './oauth-location.ts';
 import { getHubGhlOauth } from '../hub-db/ghl-oauth.ts';
@@ -91,6 +91,51 @@ export async function configForLocation(
   }
 
   return { ...located, token };
+}
+
+/**
+ * Whether this sub-account has installed the app — for the prompt that asks
+ * them to.
+ *
+ * Three answers, and the third is the point:
+ *
+ *   · `null` — the question does not arise. The Marketplace app is switched
+ *     off on this deployment, so there is nothing to connect and nothing to
+ *     say. Never nag about a feature that is not live.
+ *   · `true`  — connected.
+ *   · `false` — not connected, and someone should be asked to click Connect.
+ *
+ * It goes through the same resolver as a real request, so it costs nothing on
+ * a connected sub-account (the token is already cached) and one small database
+ * read a minute on one that is not.
+ */
+export async function locationConnected(
+  locationId: string | null | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<boolean | null> {
+  if (!oauthEnabled(env)) return null;
+  if (typeof locationId !== 'string' || locationId.trim() === '') return null;
+
+  const oauth = oauthResolver(env);
+  if (oauth === null) return null;
+
+  return (await oauth.resolve(locationId.trim())) !== null;
+}
+
+/**
+ * Whether that sub-account still has a Private Integration token to fall back
+ * on.
+ *
+ * Only ever used to choose WORDING. A contractor with a fallback is being asked
+ * to move; one without it is being told why nothing works. Those are different
+ * sentences and only one of them is alarming.
+ */
+export function hasFallbackToken(
+  locationId: string | null | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (typeof locationId !== 'string' || locationId.trim() === '') return false;
+  return readLocationTokens(env).has(locationId.trim());
 }
 
 /**
