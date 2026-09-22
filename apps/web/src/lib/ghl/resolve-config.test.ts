@@ -35,7 +35,7 @@ const base: GhlConfig = {
 const OAUTH_ENV = {
   GHL_OAUTH_CLIENT_ID: 'client-1',
   GHL_OAUTH_CLIENT_SECRET: 'secret-1',
-  GHL_OAUTH_REDIRECT_URI: 'https://hub.test/api/ghl/oauth/callback',
+  GHL_OAUTH_REDIRECT_URI: 'https://hub.test/api/connect/callback',
   GHL_API_BASE_URL: 'https://ghl.test',
 };
 

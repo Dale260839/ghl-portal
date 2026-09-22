@@ -103,7 +103,7 @@ with a comment saying a different resolver returns that location's OAuth token
 | # | Step | State |
 |---|---|---|
 | 1 | **Migration 0016** — the agency install row, with the claim columns. Additive; creates a table and touches nothing that exists. | Written. **You run it.** |
-| 2 | **Install routes** — `/api/ghl/oauth/start` and `/api/ghl/oauth/callback`. Contractor-only, signed `state`, and the callback stores the refresh token without switching anything on. | Done |
+| 2 | **Install routes** — `/api/connect/start` and `/api/connect/callback`. Contractor-only, signed `state`, and the callback stores the refresh token without switching anything on. | Done |
 | 3 | **Agency token manager** — refresh behind a single-writer claim, so two instances cannot rotate at once and invalidate each other. Same pattern as 0014. | Done |
 | 4 | **`OauthTokenResolver`** — `POST /oauth/locationToken` per sub-account, cached until shortly before expiry, refusing anything that is not the location asked for. | Done |
 | 5 | **Wire the call sites** — invoices, email, the invoicing rail, and sign-in verification, all through one function with the PIT fallback. | Done (8 call sites) |
@@ -133,7 +133,7 @@ dead code and production behaves exactly as it does today.
 | `lib/ghl/oauth-agency.ts` | Code exchange, refresh, installed locations. |
 | `lib/ghl/oauth-location.ts` | `OauthTokenResolver` — a sub-account's own token. |
 | `lib/ghl/resolve-config.ts` | The one decision point, with the PIT fallback. |
-| `app/api/ghl/oauth/start`, `/callback` | The install flow, contractor-only, signed state. |
+| `app/api/connect/start`, `/callback` | The install flow, contractor-only, signed state. |
 | `lib/ghl/oauth.test.ts`, `resolve-config.test.ts` | 24 tests. Eight deliberate breaks, each caught. |
 
 ### The variables to set
@@ -142,13 +142,13 @@ dead code and production behaves exactly as it does today.
 |---|---|
 | `GHL_OAUTH_CLIENT_ID` | From the Marketplace app. Public. |
 | `GHL_OAUTH_CLIENT_SECRET` | From the Marketplace app. **Secret.** |
-| `GHL_OAUTH_REDIRECT_URI` | `https://<the live domain>/api/ghl/oauth/callback` — must match the app exactly. |
+| `GHL_OAUTH_REDIRECT_URI` | `https://<the live domain>/api/connect/callback` — must match the app exactly. **No "ghl" in this path:** GoHighLevel refuses a redirect URL containing a reference to itself when the app is white-labelled (hit on 2026-09-23). |
 | `GHL_OAUTH_APP_ID` | Optional. Only for reading the installed-location list. |
 | `GHL_AGENCY_COMPANY_ID` | Optional. A check that we installed into the right agency. |
 | `GHL_OAUTH_ENABLED` | `true` to use it. **Set this last, on its own.** |
 
 To install once the variables are in place: sign in as a contractor and open
-`/api/ghl/oauth/start`. The callback page says what happened and changes nothing
+`/api/connect/start`. The callback page says what happened and changes nothing
 by itself.
 
 ### The table (sketch — final form in the migration)

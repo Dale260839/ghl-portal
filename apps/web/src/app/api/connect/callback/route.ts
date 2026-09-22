@@ -55,7 +55,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const secret = process.env.SESSION_SECRET ?? '';
   const checked = verify<{ purpose?: unknown }>(state, secret);
   if (!checked.valid || checked.payload.purpose !== 'ghl-install') {
-    // Either this did not start at /api/ghl/oauth/start, or it took more than
+    // Either this did not start at /api/connect/start, or it took more than
     // ten minutes. Both are "start again", and neither is worth more detail.
     return page(
       'That install link is not valid any more',

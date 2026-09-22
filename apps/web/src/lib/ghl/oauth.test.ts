@@ -21,7 +21,7 @@ const APS = 'IyKL37e3QdiFBx5ESI2d';
 const ENV = {
   GHL_OAUTH_CLIENT_ID: 'client-1',
   GHL_OAUTH_CLIENT_SECRET: 'secret-1',
-  GHL_OAUTH_REDIRECT_URI: 'https://hub.test/api/ghl/oauth/callback',
+  GHL_OAUTH_REDIRECT_URI: 'https://hub.test/api/connect/callback',
   GHL_API_BASE_URL: 'https://ghl.test',
 } as unknown as NodeJS.ProcessEnv;
 
@@ -48,7 +48,7 @@ test('§ the switch is off unless it is both set AND fully configured', () => {
 test('the authorisation URL carries the app, the return address and the signed state', () => {
   const url = new URL(authorizeUrl(config(), 'signed-state'));
   assert.equal(url.searchParams.get('client_id'), 'client-1');
-  assert.equal(url.searchParams.get('redirect_uri'), 'https://hub.test/api/ghl/oauth/callback');
+  assert.equal(url.searchParams.get('redirect_uri'), 'https://hub.test/api/connect/callback');
   assert.equal(url.searchParams.get('state'), 'signed-state');
   assert.equal(url.searchParams.get('response_type'), 'code');
   // The scopes are the Hub's actual calls and nothing else: an unused scope on
