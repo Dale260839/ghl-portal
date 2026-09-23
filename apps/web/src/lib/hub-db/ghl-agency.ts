@@ -4,8 +4,8 @@ import { getHubClient, type HubClient } from './client.ts';
 import { columnSupport } from './column-support.ts';
 
 /**
- * The agency's Marketplace install — one row, used only to prove sub-accounts
- * at sign-in.
+ * Agency Marketplace installs — one row per app, per agency. The location app
+ * mints sub-account tokens; the separate sign-in app proves sub-accounts.
  *
  * ---------------------------------------------------------------------------
  * THIS IS THE MOST POWERFUL ROW IN THE DATABASE
@@ -105,7 +105,7 @@ export class HubGhlAgency {
           },
         ],
       },
-      'company_id',
+      'company_id,client_id',
     );
     return true;
   }
