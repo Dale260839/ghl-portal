@@ -34,8 +34,8 @@ export function NotLinkedToContractor({
         This sign-in isn&apos;t linked to a contractor record yet.
       </p>
       <p className="mx-auto mt-2 max-w-lg text-xs leading-relaxed text-navy-400">
-        {what} is filed against a contractor, so we need to know which one you are before showing
-        anything. Rather than show you another company&apos;s, we show none.
+        We can&apos;t show {what.toLowerCase()} until this sign-in is linked to a contractor. Rather
+        than show you another company&apos;s records, we show none.
       </p>
       <p className="mx-auto mt-2 max-w-lg text-xs leading-relaxed text-navy-400">
         Ask your BuildSuite administrator to link this sign-in to the correct contractor record
@@ -45,7 +45,7 @@ export function NotLinkedToContractor({
             for <span className="font-medium text-navy-600">{email}</span>
           </>
         ) : null}
-        . A GoHighLevel sign-in alone does not choose a contractor for billing.
+        {'. A GoHighLevel sign-in alone does not choose a contractor for billing.'}
       </p>
     </Card>
   );
