@@ -8,6 +8,7 @@ import { resetLocationTokens } from '@/lib/ghl/oauth-location';
 import { resetResolvedConfig } from '@/lib/ghl/resolve-config';
 import { isGhlLocationId } from '@/lib/ghl/config';
 import { getHubGhlOauth } from '@/lib/hub-db/ghl-oauth';
+import { clearConnectAttempt } from '@/lib/connect-attempt';
 
 /**
  * Step two: GoHighLevel returns here with a one-time code, which becomes that
@@ -72,8 +73,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // sub-account's credential, and reaching any data still requires a BuildSuite
   // auth profile for that location. Worth the trade; a session is not.
   const secret = process.env.SESSION_SECRET ?? '';
-  const checked = verify<{ purpose?: unknown }>(state, secret);
+  const checked = verify<{ purpose?: unknown; auto?: unknown }>(state, secret);
   const signed = checked.valid && checked.payload.purpose === 'ghl-install';
+  // Started on the way in, not by somebody pressing Connect.
+  const auto = signed && checked.valid && checked.payload.auto === true;
   if (!signed && state !== '') {
     // A state we cannot read. Not necessarily an attack — GoHighLevel may send
     // its own — so it is logged rather than refused, and the session still has
@@ -156,6 +159,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // A previous install's cached token for this sub-account is worthless now.
   resetLocationTokens();
   resetResolvedConfig();
+  // Nothing left to ask them about.
+  await clearConnectAttempt();
+
+  // They were on their way to the dashboard and got sent through an approval
+  // screen. Put them back where they were going, rather than on a page telling
+  // them they completed a step they did not know they had started.
+  if (auto) {
+    // Through the front door, not straight to /dashboard: the person who was
+    // never able to sign in has no session yet, and this is the route that
+    // mints one — which now succeeds, because the credential it needs is the
+    // one just stored. Someone who already had a session is simply signed in
+    // again and lands in the same place.
+    return NextResponse.redirect(
+      new URL(`/auth/ghl?locationId=${encodeURIComponent(tokens.locationId)}`, request.nextUrl.origin),
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
 
   const connected = await hub.store.connectedLocations(oauth.config.clientId).catch(() => []);
   const others =

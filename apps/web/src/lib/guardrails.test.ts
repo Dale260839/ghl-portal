@@ -603,6 +603,41 @@ test('§ the install callback always has a gate, before it spends the code', () 
   }
 });
 
+test('§ connecting starts itself at most once, and never loops', () => {
+  // A contractor who is not connected is sent straight at GoHighLevel's
+  // approval screen — no button of ours. GoHighLevel's screen cannot be
+  // skipped; ours can, and should.
+  //
+  // The danger is the obvious one: the flow can end without connecting (a
+  // closed tab, a decline, an error), and re-sending them on the next page view
+  // would trap a browser in a loop it cannot leave. So every automatic start is
+  // remembered first, and the second time round they get a page that explains
+  // and asks.
+  const auth = FILES.find((f) => rel(f.path) === 'app/api/auth/ghl/route.ts');
+  assert.ok(auth, 'the GHL sign-in route has moved');
+  const text = withoutComments(auth.text);
+
+  // Marked before the redirect, never after: a redirect that forgets to record
+  // itself is the loop.
+  assert.ok(
+    text.indexOf('markConnectAttempted()') < text.indexOf('/api/connect/start'),
+    'the attempt must be recorded before the redirect that makes it',
+  );
+
+  // EVERY automatic start is guarded, not just the first one written. Counted
+  // rather than matched: an unguarded second path would sail past a test that
+  // only asks whether the guard appears somewhere in the file.
+  const starts = (text.match(/\/api\/connect\/start/g) ?? []).length;
+  const asked = (text.match(/hasTriedConnecting\(\)/g) ?? []).length;
+  const marked = (text.match(/markConnectAttempted\(\)/g) ?? []).length;
+  assert.ok(starts > 0, 'the automatic start has gone');
+  assert.ok(asked >= starts, `${starts} automatic start(s), only ${asked} guarded`);
+  assert.ok(marked >= starts, `${starts} automatic start(s), only ${marked} recorded`);
+
+  // And the automatic start only happens where connecting could finish.
+  assert.match(text, /oauthEnabled\(\)/);
+});
+
 test('§ the onboarding page reads nothing and belongs to nobody', () => {
   // It stands in FRONT of sign-in, because a contractor who has never connected
   // cannot sign in — proving their sub-account needs a credential for it, and

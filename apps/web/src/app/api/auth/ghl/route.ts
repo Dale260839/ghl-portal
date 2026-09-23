@@ -5,6 +5,8 @@ import { verifyGhlLocation } from '@/lib/auth/ghl-verify';
 import { readGhlConfig } from '@/lib/ghl/config';
 import { configForLocation } from '@/lib/ghl/resolve-config';
 import { oauthEnabled } from '@/lib/ghl/oauth-config';
+import { locationConnected } from '@/lib/ghl/resolve-config';
+import { hasTriedConnecting, markConnectAttempted } from '@/lib/connect-attempt';
 import { getBuildSuiteReader } from '@/lib/buildsuite/projects';
 import { homeFor, setSession, type Role } from '@/lib/session';
 
@@ -144,6 +146,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       // Only when connecting is switched on and could actually finish. The
       // page reads nothing and shows nothing but the id already in the URL.
       if (check.reason === 'unknown_location' && oauthEnabled()) {
+        // First time: send them straight at the approval screen. They came here
+        // to open Project Hub, not to read about why they cannot.
+        if (!(await hasTriedConnecting())) {
+          await markConnectAttempted();
+          return NextResponse.redirect(
+            new URL(
+              `/api/connect/start?locationId=${encodeURIComponent(locationId)}&auto=1`,
+              request.nextUrl.origin,
+            ),
+            { headers: { 'Cache-Control': 'no-store' } },
+          );
+        }
+        // They have been round this once already and are still not connected.
+        // Explain, and let them choose — never loop.
         return NextResponse.redirect(
           new URL(`/connect?locationId=${encodeURIComponent(locationId)}`, request.nextUrl.origin),
           { headers: { 'Cache-Control': 'no-store' } },
@@ -199,5 +215,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   console.log(
     `[auth] Signed in via GHL — location ${locationId}, ${authProfileIds.length} profile(s)`,
   );
+
+  // ── Connect on the way in, rather than asking ─────────────────────────────
+  //
+  // GoHighLevel will not issue a token for a sub-account without an approval
+  // from somebody who has access to it. That screen is theirs and cannot be
+  // skipped. What CAN go is every click on our side: a contractor whose account
+  // is not connected is taken straight to it, approves once, and lands on their
+  // dashboard. They never see a button of ours, and nobody ever handles a key.
+  //
+  // Once per browser per week (`connect-attempt.ts`), because this flow can end
+  // without connecting — a closed tab, a decline, an error — and sending
+  // somebody round the same loop on every page view is worse than the problem.
+  // After that the banner asks instead, and they choose their moment.
+  if (oauthEnabled() && !(await hasTriedConnecting())) {
+    const connected = await locationConnected(locationId);
+    if (connected === false) {
+      await markConnectAttempted();
+      return accept(
+        request,
+        `/api/connect/start?locationId=${encodeURIComponent(locationId)}&auto=1`,
+      );
+    }
+  }
+
   return accept(request, homeFor(role));
 }
