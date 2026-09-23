@@ -572,6 +572,35 @@ test('anything that acts on another sub-account uses that sub-account’s token'
   assert.match(withoutComments(resolver.text), /withLocationToken\(/);
 });
 
+test('§ the install callback is gated on a session, before it spends the code', () => {
+  // The signed `state` used to be the proof that an install began with us.
+  // GoHighLevel took that away on 2026-09-23: a paid app can only be installed
+  // from inside the platform, an app's pricing cannot be edited after its
+  // version is published, and a marketplace-initiated install carries no state
+  // of ours. So the contractor session is the only gate left, and these three
+  // things have to stay true.
+  const file = FILES.find((f) => rel(f.path) === 'app/api/connect/callback/route.ts');
+  assert.ok(file, 'the install callback has moved');
+  const text = withoutComments(file.text);
+
+  // 1 · A session, and a contractor one.
+  assert.match(text, /currentAccess\(\)/);
+  assert.match(text, /role !== 'contractor'/);
+
+  // 2 · BEFORE the code is exchanged. A one-time code spent on behalf of an
+  // anonymous visitor is spent, whatever the page says afterwards.
+  assert.ok(
+    text.indexOf("role !== 'contractor'") < text.indexOf('exchangeCode('),
+    'the session must be checked before the code is exchanged',
+  );
+
+  // 3 · No token ever reaches the HTML. Rendering one means interpolating it,
+  // so the interpolation itself is what this looks for.
+  for (const forbidden of ['${tokens.accessToken}', '${tokens.refreshToken}', '${install.refreshToken}']) {
+    assert.equal(text.includes(forbidden), false, `${forbidden} must never be rendered`);
+  }
+});
+
 test('the connect prompt is on a contractor screen and nowhere else', () => {
   // John, 2026-09-23: a sub-account's GoHighLevel token exists only if that
   // sub-account installed the app, so somebody has to click once. This banner

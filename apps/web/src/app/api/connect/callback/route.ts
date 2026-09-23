@@ -53,16 +53,32 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const state = (q.get('state') ?? '').trim();
   if (code === '') return page('Nothing to install', '<p>GoHighLevel sent no code.</p>', 400);
 
+  // ── Where did this install come from? ─────────────────────────────────────
+  //
+  // Two routes exist, and only one of them can carry our signature.
+  //
+  //   · Started at /api/connect/start — the `state` is ours, signed with the
+  //     same HMAC that protects sessions. Proof the flow began here.
+  //   · Started inside GoHighLevel's own App Marketplace — no `state` of ours,
+  //     because we were never asked. Forced on us on 2026-09-23: a paid app
+  //     "can only be installed within the platform", and an app's pricing
+  //     cannot be edited once its version is published.
+  //
+  // So a signed state is preferred and a missing one is allowed, with the
+  // contractor session below as the gate either way. What that costs: someone
+  // could induce a signed-in contractor to complete an install for a
+  // sub-account the attacker controls. The damage is one unusable row — it is
+  // keyed by the location GoHighLevel names, so it cannot overwrite another
+  // sub-account's credential, and reaching any data still requires a BuildSuite
+  // auth profile for that location. Worth the trade; a session is not.
   const secret = process.env.SESSION_SECRET ?? '';
   const checked = verify<{ purpose?: unknown }>(state, secret);
-  if (!checked.valid || checked.payload.purpose !== 'ghl-install') {
-    // Either this did not start at /api/connect/start, or it took more than
-    // ten minutes. Both are "start again", and neither is worth more detail.
-    return page(
-      'That install link is not valid any more',
-      '<p>Start again from the Hub. Install links are good for ten minutes.</p>',
-      400,
-    );
+  const signed = checked.valid && checked.payload.purpose === 'ghl-install';
+  if (!signed && state !== '') {
+    // A state we cannot read. Not necessarily an attack — GoHighLevel may send
+    // its own — so it is logged rather than refused, and the session still has
+    // to be there.
+    console.warn('[ghl-oauth] install callback carried a state we did not sign');
   }
 
   const access = await currentAccess();
@@ -121,7 +137,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     accessToken: tokens.accessToken,
     accessExpiresAt: tokens.expiresAt,
     scopes: tokens.scopes === '' ? null : tokens.scopes,
-    installedBy: access.access.session.name,
+    installedBy: signed
+      ? access.access.session.name
+      : `${access.access.session.name} (from the App Marketplace)`,
   });
 
   if (!stored) {
