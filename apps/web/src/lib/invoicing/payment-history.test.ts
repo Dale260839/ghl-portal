@@ -20,6 +20,10 @@ test('reject missing payment, invalid money and mismatched tenant/contact/id',()
  for(const patch of [{amountPaid:undefined},{amountPaid:-1},{amountPaid:NaN},{total:Infinity},{currency:'CAD'},{altId:'AFC'},{_id:'another'},{contactDetails:{id:'other'}},{status:'refunded'}]) assert.throws(()=>read(patch));
 });
 test('wrapped API response retains identity validation',()=>assert.equal(readInvoiceFinancials({invoice:row()},expected).paid,110));
+test('invoice number uses the verified account prefix once',()=>{
+ assert.equal(readInvoiceFinancials(row({invoiceNumber:'000003'}),{...expected,prefix:'INV-'}).number,'INV-000003');
+ assert.equal(readInvoiceFinancials(row({invoiceNumber:'INV-000003'}),{...expected,prefix:'INV-'}).number,'INV-000003');
+});
 test('timestamp dates use the account timezone while date-only fields keep their calendar day',()=>{
  assert.equal(invoiceDate('2026-09-24T00:00:00.000Z','America/Los_Angeles'),'2026-09-23');
  assert.equal(invoiceDate('2026-09-24','America/Los_Angeles'),'2026-09-24');
@@ -64,7 +68,14 @@ test('printable invoice shows requested totals and prior receipts without execut
  for(const label of ['INVOICE','Bill to','Subtotal','Tax','Invoice total','Paid on this invoice','Amount due','Previous project payments','Total previously received','Notes &amp; terms','Print / Save PDF'])assert.ok(html.includes(label),label);
  assert.ok(!html.includes('<script>alert'));assert.ok(!html.includes('onerror='));assert.ok(!html.includes('src="javascript:'));
  assert.ok(html.includes('Spokane, WA 99201'));
+ assert.ok(!html.includes('-$0.00'));
  assert.ok(historyNotes(history).includes('snapshot'));
+});
+test('an unpaid first installment is not presented as a received payment',()=>{
+ const html=invoiceStatement(read({status:'draft',amountPaid:0,amountDue:110}),{checkedAt:'2026-09-23',paid:0,entries:[]},'P-1');
+ assert.ok(html.includes('No previous payments recorded'));
+ assert.ok(html.includes('Total previously received'));
+ assert.ok(!html.includes('-$0.00'));
 });
 test('financial read includes location and disables cache; rejects foreign account',async()=>{
  const config={baseUrl:'https://example.test',apiVersion:'2021-07-28',token:'test',locationId:'APS',projectObjectKey:''};
@@ -85,4 +96,16 @@ test('location timezone is scoped to the same GHL sub-account',async()=>{
  assert.equal(await reader.locationTimeZone(),'America/Los_Angeles');
  const wrong=new GhlInvoices(config,async()=>new Response(JSON.stringify({location:{id:'AFC',timezone:'America/Los_Angeles'}})));
  await assert.rejects(wrong.locationTimeZone());
+});
+test('invoice number prefix comes only from this account settings',async()=>{
+ const config={baseUrl:'https://example.test',apiVersion:'2021-07-28',token:'test',locationId:'APS',projectObjectKey:''};
+ const reader=new GhlInvoices(config,async url=>{
+   assert.equal(String(url),'https://example.test/invoices/settings?altId=APS&altType=location');
+   return new Response(JSON.stringify({altId:'APS',altType:'location',invoiceNumberPrefix:'INV-'}));
+ });
+ assert.equal(await reader.invoiceNumberPrefix(),'INV-');
+ const optional=new GhlInvoices(config,async()=>new Response(JSON.stringify({invoiceNumberPrefix:'INV-'})));
+ assert.equal(await optional.invoiceNumberPrefix(),'INV-');
+ const wrong=new GhlInvoices(config,async()=>new Response(JSON.stringify({altId:'AFC',altType:'location',invoiceNumberPrefix:'INV-'})));
+ await assert.rejects(wrong.invoiceNumberPrefix());
 });
