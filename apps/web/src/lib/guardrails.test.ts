@@ -669,7 +669,7 @@ test('§ the onboarding page reads nothing and belongs to nobody', () => {
 });
 
 test('the connect prompt is on a contractor screen and nowhere else', () => {
-  // John, 2026-09-23: a sub-account's GoHighLevel token exists only if that
+  // Dale, 2026-09-23: a sub-account's GoHighLevel token exists only if that
   // sub-account installed the app, so somebody has to click once. This banner
   // is where that click lives. Two things must stay true.
   const layout = FILES.find((f) => rel(f.path) === 'app/dashboard/layout.tsx');
