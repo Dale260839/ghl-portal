@@ -53,7 +53,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const code = (q.get('code') ?? '').trim();
   const state = (q.get('state') ?? '').trim();
-  if (code === '') return page('Nothing to install', '<p>GoHighLevel sent no code.</p>', 400);
+  if (code === '') {
+    // Usually somebody opening this URL directly. It is a landing, not a step:
+    // GoHighLevel sends people here AFTER an approval, carrying a one-time
+    // code. Saying only "no code" leaves a person staring at a dead end with
+    // the right address in the bar, so it points at the door instead.
+    return page(
+      'There is nothing to finish here',
+      '<p>This address is where GoHighLevel sends you <em>after</em> approving Project Hub — ' +
+        'it does nothing on its own.</p>' +
+        '<p style="margin-top:1.5rem"><a href="/connect" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600">Start connecting</a></p>',
+      400,
+    );
+  }
 
   // ── Where did this install come from? ─────────────────────────────────────
   //
