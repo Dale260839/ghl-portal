@@ -67,6 +67,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       purpose: 'ghl-install',
       by,
       ...(isGhlLocationId(claimed) ? { locationId: claimed.trim() } : {}),
+      // Started on the way in rather than by somebody pressing Connect, so the
+      // callback should drop them on their dashboard instead of a page that
+      // congratulates them on a step they did not know they were taking.
+      ...(request.nextUrl.searchParams.get('auto') === '1' ? { auto: true } : {}),
     },
     secret,
     { ttlSeconds: 600 },
