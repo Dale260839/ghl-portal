@@ -44,3 +44,19 @@ Unit coverage: missing fields, identities, currency, draft/void/processing statu
 partial receipts, duplicate references, HTML escaping, data-read failures,
 pagination boundary, unchanged installment amount, read-only GHL requests.
 Existing 20-attempt concurrency test still permits exactly one draft creation.
+
+## Production verification, September 23
+
+- Deployment 98953e4 succeeded; the summary opened through the authenticated
+  APS contractor session and read INV-000003 successfully.
+- Actual API subtotal/total/due $1,212.50; tax/discount/paid $0.00.
+- GHL list: three drafts, $4,944.83; zero received. No earlier issued invoice
+  exists for BSA-APS-002. INV-000002 remains a $1,455.00 draft, not a receipt.
+- Appended a clearly dated breakdown and project-history example to INV-000003
+  using the GHL editor. Preserved Shipping Details and Terms. Save verified by
+  a fresh API-backed summary read. No send or payment action.
+- API due-date field reads September 24 while the GHL editor displays September
+  23. Summary labels source dates rather than silently inventing a timezone
+  conversion. Dates were not changed; editor timezone reconciliation remains.
+- Native PDF layout replacement, automatic refresh of already-created invoice
+  notes, and linking invoices created wholly outside the Hub are not implemented.

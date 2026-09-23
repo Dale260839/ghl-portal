@@ -39,13 +39,13 @@ export function readInvoiceFinancials(body: unknown, expected: { id: string; loc
   return {
     id: expected.id, number: String(row.invoiceNumber ?? expected.id), status, currency: 'USD',
     subtotal: money(summary.subTotal), tax: money(summary.tax), discount: money(summary.discount), total, paid, due,
-    issueDate: text(row.issueDate).slice(0,10), dueDate: text(row.dueDate).slice(0,10), terms: text(row.termsNotes),
+    issueDate: `${text(row.issueDate).slice(0,10)} (GHL record)`, dueDate: `${text(row.dueDate).slice(0,10)} (GHL record; confirm timezone in editor)`, terms: text(row.termsNotes),
     business: {name: text(business.name), logo:text(business.logoUrl), phone:text(business.phoneNo), website:text(business.website),
       address: typeof business.address === 'string' ? business.address : [address.addressLine1,address.addressLine2,[address.city,address.state,address.postalCode].filter(Boolean).join(', ')].filter(Boolean).join('\n')},
     customer: text(contact.name),
     items: (Array.isArray(row.invoiceItems) ? row.invoiceItems : []).map(value=>{
-      const item=record(value); const amount=money(item.amount), quantity=money(item.qty);
-      if (amount === null || quantity === null) throw new Error('Invoice item needs review');
+      const item=record(value); const amount=money(item.amount), quantity=item.qty;
+      if (amount === null || typeof quantity !== 'number' || !Number.isFinite(quantity) || quantity <= 0) throw new Error('Invoice item needs review');
       return {name:text(item.name),description:text(item.description),amount,quantity};
     }),
   };
