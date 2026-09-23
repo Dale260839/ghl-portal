@@ -4,6 +4,7 @@ import { describeRejection, verifyLanding } from '@/lib/auth/ghl-landing';
 import { verifyGhlLocation } from '@/lib/auth/ghl-verify';
 import { readGhlConfig } from '@/lib/ghl/config';
 import { configForLocation } from '@/lib/ghl/resolve-config';
+import { oauthEnabled } from '@/lib/ghl/oauth-config';
 import { getBuildSuiteReader } from '@/lib/buildsuite/projects';
 import { homeFor, setSession, type Role } from '@/lib/session';
 
@@ -130,6 +131,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
     if (!check.verified) {
       console.warn(`[auth] Location verification failed for ${locationId}: ${check.reason}`);
+
+      // ── The dead end that is really onboarding ────────────────────────────
+      //
+      // `unknown_location` means we hold no credential that can see this
+      // sub-account. For a contractor who has never connected, that is not a
+      // bad link — it is the whole of their setup, and the honest answer is
+      // "connect and you are in", not "that link doesn't match a sub-account
+      // we have access to" with nowhere to go. Measured on 2026-09-23, when a
+      // new sub-account's menu link did exactly that.
+      //
+      // Only when connecting is switched on and could actually finish. The
+      // page reads nothing and shows nothing but the id already in the URL.
+      if (check.reason === 'unknown_location' && oauthEnabled()) {
+        return NextResponse.redirect(
+          new URL(`/connect?locationId=${encodeURIComponent(locationId)}`, request.nextUrl.origin),
+          { headers: { 'Cache-Control': 'no-store' } },
+        );
+      }
+
       return reject(request, LOCATION_ERRORS[check.reason]);
     }
   } else if (landing.proof === 'unverified_development' && process.env.NODE_ENV === 'production') {

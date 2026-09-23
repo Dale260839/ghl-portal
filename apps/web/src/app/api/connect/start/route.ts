@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { currentAccess } from '@/lib/access';
 import { authorizeUrl, readOauthConfig } from '@/lib/ghl/oauth-config';
 import { sign } from '@/lib/auth/session-crypto';
+import { isGhlLocationId } from '@/lib/ghl/config';
 
 /**
  * Step one of connecting a sub-account: send whoever is installing to
@@ -25,13 +26,18 @@ import { sign } from '@/lib/auth/session-crypto';
  */
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  // A session is recorded when there is one, and not required when there is
+  // not. A contractor who has never connected CANNOT have one — proving their
+  // sub-account needs a credential for it, which is the thing they are here to
+  // provide. Demanding a session would make this reachable only by people who
+  // do not need it.
+  //
+  // What stands in its place is GoHighLevel's own approval screen: only
+  // somebody with access to that sub-account can complete it. Anyone else gets
+  // as far as a row for a sub-account they already control, which is worth
+  // nothing to them.
   const access = await currentAccess();
-  if (!access.ok || access.access.role !== 'contractor') {
-    return NextResponse.json(
-      { error: 'Sign in from GoHighLevel first — only a contractor can install the app.' },
-      { status: 403 },
-    );
-  }
+  const by = access.ok && access.access.role === 'contractor' ? access.access.session.name : null;
 
   const oauth = readOauthConfig();
   if (!oauth.configured) {
@@ -51,8 +57,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'SESSION_SECRET is not set here.' }, { status: 503 });
   }
 
+  // The location the visitor arrived with, carried through so the page they
+  // land on afterwards can offer to open the Hub. A claim, never a permission:
+  // what is actually connected is whatever GoHighLevel names in the response.
+  const claimed = request.nextUrl.searchParams.get('locationId') ?? '';
+
   const state = sign(
-    { purpose: 'ghl-install', by: access.access.session.name },
+    {
+      purpose: 'ghl-install',
+      by,
+      ...(isGhlLocationId(claimed) ? { locationId: claimed.trim() } : {}),
+    },
     secret,
     { ttlSeconds: 600 },
   );

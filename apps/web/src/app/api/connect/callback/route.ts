@@ -82,7 +82,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const access = await currentAccess();
-  if (!access.ok || access.access.role !== 'contractor') {
+  const contractor = access.ok && access.access.role === 'contractor';
+  if (!signed && !contractor) {
+    // Neither gate. A signed state proves the flow began at our own /connect
+    // page; a contractor session proves who is asking. One or the other, and
+    // never neither — otherwise the one-time code would be spent for anybody
+    // who happened to arrive with one.
     return page(
       'Sign in first',
       '<p>Open the Hub from GoHighLevel, then start the install again.</p>',
@@ -137,9 +142,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     accessToken: tokens.accessToken,
     accessExpiresAt: tokens.expiresAt,
     scopes: tokens.scopes === '' ? null : tokens.scopes,
-    installedBy: signed
-      ? access.access.session.name
-      : `${access.access.session.name} (from the App Marketplace)`,
+    installedBy: installerName(contractor ? access : null, signed),
   });
 
   if (!stored) {
@@ -160,12 +163,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ? `<p>${connected.length} sub-accounts are now connected.</p>`
       : '';
 
+  // Somebody who arrived here through onboarding has never seen the Hub. Give
+  // them the door rather than a full stop.
+  const open = `<p style="margin-top:1.5rem"><a href="/auth/ghl?locationId=${escapeHtml(tokens.locationId)}" style="display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600">Open Project Hub</a></p>`;
+
   return page(
     'Connected',
-    `<p>Sub-account <code>${escapeHtml(tokens.locationId)}</code> is connected.</p>${others}` +
-      '<p>Nothing has changed yet for anyone. To start using it, set <code>GHL_OAUTH_ENABLED=true</code> and redeploy. The Private Integration tokens stay as a fallback until you remove them.</p>',
+    `<p>Sub-account <code>${escapeHtml(tokens.locationId)}</code> is connected.</p>${others}${open}`,
     200,
   );
+}
+
+/** For the trail: who installed it, and which route they came through. */
+function installerName(
+  access: Awaited<ReturnType<typeof currentAccess>> | null,
+  signed: boolean,
+): string {
+  const who = access !== null && access.ok ? access.access.session.name : 'someone not signed in';
+  return signed ? who : `${who} (from the App Marketplace)`;
 }
 
 function escapeHtml(value: string): string {

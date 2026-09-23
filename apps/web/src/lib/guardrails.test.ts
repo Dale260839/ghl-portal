@@ -572,26 +572,28 @@ test('anything that acts on another sub-account uses that sub-account’s token'
   assert.match(withoutComments(resolver.text), /withLocationToken\(/);
 });
 
-test('§ the install callback is gated on a session, before it spends the code', () => {
-  // The signed `state` used to be the proof that an install began with us.
-  // GoHighLevel took that away on 2026-09-23: a paid app can only be installed
-  // from inside the platform, an app's pricing cannot be edited after its
-  // version is published, and a marketplace-initiated install carries no state
-  // of ours. So the contractor session is the only gate left, and these three
-  // things have to stay true.
+test('§ the install callback always has a gate, before it spends the code', () => {
+  // Two gates, and it needs one of them. A signed `state` proves the flow began
+  // at our own /connect page; a contractor session proves who is asking.
+  //
+  // Neither is optional by accident. The session cannot be required outright —
+  // a contractor who has never connected cannot have one, which is the dead end
+  // onboarding exists to fix. The state cannot be required either, because an
+  // install started inside GoHighLevel's App Marketplace carries none.
   const file = FILES.find((f) => rel(f.path) === 'app/api/connect/callback/route.ts');
   assert.ok(file, 'the install callback has moved');
   const text = withoutComments(file.text);
 
-  // 1 · A session, and a contractor one.
+  // 1 · One gate or the other, never neither.
   assert.match(text, /currentAccess\(\)/);
-  assert.match(text, /role !== 'contractor'/);
+  assert.match(text, /role === 'contractor'/);
+  assert.match(text, /!signed && !contractor/);
 
-  // 2 · BEFORE the code is exchanged. A one-time code spent on behalf of an
-  // anonymous visitor is spent, whatever the page says afterwards.
+  // 2 · Checked BEFORE the code is exchanged. A one-time code spent on behalf
+  // of an anonymous visitor is spent, whatever the page says afterwards.
   assert.ok(
-    text.indexOf("role !== 'contractor'") < text.indexOf('exchangeCode('),
-    'the session must be checked before the code is exchanged',
+    text.indexOf('!signed && !contractor') < text.indexOf('exchangeCode('),
+    'the gate must be checked before the code is exchanged',
   );
 
   // 3 · No token ever reaches the HTML. Rendering one means interpolating it,
@@ -599,6 +601,36 @@ test('§ the install callback is gated on a session, before it spends the code',
   for (const forbidden of ['${tokens.accessToken}', '${tokens.refreshToken}', '${install.refreshToken}']) {
     assert.equal(text.includes(forbidden), false, `${forbidden} must never be rendered`);
   }
+});
+
+test('§ the onboarding page reads nothing and belongs to nobody', () => {
+  // It stands in FRONT of sign-in, because a contractor who has never connected
+  // cannot sign in — proving their sub-account needs a credential for it, and
+  // that is the thing they are there to provide. So it must not be able to
+  // leak: no database, no BuildSuite, no session, nothing but the id already in
+  // the visitor's own URL.
+  const page = FILES.find((f) => rel(f.path) === 'app/connect/page.tsx');
+  assert.ok(page, 'the onboarding page has moved');
+  const text = withoutComments(page.text);
+
+  for (const forbidden of [
+    'currentDataSource',
+    'getBuildSuiteReader',
+    'getHubClient',
+    'requireAccess',
+    'currentAccess',
+    'getSession',
+    'requireTenantScope',
+  ]) {
+    assert.equal(
+      text.includes(forbidden),
+      false,
+      `the onboarding page must not reach for ${forbidden} — it is in front of the door`,
+    );
+  }
+
+  // And it only offers to connect when connecting could actually finish.
+  assert.match(text, /oauthEnabled\(\)/);
 });
 
 test('the connect prompt is on a contractor screen and nowhere else', () => {
