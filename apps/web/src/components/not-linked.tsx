@@ -38,15 +38,14 @@ export function NotLinkedToContractor({
         than show you another company&apos;s records, we show none.
       </p>
       <p className="mx-auto mt-2 max-w-lg text-xs leading-relaxed text-navy-400">
-        Ask your BuildSuite administrator to link this sign-in to the correct contractor record
-        {email !== undefined && email !== '' ? (
-          <>
-            {' '}
-            for <span className="font-medium text-navy-600">{email}</span>
-          </>
-        ) : null}
-        {'. A GoHighLevel sign-in alone does not choose a contractor for billing.'}
+        Ask your BuildSuite administrator to link this sign-in to the correct contractor record.
+        A GoHighLevel sign-in alone does not choose a contractor for billing.
       </p>
+      {email !== undefined && email !== '' ? (
+        <p className="mx-auto mt-2 max-w-lg text-xs text-navy-400">
+          Sign-in: <span className="font-medium text-navy-600">{email}</span>
+        </p>
+      ) : null}
     </Card>
   );
 }
