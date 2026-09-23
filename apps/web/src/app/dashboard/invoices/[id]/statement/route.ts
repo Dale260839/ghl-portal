@@ -26,8 +26,11 @@ export async function GET(request: Request, {params}: {params:Promise<{id:string
     if (!draft?.externalId || draft.sentVia !== 'ghl') return new Response('Linked GHL invoice required',{status:404,headers});
     const source=await getInvoices(scope.locationId);
     if (!source.available) throw new Error('GHL unavailable');
-    const timeZone=await source.invoices.locationTimeZone().catch(()=>undefined);
-    const read=(externalId:string)=>source.invoices.financials(externalId,project.primaryContactId,timeZone);
+    const [timeZone,prefix]=await Promise.all([
+      source.invoices.locationTimeZone().catch(()=>undefined),
+      source.invoices.invoiceNumberPrefix().catch(()=>undefined),
+    ]);
+    const read=(externalId:string)=>source.invoices.financials(externalId,project.primaryContactId,timeZone,prefix);
     const invoice=await read(draft.externalId);
     const history=await loadPaymentHistory(links,draft.id,projectId,read);
     const nonce=randomBytes(16).toString('base64');

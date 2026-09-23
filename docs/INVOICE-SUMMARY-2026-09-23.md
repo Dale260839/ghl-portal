@@ -65,7 +65,10 @@ Existing 20-attempt concurrency test still permits exactly one draft creation.
   a fresh API-backed summary read. No send or payment action.
 - API due-date field previously read September 24 while the GHL editor displayed
   September 23. Timestamp dates in the new print view use the sub-account's
-  verified timezone; date-only values keep their calendar date. Live APS
-  reconciliation is required before sending a PDF.
+  verified timezone; date-only values keep their calendar date. The live APS
+  print view and GHL editor both displayed September 23 after deployment.
+- The approved APS test draft's duplicate breakdown notes were replaced with
+  concise demo terms. Its prior text is backed up outside the repository in
+  `C:/Users/Lenovo/Desktop/chris/APS-INV-000003-NOTES-BEFORE-2026-09-23.txt`.
 - Automatic refresh of already-created invoice notes and linking invoices
   created wholly outside the Hub are not implemented.

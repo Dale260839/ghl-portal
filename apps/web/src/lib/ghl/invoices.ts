@@ -238,11 +238,21 @@ export class GhlInvoices {
     return location.timezone;
   }
 
-  async financials(id: string, contactId: string, timeZone?: string): Promise<InvoiceFinancials> {
+  async invoiceNumberPrefix(): Promise<string> {
+    const params = new URLSearchParams({altId:this.config.locationId,altType:'location'});
+    const body = await this.get(`/invoices/settings?${params}`) as Record<string, unknown>;
+    const settings = (body.settings ?? body) as Record<string, unknown>;
+    if (settings.altId !== this.config.locationId || settings.altType !== 'location' || typeof settings.invoiceNumberPrefix !== 'string' || settings.invoiceNumberPrefix.length > 10) {
+      throw new Error('Invoice number prefix is unavailable');
+    }
+    return settings.invoiceNumberPrefix;
+  }
+
+  async financials(id: string, contactId: string, timeZone?: string, prefix?: string): Promise<InvoiceFinancials> {
     if (!id.trim() || !contactId.trim()) throw new Error('Invoice and contact are required');
     const params = new URLSearchParams({altId:this.config.locationId,altType:'location'});
     const body = await this.get(`/invoices/${encodeURIComponent(id)}?${params}`);
-    return readInvoiceFinancials(body,{id,contactId,locationId:this.config.locationId,timeZone});
+    return readInvoiceFinancials(body,{id,contactId,locationId:this.config.locationId,timeZone,prefix});
   }
 
   /**

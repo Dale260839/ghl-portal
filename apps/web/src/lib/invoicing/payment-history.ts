@@ -34,7 +34,7 @@ export function invoiceDate(value: unknown, timeZone?: string): string {
 }
 
 /** Missing financial fields are an error, never a made-up zero payment. */
-export function readInvoiceFinancials(body: unknown, expected: { id: string; locationId: string; contactId: string; timeZone?: string }): InvoiceFinancials {
+export function readInvoiceFinancials(body: unknown, expected: { id: string; locationId: string; contactId: string; timeZone?: string; prefix?: string }): InvoiceFinancials {
   const outer = record(body);
   const row = outer.invoice ? record(outer.invoice) : outer;
   const contact = record(row.contactDetails);
@@ -48,8 +48,10 @@ export function readInvoiceFinancials(body: unknown, expected: { id: string; loc
   const status = text(row.status);
   if (!['draft','sent','paid','void','partially_paid','payment_processing'].includes(status)) throw new Error('Invoice status needs review');
   const summary = record(row.totalSummary), business = record(row.businessDetails), address = record(business.address);
+  const rawNumber = String(row.invoiceNumber ?? expected.id);
+  const number = expected.prefix && !rawNumber.startsWith(expected.prefix) ? `${expected.prefix}${rawNumber}` : rawNumber;
   return {
-    id: expected.id, number: String(row.invoiceNumber ?? expected.id), status, currency: 'USD',
+    id: expected.id, number, status, currency: 'USD',
     subtotal: money(summary.subTotal), tax: money(summary.tax), discount: money(summary.discount), total, paid, due,
     issueDate: invoiceDate(row.issueDate, expected.timeZone), dueDate: invoiceDate(row.dueDate, expected.timeZone), terms: text(row.termsNotes),
     business: {name: text(business.name), logo:text(business.logoUrl), phone:text(business.phoneNo), website:text(business.website),
