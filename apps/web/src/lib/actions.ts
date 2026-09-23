@@ -55,6 +55,8 @@ import {
   type InvoiceTemplate,
 } from './invoicing/template.ts';
 import { resolveInvoiceRail, draftFromStored } from './invoicing/rail.ts';
+import { getInvoices } from './ghl/invoices.ts';
+import { loadPaymentHistory } from './invoicing/payment-history.ts';
 import { resolveContractorName, resolveContractorProfile } from './buildsuite/contractor-identity.ts';
 import { getProposalsReader } from './buildsuite/proposals';
 import { paymentScheduleDrafts } from './payment-schedule';
@@ -1209,6 +1211,18 @@ export async function createInvoiceOnRail(formData: FormData) {
     ? await buildsuiteForEmail.clientEmailForProject(scope, draft.projectId)
     : null;
 
+  // Fail before claiming or writing if payment history cannot be verified.
+  let paymentHistory;
+  try {
+    const source = await getInvoices(scope.locationId);
+    if (!source.available) throw new Error('Invoice reader unavailable');
+    const links = await hub.drafts.listForProject(scope, draft.projectId);
+    paymentHistory = await loadPaymentHistory(links, draft.id, draft.projectId,
+      id => source.invoices.financials(id, project.primaryContactId));
+  } catch {
+    redirect('/dashboard/invoices?rail=' + encodeURIComponent('Project payment history could not be verified. No invoice was created. Check the GHL connection and any unresolved invoice attempts.'));
+  }
+
   // A database claim protects across tabs and server instances. Never expire it
   // automatically: an interrupted request may already have reached GHL.
   const attemptId = randomUUID();
@@ -1223,7 +1237,7 @@ export async function createInvoiceOnRail(formData: FormData) {
   }
   let result;
   try {
-    const invoice = draftFromStored(claimed, project);
+    const invoice = { ...draftFromStored(claimed, project), paymentHistory };
     result = await rail.createDraft(invoice, {
       ghlContactId: project.primaryContactId,
       name: project.clientName,

@@ -58,6 +58,7 @@ export interface DraftInvoice {
   readonly isDeposit: boolean;
   /** Always 'draft'. A person reviews and sends; composition never sends. */
   readonly status: 'draft';
+  readonly paymentHistory?: import('./payment-history.ts').PaymentHistory;
 }
 
 export interface InvoiceContext {

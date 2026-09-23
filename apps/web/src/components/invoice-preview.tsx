@@ -1,5 +1,6 @@
 import type { ContractorProfile } from '@/lib/buildsuite/contractor-identity';
-import { currency, shortDate } from '@/components/ui';
+import { shortDate } from '@/components/ui';
+import { invoiceMoney } from '@/lib/invoicing/payment-history';
 
 /**
  * What this line will look like once it reaches GoHighLevel.
@@ -76,7 +77,7 @@ export function InvoicePreview({
   return (
     <div className="mt-3 rounded-lg border border-navy-100 bg-navy-50/40 p-4">
       <p className="text-xs font-medium tracking-wide text-navy-400 uppercase">
-        How it will look in GoHighLevel
+        Draft content preview
       </p>
 
       <div className="mt-3 rounded-lg border border-navy-100 bg-white p-4">
@@ -148,7 +149,7 @@ export function InvoicePreview({
                 {amount === null ? (
                   <span className="text-amber-700">Amount needed</span>
                 ) : (
-                  <span className="text-navy-900">{currency(amount)}</span>
+                  <span className="text-navy-900">{invoiceMoney(amount)}</span>
                 )}
               </td>
             </tr>
@@ -162,7 +163,8 @@ export function InvoicePreview({
       </div>
 
       <p className="mt-3 text-xs text-navy-400">
-        Created as a draft. You send it from GoHighLevel.
+        Draft content only. Review taxes and final totals in GoHighLevel before sending.
+        Existing invoices retain their saved details and dates.
       </p>
     </div>
   );

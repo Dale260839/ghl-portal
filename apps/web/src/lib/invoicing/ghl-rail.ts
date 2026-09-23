@@ -6,6 +6,7 @@ import type {
 } from './invoice.ts';
 import { readyToSend } from './invoice.ts';
 import { ghlInvoiceEditorUrl } from './ghl-link.ts';
+import { escapeInvoiceHtml, historyNotes } from './payment-history.ts';
 
 /**
  * The GoHighLevel invoice rail.
@@ -222,7 +223,9 @@ export function buildGhlInvoicePayload(
     dueDate: dateOnly(due),
     // The line item keeps the stage's terms alone; the invoice's notes carry
     // the contractor's standing terms after them.
-    termsNotes: combineTerms(invoice.terms, opts.standingTerms),
+    termsNotes: invoice.paymentHistory
+      ? `<p>${escapeInvoiceHtml(combineTerms(invoice.terms, opts.standingTerms)).replace(/\n/g, '<br>')}</p>${historyNotes(invoice.paymentHistory)}`
+      : combineTerms(invoice.terms, opts.standingTerms),
     liveMode: true,
     automaticTaxesEnabled: false,
     sentTo: {

@@ -1,5 +1,6 @@
 import { readGhlConfig, type GhlConfig  } from './config.ts';
 import { configForLocation } from './resolve-config.ts';
+import { readInvoiceFinancials, type InvoiceFinancials } from '../invoicing/payment-history.ts';
 
 /**
  * Invoices, read from GoHighLevel.
@@ -192,6 +193,7 @@ export class GhlInvoices {
 
   private async get(path: string): Promise<unknown> {
     const response = await this.fetchImpl(`${this.config.baseUrl}${path}`, {
+      cache: 'no-store',
       headers: {
         Authorization: `Bearer ${this.config.token}`,
         Version: this.config.apiVersion,
@@ -220,6 +222,13 @@ export class GhlInvoices {
     });
     const body = (await this.get(`/invoices/?${params}`)) as { invoices?: GhlInvoiceRow[] };
     return (body.invoices ?? []).map(normalizeInvoice);
+  }
+
+  async financials(id: string, contactId: string): Promise<InvoiceFinancials> {
+    if (!id.trim() || !contactId.trim()) throw new Error('Invoice and contact are required');
+    const params = new URLSearchParams({altId:this.config.locationId,altType:'location'});
+    const body = await this.get(`/invoices/${encodeURIComponent(id)}?${params}`);
+    return readInvoiceFinancials(body,{id,contactId,locationId:this.config.locationId});
   }
 
   /**
