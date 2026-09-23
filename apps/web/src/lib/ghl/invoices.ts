@@ -242,7 +242,9 @@ export class GhlInvoices {
     const params = new URLSearchParams({altId:this.config.locationId,altType:'location'});
     const body = await this.get(`/invoices/settings?${params}`) as Record<string, unknown>;
     const settings = (body.settings ?? body) as Record<string, unknown>;
-    if (settings.altId !== this.config.locationId || settings.altType !== 'location' || typeof settings.invoiceNumberPrefix !== 'string' || settings.invoiceNumberPrefix.length > 10) {
+    if ((settings.altId !== undefined && settings.altId !== this.config.locationId) ||
+        (settings.altType !== undefined && settings.altType !== 'location') ||
+        typeof settings.invoiceNumberPrefix !== 'string' || settings.invoiceNumberPrefix.length > 10) {
       throw new Error('Invoice number prefix is unavailable');
     }
     return settings.invoiceNumberPrefix;

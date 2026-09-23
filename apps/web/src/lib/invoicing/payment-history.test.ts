@@ -104,6 +104,8 @@ test('invoice number prefix comes only from this account settings',async()=>{
    return new Response(JSON.stringify({altId:'APS',altType:'location',invoiceNumberPrefix:'INV-'}));
  });
  assert.equal(await reader.invoiceNumberPrefix(),'INV-');
+ const optional=new GhlInvoices(config,async()=>new Response(JSON.stringify({invoiceNumberPrefix:'INV-'})));
+ assert.equal(await optional.invoiceNumberPrefix(),'INV-');
  const wrong=new GhlInvoices(config,async()=>new Response(JSON.stringify({altId:'AFC',altType:'location',invoiceNumberPrefix:'INV-'})));
  await assert.rejects(wrong.invoiceNumberPrefix());
 });
