@@ -411,6 +411,13 @@ export default async function Invoices({
                         {saved?.externalId ? (
                           <>
                             <Badge tone="good">In GoHighLevel</Badge>
+                            <a
+                              href={`/dashboard/invoices/${encodeURIComponent(saved.id)}/statement?projectId=${encodeURIComponent(row.project.buildsuiteProjectId)}`}
+                              target="_blank" rel="noreferrer"
+                              className="text-xs font-medium text-navy-700 underline"
+                            >
+                              Totals &amp; payment history
+                            </a>
                             <span className="text-xs text-navy-500">
                               {saved.externalId}
                               {saved.railCreatedAt !== null && ` · ${shortDate(saved.railCreatedAt)}`}

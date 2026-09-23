@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { HubInvoiceDrafts } from '../hub-db/invoice-drafts.ts';
 import { createGhlInvoiceRail } from './ghl-rail.ts';
 import { draftFromStored } from './rail.ts';
+import { loadPaymentHistory } from './payment-history.ts';
 
 // Run the actual server action without Next's request context or live services.
 const source = readFileSync(new URL('../actions.ts', import.meta.url), 'utf8');
@@ -15,7 +16,7 @@ const body = source.split('export async function createInvoiceOnRail(formData: F
 const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
 const names = ['getSession','assertCan','actionTenantScope','getHubInvoiceDrafts','currentDataSource',
   'resolveContractorProfile','getHubInvoiceTemplates','resolveInvoiceRail','mergeLetterhead','dueDaysFor',
-  'getBuildSuiteReader','draftFromStored','redirect','revalidatePath','process','randomUUID','formData'];
+  'getBuildSuiteReader','draftFromStored','redirect','revalidatePath','process','randomUUID','getInvoices','loadPaymentHistory','formData'];
 const action = new AsyncFunction(...names, body);
 
 function fixture(mode = 'ok') {
@@ -55,6 +56,7 @@ function fixture(mode = 'ok') {
     async()=>null,()=>({available:false}),()=>rail,()=>undefined,()=>5,
     ()=>({available:true,clientEmailForProject:async()=> 'test@example.com'}),draftFromStored,
     (url:string)=>{throw Error('redirect '+url);},()=>{},{env:{}},randomUUID,
+    async()=>({available:mode !== 'history-unavailable',invoices:{financials:async()=>{throw Error('No earlier invoices expected');}}}),loadPaymentHistory,
     new Map([['draftId','draft-test'],['proposalId','proposal-test']])];
   return {run:()=>action(...deps), row, calls:()=>calls, drafts, scope};
 }
@@ -77,7 +79,7 @@ for (const mode of ['lost-record','network','reject']) {
     assert.equal(f.calls(),1);
   });
 }
-for (const mode of ['missing-schema','lost-claim-response']) {
+for (const mode of ['missing-schema','lost-claim-response','history-unavailable']) {
   test(`${mode}: never calls GHL`,async()=>{
     const f=fixture(mode);
     await assert.rejects(f.run());
