@@ -240,3 +240,84 @@ export async function locationAccessToken(
     return null;
   }
 }
+
+// ── Minting a sub-account token from an agency-level install ───────────────
+
+interface RawLocationToken {
+  access_token?: unknown;
+  expires_in?: unknown;
+  locationId?: unknown;
+}
+
+export interface MintedToken {
+  token: string;
+  /** Seconds, as GoHighLevel reported them. */
+  expiresIn: number;
+}
+
+/**
+ * `POST /oauth/locationToken` — a sub-account's token, from the agency's.
+ *
+ * ---------------------------------------------------------------------------
+ * THIS IS WHAT MAKES ONE INSTALL COVER EVERY CONTRACTOR
+ *
+ * The App Marketplace lets an agency install a sub-account app across all of
+ * its sub-accounts at once (149 of them, in this agency). That install is what
+ * grants the scopes — contacts, conversations, invoices — for each location.
+ * What it does NOT do is send us through an OAuth redirect 149 times, so there
+ * is no per-location code to exchange and no per-location row to store.
+ *
+ * This is the endpoint that closes that gap: with the agency's own token for
+ * the same app, it mints a token for any location the app is installed on. One
+ * action by an agency admin, and every contractor works — sign-in, invoices and
+ * email — having done nothing themselves.
+ *
+ * A 401 means the app is not installed on that sub-account. That is the normal,
+ * expected answer for a location we do not serve, so it warns rather than
+ * shouting.
+ * ---------------------------------------------------------------------------
+ */
+export async function mintLocationToken(
+  config: GhlOauthConfig,
+  agencyToken: string,
+  companyId: string,
+  locationId: string,
+  options: { fetchImpl?: typeof fetch } = {},
+): Promise<MintedToken | null> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  const response = await fetchImpl(`${config.apiBase}/oauth/locationToken`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${agencyToken}`,
+      Version: '2021-07-28',
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({ companyId, locationId }).toString(),
+  });
+
+  if (!response.ok) {
+    console.warn(`[ghl-oauth] no minted token for ${locationId}: ${response.status}`);
+    return null;
+  }
+
+  const body = (await response.json()) as RawLocationToken;
+  const token = typeof body.access_token === 'string' ? body.access_token : '';
+  if (token === '') return null;
+
+  // If GoHighLevel names a location in the response it must be the one we asked
+  // for. Handing back a token for another sub-account is precisely the leak the
+  // resolver exists to prevent, and a mismatch is worth failing on rather than
+  // papering over.
+  if (typeof body.locationId === 'string' && body.locationId !== locationId) {
+    console.error(`[ghl-oauth] minted ${body.locationId} when asked for ${locationId} — refusing`);
+    return null;
+  }
+
+  const expiresIn =
+    typeof body.expires_in === 'number' && Number.isFinite(body.expires_in)
+      ? body.expires_in
+      : 86_400;
+  return { token, expiresIn };
+}

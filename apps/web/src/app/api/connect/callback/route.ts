@@ -8,6 +8,7 @@ import { resetLocationTokens } from '@/lib/ghl/oauth-location';
 import { resetResolvedConfig } from '@/lib/ghl/resolve-config';
 import { isGhlLocationId } from '@/lib/ghl/config';
 import { getHubGhlOauth } from '@/lib/hub-db/ghl-oauth';
+import { getHubGhlAgency } from '@/lib/hub-db/ghl-agency';
 import { clearConnectAttempt } from '@/lib/connect-attempt';
 
 /**
@@ -122,6 +123,66 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       'GoHighLevel would not complete the install',
       '<p>The code could not be exchanged. The reason is in the server log; the most common cause is a redirect URL that does not match the one on the app.</p>',
       502,
+    );
+  }
+
+  // ── An agency installing this app across every sub-account ───────────────
+  //
+  // The App Marketplace lets an agency admin install a sub-account app on all
+  // of its sub-accounts at once. GoHighLevel reports that as a COMPANY install:
+  // one code, one exchange, no location named, because it is not about one
+  // location. There is no per-sub-account redirect and never will be, so
+  // refusing this — as the code below would, for want of a location id — would
+  // throw away the one action that covers every contractor at once.
+  //
+  // It is stored as the agency install of this app, and the resolver mints a
+  // token per sub-account from it on demand.
+  if (tokens.userType === 'Company') {
+    if (tokens.companyId === '') {
+      return page(
+        'No agency id came back',
+        '<p>An agency-wide install needs a company id to mint sub-account tokens from. Nothing was stored.</p>',
+        502,
+      );
+    }
+
+    const agencyHub = getHubGhlAgency();
+    if (!agencyHub.available) {
+      return page(
+        'The Hub database is not available',
+        `<p>Nothing was stored. Missing: ${escapeHtml(agencyHub.missing.join(', '))}.</p>`,
+        503,
+      );
+    }
+
+    const kept = await agencyHub.store.save({
+      companyId: tokens.companyId,
+      clientId: oauth.config.clientId,
+      refreshToken: tokens.refreshToken,
+      accessToken: tokens.accessToken,
+      accessExpiresAt: tokens.expiresAt,
+      scopes: tokens.scopes === '' ? null : tokens.scopes,
+      installedBy: installerName(contractor ? access : null, signed),
+    });
+
+    if (!kept) {
+      return page(
+        'Nowhere to store the install',
+        '<p>Migration <code>0017_ghl_agency_oauth.sql</code> has not been run on this database. Run it and install again — nothing was kept.</p>',
+        503,
+      );
+    }
+
+    resetLocationTokens();
+    resetResolvedConfig();
+    await clearConnectAttempt();
+
+    return page(
+      'Installed across the agency',
+      `<p>Agency <code>${escapeHtml(tokens.companyId)}</code> is connected.</p>` +
+        '<p>Every sub-account this app is installed on can now send invoices and emails, without anyone installing anything themselves.</p>' +
+        '<p>Nothing has changed yet for anyone unless <code>GHL_OAUTH_ENABLED=true</code> is set.</p>',
+      200,
     );
   }
 

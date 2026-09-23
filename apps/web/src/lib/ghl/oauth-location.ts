@@ -2,7 +2,9 @@ import 'server-only';
 
 import type { TokenResolver } from './location.ts';
 import type { GhlOauthConfig } from './oauth-config.ts';
-import { locationAccessToken } from './oauth-tokens.ts';
+import { locationAccessToken, mintLocationToken } from './oauth-tokens.ts';
+import { agencyAccessToken } from './agency-token.ts';
+import { getHubGhlAgency, type HubGhlAgency } from '../hub-db/ghl-agency.ts';
 import { isGhlLocationId } from './config.ts';
 import type { HubGhlOauth } from '../hub-db/ghl-oauth.ts';
 
@@ -63,6 +65,11 @@ export function resetLocationTokens(): void {
 export interface OauthResolverDeps {
   config: GhlOauthConfig;
   store: HubGhlOauth;
+  /**
+   * The agency-level install of THIS app, when there is one. Injectable for
+   * tests; read from the Hub otherwise.
+   */
+  agencyStore?: HubGhlAgency | null;
   fetchImpl?: typeof fetch;
   now?: () => number;
 }
@@ -108,6 +115,20 @@ export class OauthTokenResolver implements TokenResolver {
       console.warn(`[ghl-oauth] resolving a token for ${id} failed`, error);
     }
 
+    // ── Nobody installed it here, but the agency installed it everywhere ───
+    //
+    // An agency admin can install this app across every sub-account at once
+    // from the App Marketplace. That grants the scopes for each location, but
+    // sends no OAuth redirect per location — so there is no row for this
+    // sub-account and never will be. The agency's own token for the same app
+    // mints one on demand.
+    //
+    // Second, not first: a sub-account that connected itself has a row of its
+    // own, and that credential is the more specific answer.
+    if (token === null) {
+      token = await this.fromAgencyInstall(id);
+    }
+
     if (token === null) {
       refusals.set(id, now);
       return null;
@@ -116,6 +137,52 @@ export class OauthTokenResolver implements TokenResolver {
     refusals.delete(id);
     tokens.set(id, { token, goodUntil: now + MAX_CACHE_MS });
     return token;
+  }
+
+  /**
+   * A token minted from the agency-level install of this app, or null.
+   *
+   * Every failure here is a null and a log line. This is the path that covers
+   * contractors who did nothing at all, so it must never be the reason one of
+   * them sees an error: without it they fall back to their Private Integration
+   * token, exactly as before it existed.
+   */
+  private async fromAgencyInstall(locationId: string): Promise<string | null> {
+    const agency =
+      this.deps.agencyStore === undefined
+        ? (() => {
+            const hub = getHubGhlAgency();
+            return hub.available ? hub.store : null;
+          })()
+        : this.deps.agencyStore;
+    if (agency === null) return null;
+
+    try {
+      // The agency install of THIS app — same client id. Not the sign-in app,
+      // which holds only `locations.readonly` and could mint nothing useful.
+      const install = await agency.read(this.deps.config.clientId);
+      if (install === null) return null;
+
+      const agencyToken = await agencyAccessToken({
+        config: this.deps.config,
+        store: agency,
+        ...(this.deps.fetchImpl !== undefined ? { fetchImpl: this.deps.fetchImpl } : {}),
+        ...(this.deps.now !== undefined ? { now: this.deps.now } : {}),
+      });
+      if (agencyToken === null) return null;
+
+      const minted = await mintLocationToken(
+        this.deps.config,
+        agencyToken,
+        install.companyId,
+        locationId,
+        this.deps.fetchImpl !== undefined ? { fetchImpl: this.deps.fetchImpl } : {},
+      );
+      return minted === null ? null : minted.token;
+    } catch (error) {
+      console.warn(`[ghl-oauth] minting from the agency install failed for ${locationId}`, error);
+      return null;
+    }
   }
 
   /**

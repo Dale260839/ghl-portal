@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { authorizeUrl, oauthEnabled, readOauthConfig, OAUTH_SCOPES } from './oauth-config.ts';
 import { exchangeCode, locationAccessToken } from './oauth-tokens.ts';
 import { OauthTokenResolver, resetLocationTokens } from './oauth-location.ts';
+import { mintLocationToken } from './oauth-tokens.ts';
+import type { AgencyInstall, HubGhlAgency } from '../hub-db/ghl-agency.ts';
 import type { HubGhlOauth, LocationInstall } from '../hub-db/ghl-oauth.ts';
 
 /**
@@ -374,4 +376,127 @@ test('a refusal is not re-asked on every request, but is not remembered for long
   assert.equal(await resolver.resolve(AFC), null);
   assert.equal(await resolver.resolve(AFC), null);
   assert.equal(reads, 1, 'a refusal is cached briefly');
+});
+
+// ── One agency install, covering every sub-account ─────────────────────────
+
+function fakeAgencyStore(install: AgencyInstall | null): HubGhlAgency {
+  return {
+    // Honours the client id, because that is a real distinction: the sign-in
+    // app's agency install holds only `locations.readonly` and could mint
+    // nothing useful. Reading the wrong app's row must not look like success.
+    async read(clientId: string) {
+      return install !== null && install.clientId === clientId ? install : null;
+    },
+    async save() {
+      return true;
+    },
+    async claim() {
+      return true;
+    },
+    async saveRefreshed() {
+      return true;
+    },
+    async releaseClaim() {},
+  } as unknown as HubGhlAgency;
+}
+
+const agencyInstall: AgencyInstall = {
+  companyId: 'comp-1',
+  clientId: 'client-1',
+  refreshToken: 'agency-refresh',
+  accessToken: 'agency-access',
+  accessExpiresAt: new Date(86_400_000).toISOString(),
+  scopes: null,
+};
+
+test('§ a sub-account that installed nothing is covered by the agency install', async () => {
+  // The App Marketplace installs this app on every sub-account at once, and
+  // sends no OAuth redirect per location — so there is no row for this
+  // sub-account and never will be. The agency's own token mints one.
+  resetLocationTokens();
+  const fetchImpl = (async (url: string) => {
+    if (String(url).endsWith('/oauth/locationToken')) {
+      return new Response(
+        JSON.stringify({ access_token: 'minted-for-afc', expires_in: 86_400, locationId: AFC }),
+        { status: 200 },
+      );
+    }
+    throw new Error(`unexpected ${url}`);
+  }) as unknown as typeof fetch;
+
+  const resolver = new OauthTokenResolver({
+    config: config(),
+    store: fakeStore(null), // nobody connected this sub-account themselves
+    agencyStore: fakeAgencyStore(agencyInstall),
+    fetchImpl,
+    now: () => 0,
+  });
+
+  assert.equal(await resolver.resolve(AFC), 'minted-for-afc');
+});
+
+test('§ a sub-account’s own install still wins over the agency one', async () => {
+  // The more specific credential is the better answer: a contractor who
+  // connected their own account did so deliberately, and that row is the one
+  // their scopes were granted against.
+  resetLocationTokens();
+  const fetchImpl = (async (url: string) => {
+    throw new Error(`must not reach ${url} — the sub-account has its own token`);
+  }) as unknown as typeof fetch;
+
+  const resolver = new OauthTokenResolver({
+    config: config(),
+    store: fakeStore(install({ accessToken: 'its-own', accessExpiresAt: new Date(86_400_000).toISOString() })),
+    agencyStore: fakeAgencyStore(agencyInstall),
+    fetchImpl,
+    now: () => 0,
+  });
+
+  assert.equal(await resolver.resolve(AFC), 'its-own');
+});
+
+test('§ minting refuses a token answered for a DIFFERENT sub-account', async () => {
+  const fetchImpl = (async () =>
+    new Response(
+      JSON.stringify({ access_token: 'wrong-one', expires_in: 86_400, locationId: APS }),
+      { status: 200 },
+    )) as unknown as typeof fetch;
+
+  assert.equal(
+    await mintLocationToken(config(), 'agency-access', 'comp-1', AFC, { fetchImpl }),
+    null,
+  );
+});
+
+test('a sub-account the agency install does not cover gets null, not a guess', async () => {
+  resetLocationTokens();
+  const fetchImpl = (async () => new Response('not installed', { status: 401 })) as unknown as typeof fetch;
+
+  const resolver = new OauthTokenResolver({
+    config: config(),
+    store: fakeStore(null),
+    agencyStore: fakeAgencyStore(agencyInstall),
+    fetchImpl,
+    now: () => 0,
+  });
+
+  assert.equal(await resolver.resolve(APS), null);
+});
+
+test('no agency install at all leaves the resolver exactly as it was', async () => {
+  resetLocationTokens();
+  const fetchImpl = (async (url: string) => {
+    throw new Error(`must not reach ${url}`);
+  }) as unknown as typeof fetch;
+
+  const resolver = new OauthTokenResolver({
+    config: config(),
+    store: fakeStore(null),
+    agencyStore: null,
+    fetchImpl,
+    now: () => 0,
+  });
+
+  assert.equal(await resolver.resolve(AFC), null);
 });
