@@ -1,4 +1,4 @@
-# Invoice summary and payment history
+# Printable invoice and payment history
 
 Request: meeting recording September 22, 14:43-18:09. Complete invoice totals,
 tax, notes, and payments on other installments, without pretending an earlier
@@ -6,7 +6,13 @@ installment payment is also a credit on the current invoice.
 
 ## Implemented
 
-- Contractor-only `Totals & payment history` link on each linked Hub invoice.
+- Contractor-only `View / print invoice` link on each linked Hub invoice.
+- A clean Letter-size invoice for printing or saving as PDF: logo and compact
+  business address, bill-to, number, project, dates, descriptions and line totals,
+  subtotal, tax, invoice total, paid on this invoice, amount due, prior issued
+  installment receipts, and notes and terms.
+- GHL notes are sanitized before they enter the printable page. Drafts are
+  visibly marked `DRAFT - NOT SENT`.
 - Fresh GET of the exact GHL invoice IDs linked to the project. Location,
   contact and invoice identity are checked before displaying financial data.
 - Subtotal, discount, tax, invoice total, paid on this invoice and current due.
@@ -21,8 +27,10 @@ installment payment is also a credit on the current invoice.
 
 ## Boundaries
 
-This does not replace GHL's native PDF layout. The new summary is a read-only
-companion view; GHL determines where its native tax and payment rows appear.
+This does not replace GHL's native invoice layout or what GHL's Send command
+delivers. To send this full layout, the contractor must save the Hub print view
+as a PDF and attach it through an approved sending workflow. The Hub toolbar
+states the difference. GHL determines where its native tax and payment rows appear.
 Tax is selected and reviewed in the GHL draft editor. This change does not
 choose tax rates or infer exemption.
 
@@ -55,8 +63,9 @@ Existing 20-attempt concurrency test still permits exactly one draft creation.
 - Appended a clearly dated breakdown and project-history example to INV-000003
   using the GHL editor. Preserved Shipping Details and Terms. Save verified by
   a fresh API-backed summary read. No send or payment action.
-- API due-date field reads September 24 while the GHL editor displays September
-  23. Summary labels source dates rather than silently inventing a timezone
-  conversion. Dates were not changed; editor timezone reconciliation remains.
-- Native PDF layout replacement, automatic refresh of already-created invoice
-  notes, and linking invoices created wholly outside the Hub are not implemented.
+- API due-date field previously read September 24 while the GHL editor displayed
+  September 23. Timestamp dates in the new print view use the sub-account's
+  verified timezone; date-only values keep their calendar date. Live APS
+  reconciliation is required before sending a PDF.
+- Automatic refresh of already-created invoice notes and linking invoices
+  created wholly outside the Hub are not implemented.

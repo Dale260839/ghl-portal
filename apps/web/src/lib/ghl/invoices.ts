@@ -224,11 +224,25 @@ export class GhlInvoices {
     return (body.invoices ?? []).map(normalizeInvoice);
   }
 
-  async financials(id: string, contactId: string): Promise<InvoiceFinancials> {
+  async locationTimeZone(): Promise<string> {
+    const body = await this.get(`/locations/${encodeURIComponent(this.config.locationId)}`) as Record<string, unknown>;
+    const location = (body.location ?? body) as Record<string, unknown>;
+    if (location.id !== this.config.locationId || typeof location.timezone !== 'string') {
+      throw new Error('Location timezone is unavailable');
+    }
+    try {
+      new Intl.DateTimeFormat('en-US', {timeZone: location.timezone});
+    } catch {
+      throw new Error('Location timezone is invalid');
+    }
+    return location.timezone;
+  }
+
+  async financials(id: string, contactId: string, timeZone?: string): Promise<InvoiceFinancials> {
     if (!id.trim() || !contactId.trim()) throw new Error('Invoice and contact are required');
     const params = new URLSearchParams({altId:this.config.locationId,altType:'location'});
     const body = await this.get(`/invoices/${encodeURIComponent(id)}?${params}`);
-    return readInvoiceFinancials(body,{id,contactId,locationId:this.config.locationId});
+    return readInvoiceFinancials(body,{id,contactId,locationId:this.config.locationId,timeZone});
   }
 
   /**

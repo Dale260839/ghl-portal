@@ -5,6 +5,7 @@ import { getHubInvoiceDrafts } from '@/lib/hub-db/invoice-drafts';
 import { getInvoices } from '@/lib/ghl/invoices';
 import { loadPaymentHistory } from '@/lib/invoicing/payment-history';
 import { invoiceStatement } from '@/lib/invoicing/statement';
+import { randomBytes } from 'node:crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,10 +26,12 @@ export async function GET(request: Request, {params}: {params:Promise<{id:string
     if (!draft?.externalId || draft.sentVia !== 'ghl') return new Response('Linked GHL invoice required',{status:404,headers});
     const source=await getInvoices(scope.locationId);
     if (!source.available) throw new Error('GHL unavailable');
-    const read=(externalId:string)=>source.invoices.financials(externalId,project.primaryContactId);
+    const timeZone=await source.invoices.locationTimeZone().catch(()=>undefined);
+    const read=(externalId:string)=>source.invoices.financials(externalId,project.primaryContactId,timeZone);
     const invoice=await read(draft.externalId);
     const history=await loadPaymentHistory(links,draft.id,projectId,read);
-    return new Response(invoiceStatement(invoice,history,project.projectCode ?? ''),{headers:{...headers,'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':"default-src 'none'; img-src https:; style-src 'unsafe-inline'; frame-src 'self' about:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'"}});
+    const nonce=randomBytes(16).toString('base64');
+    return new Response(invoiceStatement(invoice,history,project.projectCode ?? '',nonce),{headers:{...headers,'Content-Type':'text/html; charset=utf-8','Content-Security-Policy':`default-src 'none'; img-src https:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`}});
   } catch {
     return new Response('Invoice totals or project payment history could not be verified. Open GoHighLevel and review the linked invoices; no records were changed.',{status:502,headers});
   }
