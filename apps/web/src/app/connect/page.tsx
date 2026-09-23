@@ -18,6 +18,15 @@ import { oauthEnabled } from '@/lib/ghl/oauth-config';
  * somebody with access to that sub-account can complete. That is a stronger
  * gate than a session we cannot issue anyway.
  *
+ * WHICH ROUTE IT SENDS PEOPLE DOWN
+ *
+ * The App Marketplace **inside their own account**, first and in words. The
+ * OAuth link is second, and labelled as the other option, because it ends on
+ * `marketplace.gohighlevel.com` — and a contractor in a white-labelled agency
+ * signs in at the agency's domain and has never had a HighLevel login. Sending
+ * them to one is a dead end dressed as a button. The in-account route uses the
+ * session they already have.
+ *
  * It is laid out as the sign-in page's twin, because that is what it is: the
  * other way into the product. A contractor's first impression should not be a
  * utility page that looks like it belongs to a different application.
@@ -34,18 +43,18 @@ export const dynamic = 'force-dynamic';
 
 const STEPS: [string, string][] = [
   [
-    'Approve access',
-    'You allow Project Hub to work with your contacts, conversations and invoices — that is how it sends invoices and appointment emails on your behalf.',
+    'Open App Marketplace',
+    'In the left-hand menu of your own account. You are already signed in there, which is why this is the way to do it.',
   ],
   [
-    'Come straight back',
-    'Your projects, clients and payment schedules are already waiting. Nothing has to be imported.',
+    'Find Project Hub and install it',
+    'You will be asked to allow it to work with your contacts, conversations and invoices — that is how it sends invoices and appointment emails on your behalf.',
   ],
   [
     'That is the whole setup',
     'No keys, no settings, nothing to install on your computer. It stays connected from then on.',
   ],
-];
+]
 
 export default async function ConnectPage({
   searchParams,
@@ -117,7 +126,7 @@ export default async function ConnectPage({
             Connect your account
           </h2>
           <p className="mt-1.5 text-sm text-navy-400">
-            One approval and Project Hub is ready. It takes about ten seconds.
+            One approval and Project Hub is ready. Three steps, about a minute.
           </p>
 
           <ol className="mt-7 space-y-5">
@@ -136,16 +145,18 @@ export default async function ConnectPage({
 
           {live ? (
             <>
+              <p className="mt-8 rounded-lg border border-navy-100 bg-navy-50/60 px-4 py-3.5 text-xs leading-relaxed text-navy-600">
+                <strong className="font-semibold text-navy-900">Do it from inside your account.</strong>{' '}
+                The App Marketplace in your own left-hand menu uses the login you already have. The
+                button below goes to GoHighLevel&rsquo;s own site, which asks for a separate HighLevel
+                login that most people do not have.
+              </p>
               <a
                 href={startHref}
-                className="mt-8 flex w-full items-center justify-center rounded-lg bg-navy-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800"
+                className="mt-4 flex w-full items-center justify-center rounded-lg border border-navy-200 px-5 py-2.5 text-sm font-semibold text-navy-900 transition hover:bg-navy-50"
               >
-                Connect
+                Connect on GoHighLevel instead
               </a>
-              <p className="mt-3 text-xs leading-relaxed text-navy-400">
-                You will be asked to sign in to your account first if you are not already. Only
-                somebody with access to it can approve this.
-              </p>
             </>
           ) : (
             // The switch is off on this deployment. Offering "Connect" would
@@ -154,8 +165,7 @@ export default async function ConnectPage({
               className="mt-8 rounded-lg border border-amber-600/25 bg-amber-50/70 px-4 py-3 text-sm leading-relaxed text-navy-900"
               role="alert"
             >
-              Connecting is not switched on for this site yet. Ask whoever set up Project Hub for
-              you.
+              Connecting is not switched on for this site yet. Ask whoever set up Project Hub for you.
             </p>
           )}
 

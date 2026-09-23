@@ -129,3 +129,113 @@ export function authorizeUrl(config: GhlOauthConfig, state: string): string {
   url.searchParams.set('state', state);
   return url.toString();
 }
+
+/**
+ * Whether to send an unconnected contractor straight at the approval screen.
+ *
+ * ---------------------------------------------------------------------------
+ * OFF BY DEFAULT, AND THE REASON MATTERS
+ *
+ * The approval screen lives on `marketplace.gohighlevel.com`. A contractor in a
+ * white-labelled agency signs in at the agency's own domain and has never seen
+ * that one — so an automatic redirect hands them "Please login to HighLevel to
+ * continue" and a login they do not have. That is a worse dead end than the one
+ * it was meant to remove, because at least the old one was honest.
+ *
+ * The route that works for them is the App Marketplace **inside their own
+ * account**, which uses the session they already have. That is what the connect
+ * page tells them to do.
+ *
+ * So this exists for the case where it genuinely helps — an agency admin
+ * installing on a contractor's behalf, who does have that login — and stays off
+ * everywhere else.
+ * ---------------------------------------------------------------------------
+ */
+export function autoConnectEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (env.GHL_AUTO_CONNECT ?? '').trim().toLowerCase() === 'true';
+}
+
+// ── The agency app, which is a different app ────────────────────────────────
+
+/**
+ * The agency-level Marketplace app: one install, used for one thing.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THERE ARE TWO APPS
+ *
+ * GoHighLevel will not sell one credential that does both jobs.
+ *
+ *   · Signing a contractor in makes exactly one call, `GET /locations/{id}`.
+ *     `locations.readonly` is available to an agency app — it is badged
+ *     "Sub + agency" in the scope picker.
+ *   · Invoices and emails need contacts, conversations and invoices, which are
+ *     greyed out on an agency app: *"This scope works with Location-level
+ *     tokens only, which are issued when a Sub-Account installs your app."*
+ *
+ * So the agency app proves sub-accounts, and the sub-account app does the work.
+ * The effect is that a contractor who has installed nothing can still sign in
+ * and see everything that comes from BuildSuite — which is almost all of it —
+ * and is only asked to approve when they first send an invoice or an email.
+ *
+ * Absent configuration means absent, not broken: sign-in falls back to the
+ * sub-account token or the Private Integration token, exactly as before.
+ * ---------------------------------------------------------------------------
+ */
+const AGENCY_REQUIRED = [
+  'GHL_AGENCY_CLIENT_ID',
+  'GHL_AGENCY_CLIENT_SECRET',
+  'GHL_AGENCY_REDIRECT_URI',
+] as const;
+
+export function readAgencyConfig(env: NodeJS.ProcessEnv = process.env): GhlOauthResult {
+  const missing = AGENCY_REQUIRED.filter((key) => {
+    const value = env[key];
+    return value === undefined || value.trim() === '';
+  });
+  if (missing.length > 0) return { configured: false, missing };
+
+  return {
+    configured: true,
+    config: {
+      clientId: env.GHL_AGENCY_CLIENT_ID!.trim(),
+      clientSecret: env.GHL_AGENCY_CLIENT_SECRET!.trim(),
+      redirectUri: env.GHL_AGENCY_REDIRECT_URI!.trim().replace(/\/+$/, ''),
+      apiBase: (env.GHL_API_BASE_URL ?? DEFAULT_API_BASE).trim().replace(/\/+$/, ''),
+      authorizeBase: (env.GHL_OAUTH_AUTHORIZE_BASE ?? DEFAULT_AUTHORIZE_BASE)
+        .trim()
+        .replace(/\/+$/, ''),
+    },
+  };
+}
+
+/**
+ * Whether the agency install may be used.
+ *
+ * Deliberately NOT gated on `GHL_OAUTH_ENABLED`. That switch governs which
+ * credential does the work — invoices, emails — and rolling it back must not
+ * also take away the thing that lets people sign in. They are separate
+ * decisions and separate failure modes.
+ */
+export function agencyEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if ((env.GHL_AGENCY_ENABLED ?? '').trim().toLowerCase() !== 'true') return false;
+  return readAgencyConfig(env).configured;
+}
+
+/**
+ * One scope, and it stays one scope.
+ *
+ * This credential can reach every sub-account in the agency. Anything added
+ * here is granted across all of them at once, so the bar is not "might be
+ * useful" — it is "sign-in cannot work without it".
+ */
+export const AGENCY_SCOPES = ['locations.readonly'] as const;
+
+export function agencyAuthorizeUrl(config: GhlOauthConfig, state: string): string {
+  const url = new URL(`${config.authorizeBase}/oauth/chooselocation`);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('client_id', config.clientId);
+  url.searchParams.set('redirect_uri', config.redirectUri);
+  url.searchParams.set('scope', AGENCY_SCOPES.join(' '));
+  url.searchParams.set('state', state);
+  return url.toString();
+}

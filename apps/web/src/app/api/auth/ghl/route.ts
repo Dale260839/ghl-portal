@@ -4,8 +4,9 @@ import { describeRejection, verifyLanding } from '@/lib/auth/ghl-landing';
 import { verifyGhlLocation } from '@/lib/auth/ghl-verify';
 import { readGhlConfig } from '@/lib/ghl/config';
 import { configForLocation } from '@/lib/ghl/resolve-config';
-import { oauthEnabled } from '@/lib/ghl/oauth-config';
+import { autoConnectEnabled, oauthEnabled } from '@/lib/ghl/oauth-config';
 import { locationConnected } from '@/lib/ghl/resolve-config';
+import { currentAgencyToken } from '@/lib/ghl/agency-token';
 import { hasTriedConnecting, markConnectAttempted } from '@/lib/connect-attempt';
 import { getBuildSuiteReader } from '@/lib/buildsuite/projects';
 import { homeFor, setSession, type Role } from '@/lib/session';
@@ -127,10 +128,38 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // is the token minted for the location, so the check becomes "is the app
     // installed there" — which is the honest question. Without it, this is the
     // per-location Private Integration token exactly as before.
-    const check = await verifyGhlLocation(
+    let check = await verifyGhlLocation(
       locationId,
       await configForLocation(ghlConfig.config, locationId),
     );
+
+    // ── Second chance: the agency credential ──────────────────────────────
+    //
+    // `unknown_location` means the credential we tried cannot see this
+    // sub-account — which is the normal state for a contractor who has
+    // installed nothing and has no Private Integration token. The agency
+    // install can see every sub-account in the agency, so it answers exactly
+    // this question and no other.
+    //
+    // A SECOND ATTEMPT, NOT A REPLACEMENT. The sub-account's own credential is
+    // tried first and still decides when it can. That keeps this additive: with
+    // no agency install, or a broken one, sign-in behaves precisely as it did
+    // before, and a failure here costs one extra API call rather than a locked
+    // door.
+    if (!check.verified && check.reason === 'unknown_location') {
+      const agencyToken = await currentAgencyToken();
+      if (agencyToken !== null) {
+        check = await verifyGhlLocation(locationId, {
+          ...ghlConfig.config,
+          locationId,
+          token: agencyToken,
+        });
+        if (check.verified) {
+          console.log(`[auth] Location ${locationId} proved by the agency install`);
+        }
+      }
+    }
+
     if (!check.verified) {
       console.warn(`[auth] Location verification failed for ${locationId}: ${check.reason}`);
 
@@ -148,7 +177,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       if (check.reason === 'unknown_location' && oauthEnabled()) {
         // First time: send them straight at the approval screen. They came here
         // to open Project Hub, not to read about why they cannot.
-        if (!(await hasTriedConnecting())) {
+        if (autoConnectEnabled() && !(await hasTriedConnecting())) {
           await markConnectAttempted();
           return NextResponse.redirect(
             new URL(
@@ -228,7 +257,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // without connecting — a closed tab, a decline, an error — and sending
   // somebody round the same loop on every page view is worse than the problem.
   // After that the banner asks instead, and they choose their moment.
-  if (oauthEnabled() && !(await hasTriedConnecting())) {
+  if (oauthEnabled() && autoConnectEnabled() && !(await hasTriedConnecting())) {
     const connected = await locationConnected(locationId);
     if (connected === false) {
       await markConnectAttempted();

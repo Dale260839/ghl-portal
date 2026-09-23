@@ -16,6 +16,13 @@
  * answer is "whoever opens the Hub, at the moment they first need it", and no
  * key is ever seen by anyone.
  *
+ * It links to /connect rather than starting the flow, deliberately. The flow
+ * ends on GoHighLevel's own site, which asks for a HighLevel login a contractor
+ * in a white-labelled agency has never had; the page explains the route that
+ * uses the session they already have — the App Marketplace inside their own
+ * account. A button that leads somewhere a person cannot get through is worse
+ * than a page that tells them where to go.
+ *
  * WHEN IT SAYS NOTHING
  *
  * When the app is switched off on this deployment, and when the sub-account is
@@ -52,7 +59,7 @@ export function ConnectBanner({
         </span>
       )}
       <a
-        href="/api/connect/start"
+        href="/connect"
         className="rounded bg-amber-700 px-2 py-0.5 font-semibold text-white hover:bg-amber-800"
       >
         Connect
