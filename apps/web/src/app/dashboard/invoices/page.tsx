@@ -416,7 +416,7 @@ export default async function Invoices({
                               target="_blank" rel="noreferrer"
                               className="text-xs font-medium text-navy-700 underline"
                             >
-                              Totals &amp; payment history
+                              View / print invoice
                             </a>
                             <span className="text-xs text-navy-500">
                               {saved.externalId}

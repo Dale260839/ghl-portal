@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readInvoiceFinancials, loadPaymentHistory, historyNotes } from './payment-history.ts';
+import { readInvoiceFinancials, loadPaymentHistory, historyNotes, invoiceDate } from './payment-history.ts';
 import { invoiceStatement } from './statement.ts';
 import { buildGhlInvoicePayload } from './ghl-rail.ts';
 import { composeFirstInvoice } from './invoice.ts';
 import { GhlInvoices } from '../ghl/invoices.ts';
 
 const expected={id:'one',locationId:'APS',contactId:'client'};
-const row=(over:Record<string,unknown>={})=>({_id:'one',altId:'APS',altType:'location',contactDetails:{id:'client',name:'Test'},invoiceNumber:'INV-1',status:'paid',currency:'USD',total:110,amountPaid:110,amountDue:0,totalSummary:{subTotal:100,tax:10,discount:0},invoiceItems:[{name:'Deposit',amount:100,qty:1}],...over});
+const row=(over:Record<string,unknown>={})=>({_id:'one',altId:'APS',altType:'location',contactDetails:{id:'client',name:'Test',email:'test@example.com'},invoiceNumber:'INV-1',status:'paid',currency:'USD',total:110,amountPaid:110,amountDue:0,totalSummary:{subTotal:100,tax:10,discount:0},invoiceItems:[{name:'Deposit',amount:100,qty:1}],issueDate:'2026-09-18',dueDate:'2026-09-23',...over});
 const read=(over:Record<string,unknown>={})=>readInvoiceFinancials(row(over),expected);
 const link=(over={})=>({id:'draft1',projectId:'project1',externalId:'one',sentVia:'ghl',...over});
 
@@ -20,6 +20,11 @@ test('reject missing payment, invalid money and mismatched tenant/contact/id',()
  for(const patch of [{amountPaid:undefined},{amountPaid:-1},{amountPaid:NaN},{total:Infinity},{currency:'CAD'},{altId:'AFC'},{_id:'another'},{contactDetails:{id:'other'}},{status:'refunded'}]) assert.throws(()=>read(patch));
 });
 test('wrapped API response retains identity validation',()=>assert.equal(readInvoiceFinancials({invoice:row()},expected).paid,110));
+test('timestamp dates use the account timezone while date-only fields keep their calendar day',()=>{
+ assert.equal(invoiceDate('2026-09-24T00:00:00.000Z','America/Los_Angeles'),'2026-09-23');
+ assert.equal(invoiceDate('2026-09-24','America/Los_Angeles'),'2026-09-24');
+ assert.throws(()=>invoiceDate('2026-09-24T00:00:00.000Z'));
+});
 test('history joins by linked IDs, not by contact; removes duplicates and current invoice',async()=>{
  const calls:string[]=[];
  const history=await loadPaymentHistory([link(),link({id:'duplicate'}),link({id:'current',externalId:'two'}),link({id:'foreign',projectId:'other',externalId:'foreign'}),link({id:'unsaved',externalId:null})],'current','project1',async id=>{calls.push(id);return read()});
@@ -52,12 +57,13 @@ test('new invoice history does not subtract earlier installment receipts or reco
  assert.match(payload.termsNotes,/not deducted again/);
  assert.match(payload.termsNotes,/&lt;script&gt;/);
 });
-test('statement shows all requested totals and escapes untrusted content',()=>{
- const invoice=read({businessDetails:{name:'<script>alert(1)</script>',logoUrl:'javascript:alert(1)'},termsNotes:'<script>alert(1)</script>'});
+test('printable invoice shows requested totals and prior receipts without executable notes',()=>{
+ const invoice=read({businessDetails:{name:'<script>alert(1)</script>',logoUrl:'javascript:alert(1)',address:{addressLine1:'100 N Howard St',city:'Spokane',state:'WA',postalCode:'99201'}},termsNotes:'<p>Payment terms</p><img src=x onerror=alert(1)><script>alert(1)</script>'});
  const history={checkedAt:'2026-09-23',paid:110,entries:[invoice]};
- const html=invoiceStatement(invoice,history,'P-1');
- for(const label of ['Subtotal','Tax','Invoice total','Paid on this invoice','Amount due on this invoice','Other project invoices'])assert.ok(html.includes(label));
- assert.ok(!html.includes('<script>'));assert.ok(!html.includes('src="javascript:'));assert.ok(html.includes('sandbox'));
+ const html=invoiceStatement(invoice,history,'P-1','testnonce');
+ for(const label of ['INVOICE','Bill to','Subtotal','Tax','Invoice total','Paid on this invoice','Amount due','Previous project payments','Total previously received','Notes &amp; terms','Print / Save PDF'])assert.ok(html.includes(label),label);
+ assert.ok(!html.includes('<script>alert'));assert.ok(!html.includes('onerror='));assert.ok(!html.includes('src="javascript:'));
+ assert.ok(html.includes('Spokane, WA 99201'));
  assert.ok(historyNotes(history).includes('snapshot'));
 });
 test('financial read includes location and disables cache; rejects foreign account',async()=>{
@@ -69,4 +75,14 @@ test('financial read includes location and disables cache; rejects foreign accou
  assert.equal((await reader.financials('one','client')).paid,110);
  const bad=new GhlInvoices(config,async()=>new Response(JSON.stringify(row({altId:'AFC'}))));
  await assert.rejects(bad.financials('one','client'));
+});
+test('location timezone is scoped to the same GHL sub-account',async()=>{
+ const config={baseUrl:'https://example.test',apiVersion:'2021-07-28',token:'test',locationId:'APS',projectObjectKey:''};
+ const reader=new GhlInvoices(config,async url=>{
+   assert.equal(String(url),'https://example.test/locations/APS');
+   return new Response(JSON.stringify({location:{id:'APS',timezone:'America/Los_Angeles'}}));
+ });
+ assert.equal(await reader.locationTimeZone(),'America/Los_Angeles');
+ const wrong=new GhlInvoices(config,async()=>new Response(JSON.stringify({location:{id:'AFC',timezone:'America/Los_Angeles'}})));
+ await assert.rejects(wrong.locationTimeZone());
 });

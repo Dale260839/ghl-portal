@@ -14,6 +14,7 @@ export interface InvoiceFinancials {
   terms: string;
   business: { name: string; logo: string; phone: string; website: string; address: string };
   customer: string;
+  customerEmail: string;
   items: { name: string; description: string; amount: number; quantity: number }[];
 }
 
@@ -21,8 +22,19 @@ const record = (v: unknown): Record<string, unknown> => v !== null && typeof v =
 const text = (v: unknown): string => typeof v === 'string' ? v : '';
 const money = (v: unknown): number | null => typeof v === 'number' && Number.isFinite(v) && v >= 0 && Number.isSafeInteger(Math.round(v * 100)) ? Math.round(v * 100) / 100 : null;
 
+export function invoiceDate(value: unknown, timeZone?: string): string {
+  const raw = text(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  if (!timeZone || !/^\d{4}-\d{2}-\d{2}T/.test(raw)) throw new Error('Invoice date needs location timezone review');
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) throw new Error('Invalid invoice date');
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const part = (type: string) => parts.find(value => value.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
 /** Missing financial fields are an error, never a made-up zero payment. */
-export function readInvoiceFinancials(body: unknown, expected: { id: string; locationId: string; contactId: string }): InvoiceFinancials {
+export function readInvoiceFinancials(body: unknown, expected: { id: string; locationId: string; contactId: string; timeZone?: string }): InvoiceFinancials {
   const outer = record(body);
   const row = outer.invoice ? record(outer.invoice) : outer;
   const contact = record(row.contactDetails);
@@ -39,10 +51,10 @@ export function readInvoiceFinancials(body: unknown, expected: { id: string; loc
   return {
     id: expected.id, number: String(row.invoiceNumber ?? expected.id), status, currency: 'USD',
     subtotal: money(summary.subTotal), tax: money(summary.tax), discount: money(summary.discount), total, paid, due,
-    issueDate: `${text(row.issueDate).slice(0,10)} (GHL record)`, dueDate: `${text(row.dueDate).slice(0,10)} (GHL record; confirm timezone in editor)`, terms: text(row.termsNotes),
+    issueDate: invoiceDate(row.issueDate, expected.timeZone), dueDate: invoiceDate(row.dueDate, expected.timeZone), terms: text(row.termsNotes),
     business: {name: text(business.name), logo:text(business.logoUrl), phone:text(business.phoneNo), website:text(business.website),
-      address: typeof business.address === 'string' ? business.address : [address.addressLine1,address.addressLine2,[address.city,address.state,address.postalCode].filter(Boolean).join(', ')].filter(Boolean).join('\n')},
-    customer: text(contact.name),
+      address: typeof business.address === 'string' ? business.address : [address.addressLine1,address.addressLine2,[address.city,[address.state,address.postalCode].filter(Boolean).join(' ')].filter(Boolean).join(', ')].filter(Boolean).join('\n')},
+    customer: text(contact.name), customerEmail: text(contact.email),
     items: (Array.isArray(row.invoiceItems) ? row.invoiceItems : []).map(value=>{
       const item=record(value); const amount=money(item.amount), quantity=item.qty;
       if (amount === null || typeof quantity !== 'number' || !Number.isFinite(quantity) || quantity <= 0) throw new Error('Invoice item needs review');
