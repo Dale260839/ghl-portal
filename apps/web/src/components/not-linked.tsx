@@ -16,8 +16,8 @@ import { Card } from '@/components/ui';
  * done nothing wrong and can do nothing about it. This is the same refusal,
  * said in words.
  *
- * Seven of 64 contractor profiles are in this state. It is a one-line fix in
- * BuildSuite, not a fault in their account.
+ * A sign-in can also belong to an agency administrator with no contractor
+ * record, so the explanation must not imply every case is an onboarding error.
  * ---------------------------------------------------------------------------
  */
 export function NotLinkedToContractor({
@@ -38,15 +38,14 @@ export function NotLinkedToContractor({
         anything. Rather than show you another company&apos;s, we show none.
       </p>
       <p className="mx-auto mt-2 max-w-lg text-xs leading-relaxed text-navy-400">
-        This is a one-off fix on the BuildSuite side, not something wrong with your account:
-        setting <code>contractor_id</code> on your auth profile
+        Ask your BuildSuite administrator to link this sign-in to the correct contractor record
         {email !== undefined && email !== '' ? (
           <>
             {' '}
             for <span className="font-medium text-navy-600">{email}</span>
           </>
         ) : null}
-        , or matching your sign-in email to your contractor record.
+        . A GoHighLevel sign-in alone does not choose a contractor for billing.
       </p>
     </Card>
   );

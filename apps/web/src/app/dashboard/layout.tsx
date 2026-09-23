@@ -42,11 +42,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     db.listIssues(scope),
     resolveContractorName(scope),
   ]);
-  // Chris, 8 Sep: the shell shows the contractor's own code and "Project Hub",
-  // never BuildSuite. The code is the business name's initials; the context bar
-  // names the business in full. Falls back to Alliance only when the session is
-  // not linked to a contractor record.
-  const tenantName = businessName ?? 'Alliance Pro Services';
+  // An unlinked sign-in must not be branded as another contractor.
+  const tenantName = businessName ?? 'Project Hub';
   const hub = getHubClient();
   const pendingReview = updates.filter((u) => u.managerApprovalStatus === 'Pending').length;
   const openIssues = issues.filter(
@@ -94,7 +91,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <AppShell
-      brand={brandCode(tenantName)}
+      brand={businessName === null ? 'HUB' : brandCode(businessName)}
       brandSuffix="Project Hub"
       contextTitle={tenantName}
       contextSubtitle={`${session.name} · Project Manager`}
