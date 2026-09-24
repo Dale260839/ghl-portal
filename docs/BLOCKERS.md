@@ -37,7 +37,7 @@ for a week becomes impossible to miss, without burying the check-in in a table.
 | 🟡 | **9 of 68 accounts** on this location do not resolve to a contractor record. | Sing | 2026-09-10 | Those users see "not linked to a contractor" on every Hub-backed screen. |
 | 🟡 | **`proposals.contractor_id` null on 13 of 48**, including one of the six signed. | Sing | 2026-09-10 | Worked around via `ContractorResolver`, but the fallback costs a read and covers a gap that should not exist. |
 | 🟡 | **`BSA-028` has a code but no `client_email`.** | Sing | 2026-09-10 | Its homeowner can never sign in. Nothing else is affected. |
-| 🟡 | **51 live projects have no `project_code`.** | Sing | 2026-09-10 | They cannot hand off (§3.6) and their homeowners cannot sign in. Codes appear to be assigned at award or signature. |
+| ✅ | ~~**51 live projects have no `project_code`.**~~ **Not a gap — closed 2026-09-24.** Measured read-only against BuildSuite: 115 projects, 53 without a code, and every one of them is `active` (43), `draft` (9) or `completed` (1). **All 9 awarded projects have both a code and a `client_email`.** Codes are assigned at award, exactly as suspected, so no homeowner is locked out and nothing is waiting on Sing. Re-check if an *awarded* project ever appears without one. | — | closed | None. |
 
 ---
 

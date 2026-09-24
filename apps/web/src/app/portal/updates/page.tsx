@@ -1,5 +1,6 @@
-import Link from 'next/link';
 import { currentPortalProject, photosFor } from '@/lib/portal-data';
+import { getHubUpdateFeedback } from '@/lib/hub-db/update-feedback';
+import { UpdateFeedback } from '@/components/update-feedback';
 
 import { scopeOfProject } from '@/lib/scope';
 import { hubScopeOfProject } from '@/lib/tenant-scope';
@@ -35,6 +36,17 @@ export default async function PortalUpdates({
   );
   const updates = toClientUpdates(all, project);
   const photos = (await photosFor(project));
+
+  // What has already been said. The ids come from `updates`, which is the
+  // published projection above — so nothing is read for an update this
+  // homeowner was never shown.
+  const feedbackStore = getHubUpdateFeedback();
+  const feedback = feedbackStore.available
+    ? await feedbackStore.feedback
+        .forUpdates(updates.map((u) => u.id))
+        .catch(() => ({ acknowledgements: [], comments: [] }))
+    : { acknowledgements: [], comments: [] };
+  const me = project.clientName;
 
   return (
     <div className="space-y-6">
@@ -89,14 +101,34 @@ export default async function PortalUpdates({
                   </div>
                 )}
 
-                {/* "Acknowledge" and "Comment" did nothing. The tables for both
-                    exist and nothing reads or writes either, so this goes where
-                    a homeowner can actually reply today. */}
-                <div className="mt-4 border-t border-navy-100 pt-3.5">
-                  <Link href="/portal/messages" className="text-sm font-medium text-navy-600 hover:underline">
-                    Reply about this update
-                  </Link>
-                </div>
+                {/* The conversation on this update. Only client-visible
+                    comments: an internal note by the contractor is on the same
+                    record and must never appear here. */}
+                {feedback.comments.filter((c) => c.updateId === u.id && c.clientVisible).length >
+                  0 && (
+                  <ul className="mt-4 space-y-2.5 border-t border-navy-100 pt-3.5">
+                    {feedback.comments
+                      .filter((c) => c.updateId === u.id && c.clientVisible)
+                      .map((c) => (
+                        <li key={c.id} className="text-sm">
+                          <span className="font-medium text-navy-900">
+                            {c.authorRole === 'client' ? 'You' : c.author}
+                          </span>{' '}
+                          <span className="text-xs text-navy-400">{shortDate(c.createdAt)}</span>
+                          <p className="mt-0.5 leading-relaxed text-navy-700">{c.body}</p>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+
+                <UpdateFeedback
+                  projectId={project.buildsuiteProjectId}
+                  updateId={u.id}
+                  acknowledged={feedback.acknowledgements.some(
+                    (a) => a.updateId === u.id && a.acknowledgedBy === me,
+                  )}
+                  replies={feedback.comments.filter((c) => c.updateId === u.id).length}
+                />
               </Card>
             );
           })}

@@ -79,7 +79,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
       // project — it no longer quietly opens the first active one.
       projectSections: true,
     },
-    { href: '/dashboard/engagements', label: 'Tasks', icon: IconTasks },
+    // Tasks means tasks (Dale, 2026-09-24). This pointed at Active work — the
+    // book of jobs — for weeks, so anyone looking for the tasks they had
+    // assigned concluded the feature did not exist. Active work keeps its own
+    // entry below rather than losing its place in the sidebar.
+    { href: '/dashboard/tasks', label: 'Tasks', icon: IconTasks },
+    { href: '/dashboard/engagements', label: 'Active work', icon: IconProjects },
     { href: '/dashboard/updates', label: 'Field Updates', icon: IconUpdates, badge: pendingReview },
     { href: '/dashboard/issues', label: 'Issues', icon: IconIssues, badge: openIssues },
     { href: '/dashboard/invoices', label: 'Invoices & Payments', icon: IconInvoices },

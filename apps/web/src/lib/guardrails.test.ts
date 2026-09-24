@@ -700,6 +700,47 @@ test('the connect prompt is on a contractor screen and nowhere else', () => {
   assert.match(withoutComments(banner.text), /connected !== false.*return null/s);
 });
 
+test('§ an internal reply on an update never reaches the portal', () => {
+  // Dale, 2026-09-24: acknowledgements and comments are live. A contractor's
+  // reply defaults to internal, and the portal must filter on that flag — the
+  // same record carries both kinds, so the only thing keeping a private note
+  // private is the clause that reads it.
+  const portal = FILES.find((f) => rel(f.path) === 'app/portal/updates/page.tsx');
+  assert.ok(portal, 'the portal updates page has moved');
+  const text = withoutComments(portal.text);
+
+  // Every read of comments on this page is narrowed by clientVisible.
+  const reads = text.split('feedback.comments').length - 1;
+  const guarded = text.split('c.clientVisible').length - 1;
+  assert.ok(reads > 0, 'the portal no longer shows comments at all');
+  assert.ok(
+    guarded >= reads - 1,
+    `${reads} reads of comments, only ${guarded} narrowed to client-visible`,
+  );
+
+  // And the homeowner's own comment is written visible to them, never hidden.
+  const action = FILES.find((f) => rel(f.path) === 'lib/actions/update-feedback.ts');
+  assert.ok(action, 'lib/actions/update-feedback.ts has moved');
+  const actionText = withoutComments(action.text);
+  const clientWrite = actionText.slice(actionText.indexOf("authorRole: 'client'"));
+  assert.ok(
+    clientWrite.startsWith("authorRole: 'client',"),
+    'the homeowner comment path has moved',
+  );
+  assert.match(clientWrite.slice(0, 200), /clientVisible: true/);
+
+  // The contractor's reply is a choice, defaulting to internal: an unticked box
+  // posts nothing, so presence is the test.
+  const reply = FILES.find((f) => rel(f.path) === 'components/update-reply.tsx');
+  assert.ok(reply, 'components/update-reply.tsx has moved');
+  assert.match(reply.text, /type="checkbox" name="clientVisible"/);
+  assert.equal(
+    /name="clientVisible"[^>]*(checked|defaultChecked)/.test(reply.text),
+    false,
+    'sending to the homeowner must not be the default',
+  );
+});
+
 test('a homeowner writes only into their own project, and only where the switch is on', () => {
   // John, 2026-09-19: the portal's "Raise an issue" and "Upload File" now work.
   // Both are writes by the least-trusted role in the system, so each must read
