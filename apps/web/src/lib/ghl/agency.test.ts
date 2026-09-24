@@ -199,3 +199,26 @@ test('no agency install is null, not a throw', async () => {
   }) as unknown as typeof fetch;
   assert.equal(await agencyAccessToken({ config: config(), store: fakeStore(null), fetchImpl }), null);
 });
+
+test('§ a database failure reading the install never reaches sign-in', async () => {
+  // Sign-in calls this as a SECOND chance at proving a sub-account. A throw
+  // here would produce a 500 for a contractor whose own credential was working
+  // perfectly — the opposite of a fallback.
+  const exploding = {
+    async read() {
+      throw new Error('supabase said no');
+    },
+  } as unknown as HubGhlAgency;
+
+  const fetchImpl = (async () => {
+    throw new Error('must not be called');
+  }) as unknown as typeof fetch;
+
+  await assert.rejects(exploding.read('agency-client'), /supabase said no/);
+  // …and the wrapper turns exactly that into a null.
+  assert.equal(
+    await agencyAccessToken({ config: config(), store: exploding, fetchImpl }).catch(() => 'THREW'),
+    'THREW',
+    'agencyAccessToken itself still propagates — the catch belongs in currentAgencyToken',
+  );
+});

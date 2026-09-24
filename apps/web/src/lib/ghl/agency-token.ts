@@ -216,7 +216,25 @@ export async function currentAgencyToken(
   const hub = getHubGhlAgency();
   if (!hub.available) return null;
 
-  const token = await agencyAccessToken({ config: config.config, store: hub.store });
+  // ── THIS FUNCTION MUST NOT THROW ──────────────────────────────────────────
+  //
+  // Its only caller is sign-in, where it is a second chance at proving a
+  // sub-account. The file above says a broken agency install must never be the
+  // reason a contractor cannot open the Hub — and until this catch existed,
+  // that was an intention rather than a guarantee: `store.read` reaches the
+  // database, and a 5xx from Supabase or a dropped connection would have
+  // thrown straight through sign-in and produced a 500 for someone whose own
+  // credential was working perfectly.
+  //
+  // Null means "no agency token available", which is exactly what a caller
+  // needs to know in every one of those cases.
+  let token: string | null = null;
+  try {
+    token = await agencyAccessToken({ config: config.config, store: hub.store });
+  } catch (error) {
+    console.error('[ghl-agency] could not read the agency install — signing in without it', error);
+    return null;
+  }
   if (token === null) return null;
 
   cached = { token, goodUntil: now + MAX_CACHE_MS };
