@@ -28,13 +28,23 @@ import { usePathname } from 'next/navigation';
  * row scrolls when they do not all fit. On a wide phone nothing scrolls and it
  * looks exactly as it did; on a narrow one the last item is reachable rather
  * than merely present. Snap points stop it settling mid-item.
+ *
+ * AND THEN IT SCROLLED ON A DESKTOP TOO (Dale, 2026-09-24)
+ *
+ * The bar was capped at `max-w-lg` — 32rem — on every screen. Nine items need
+ * more than that, so on a 27-inch monitor the last one sat half off the end of
+ * a bar with acres of empty space either side of it, and looked broken rather
+ * than scrollable. Mobile-first is not the same as mobile-only.
+ *
+ * So the cap lifts with the viewport. On a phone nothing changes; from `sm` up
+ * the bar is wide enough that every item fits and the scrolling never starts.
  * ---------------------------------------------------------------------------
  */
 
 export interface FieldNavItem {
   href: string;
   label: string;
-  icon: 'today' | 'tasks' | 'update' | 'docs' | 'photos' | 'issues' | 'punch' | 'messages';
+  icon: 'today' | 'tasks' | 'schedule' | 'update' | 'docs' | 'photos' | 'issues' | 'punch' | 'messages';
   /** Unseen assignments. The "ding" in D4 §5. */
   badge?: number;
 }
@@ -42,6 +52,7 @@ export interface FieldNavItem {
 const ICONS: Record<FieldNavItem['icon'], React.ReactNode> = {
   today: <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />,
   tasks: <path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />,
+  schedule: <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM9 14h2v2H9z" />,
   update: <path d="M12 5v14M5 12h14" />,
   docs: <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h5" />,
   photos: <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />,
@@ -58,7 +69,7 @@ export function FieldNav({ items }: { items: FieldNavItem[] }) {
       className="fixed inset-x-0 bottom-0 z-20 border-t border-navy-100 bg-white pb-[env(safe-area-inset-bottom)]"
       aria-label="Field navigation"
     >
-      <ul className="mx-auto flex max-w-lg snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ul className="mx-auto flex max-w-lg snap-x snap-mandatory overflow-x-auto sm:max-w-3xl sm:justify-center sm:overflow-x-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {items.map((item) => {
           const active = pathname === item.href;
           return (

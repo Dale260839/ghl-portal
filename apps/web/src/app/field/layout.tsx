@@ -47,6 +47,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   const nav: FieldNavItem[] = [
     { href: '/field', label: 'Today', icon: 'today' },
     { href: '/field/tasks', label: 'Tasks', icon: 'tasks', badge: unseen },
+    { href: '/field/schedule', label: 'Schedule', icon: 'schedule' },
     { href: '/field/update', label: 'Update', icon: 'update' },
     { href: '/field/documents', label: 'Docs', icon: 'docs' },
     { href: '/field/photos', label: 'Photos', icon: 'photos' },
@@ -61,7 +62,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
       <DataModeBanner kind={activeSourceKind()} hubConnected={getHubClient().available} />
 
       <header className="sticky top-0 z-10 border-b border-navy-100 bg-white">
-        <div className="mx-auto flex max-w-lg items-center justify-between gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-lg items-center justify-between gap-3 px-4 py-3 sm:max-w-3xl">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-navy-900">{session.name}</div>
             <div className="text-xs text-navy-400">
@@ -85,7 +86,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
 
       {/* pb-24 clears the fixed bottom nav. Without it the last control on a
           page sits under it and cannot be tapped. */}
-      <main className="mx-auto max-w-lg px-4 py-5 pb-24">{children}</main>
+      <main className="mx-auto max-w-lg px-4 py-5 pb-24 sm:max-w-3xl">{children}</main>
 
       <FieldNav items={nav} />
     </div>

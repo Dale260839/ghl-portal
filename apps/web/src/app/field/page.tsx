@@ -7,6 +7,8 @@ import { fieldProjectsFor } from '@/lib/field-scope';
 import { Badge, Card, CardHeader, shortDate } from '@/components/ui';
 import { stageLabel } from '@/lib/data/types';
 import { currentDataSource } from '@/lib/data/current-source';
+import { getHubSchedule, type ScheduleItem } from '@/lib/hub-db/schedule';
+import { appointmentsForField, splitByTime } from '@/lib/field-schedule';
 
 /**
  * Field Interface (§12.2). Mobile-first, large tap targets, minimal typing.
@@ -37,6 +39,28 @@ export default async function FieldToday({
   const assignedIds = new Set(assigned.map((p) => p.buildsuiteProjectId));
   const todaysTasks = tasks.filter((t) => assignedIds.has(t.projectId));
 
+  // What is coming up on their projects. On Today rather than only behind the
+  // Schedule tab, because a crew member opens this screen to find out where
+  // they are meant to be — and until 2026-09-24 the answer only existed in an
+  // email their PM may or may not have sent.
+  const hub = getHubSchedule();
+  const scheduleItems: ScheduleItem[] = hub.available
+    ? (
+        await Promise.all(
+          [...assignedIds].map((id) =>
+            hub.schedule.listForProject(scope, id).catch(() => [] as ScheduleItem[]),
+          ),
+        )
+      ).flat()
+    : [];
+  const { upcoming } = splitByTime(
+    appointmentsForField(scheduleItems, assignedIds, {
+      name: access.session.name,
+      email: access.session.email,
+    }),
+  );
+  const nextUp = upcoming.slice(0, 3);
+
   return (
     <div className="space-y-5">
       {submitted === '1' && (
@@ -48,6 +72,38 @@ export default async function FieldToday({
             ? 'They have been emailed.'
             : 'Nobody was emailed — tell them if it is urgent.'}
         </div>
+      )}
+
+      {nextUp.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Coming up"
+            action={
+              <a href="/field/schedule" className="text-xs font-medium text-navy-600 underline">
+                See all
+              </a>
+            }
+          />
+          <ul className="divide-y divide-navy-100">
+            {nextUp.map((item) => (
+              <li key={item.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-navy-900">{item.title}</span>
+                    {item.mine && <Badge tone="warn">You</Badge>}
+                  </div>
+                  <div className="mt-0.5 text-xs text-navy-400">
+                    {projects.find((p) => p.buildsuiteProjectId === item.projectId)?.projectName ??
+                      'Your project'}
+                  </div>
+                </div>
+                <span className="shrink-0 text-xs text-navy-400">
+                  {item.startsAt === null ? 'Date TBC' : shortDate(item.startsAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
 
       <Card>
