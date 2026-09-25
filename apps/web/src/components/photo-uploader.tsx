@@ -13,7 +13,7 @@ import { fitWithin, MAX_PHOTO_BYTES, PHOTO_MAX_EDGE } from '@/lib/field-task';
  * See `lib/field-task.ts` for why the shrinking is not optional.
  */
 
-type UploadResult = { ok: true } | { ok: false; error: string };
+type UploadResult = { ok: true; photoId?: string } | { ok: false; error: string };
 
 interface Item {
   key: string;
@@ -21,6 +21,15 @@ interface Item {
   preview: string;
   state: 'shrinking' | 'uploading' | 'saved' | 'failed';
   error?: string;
+  /**
+   * The row this photo became, when the server told us.
+   *
+   * Carried into the enclosing form as a hidden input so the submission can
+   * file these photographs against the update they were sent with. A photo
+   * that failed contributes nothing, which is the point: the form links what
+   * actually saved, not what was chosen.
+   */
+  photoId?: string;
 }
 
 async function shrink(file: File): Promise<Blob> {
@@ -97,7 +106,12 @@ export function PhotoUploader({
             }
           }
           const result = await upload(form);
-          patch(key, result.ok ? { state: 'saved' } : { state: 'failed', error: result.error });
+          patch(
+            key,
+            result.ok
+              ? { state: 'saved', ...(result.photoId !== undefined ? { photoId: result.photoId } : {}) }
+              : { state: 'failed', error: result.error },
+          );
         } catch (error) {
           patch(key, {
             state: 'failed',
@@ -145,6 +159,13 @@ export function PhotoUploader({
       </div>
 
       {countFieldName !== undefined && <input type="hidden" name={countFieldName} value={saved} />}
+
+      {/* One per saved photo. The server reads them all with getAll(). */}
+      {items
+        .filter((i) => i.state === 'saved' && i.photoId !== undefined)
+        .map((i) => (
+          <input key={i.photoId} type="hidden" name="photoId" value={i.photoId} />
+        ))}
 
       {items.length > 0 && (
         <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">

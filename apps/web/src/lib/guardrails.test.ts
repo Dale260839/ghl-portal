@@ -700,6 +700,46 @@ test('the connect prompt is on a contractor screen and nowhere else', () => {
   assert.match(withoutComments(banner.text), /connected !== false.*return null/s);
 });
 
+test('§ a homeowner sees released photographs, and sees them as photographs', () => {
+  // Dale, 2026-09-25. Two separate failures lived on this screen:
+  //
+  //   · it drew a grey box with the word "Photo" in it, never the picture;
+  //   · it picked the two most recent photos on the PROJECT and pinned them to
+  //     the newest update, which the code admitted was fixture behaviour.
+  //
+  // Both are fixed by the same link (0019). What must not come back is the
+  // second one dressed differently: a read of photos on this page that is not
+  // narrowed to the update AND to what has been released.
+  const portal = FILES.find((f) => rel(f.path) === 'app/portal/updates/page.tsx');
+  assert.ok(portal, 'the portal updates page has moved');
+  const text = withoutComments(portal.text);
+
+  // Released only. `true` is the fourth argument of listForUpdates, and it is
+  // required rather than optional so this cannot be forgotten quietly.
+  assert.match(text, /listForUpdates\([\s\S]{0,120}true\s*\)/);
+  assert.equal(
+    /photosFor\(/.test(text),
+    false,
+    'the feed must not fall back to every photo on the project',
+  );
+  // And by update, not by position in a list.
+  assert.match(text, /p\.updateId === u\.id/);
+
+  // The picture itself. The component is shared with the PM's screen, so this
+  // is where the <img> has to be.
+  const component = FILES.find((f) => rel(f.path) === 'components/update-photos.tsx');
+  assert.ok(component, 'components/update-photos.tsx has moved');
+  assert.match(component.text, /<img/);
+
+  // The component draws what it is handed and never decides who may see it —
+  // that rule lives in the query, where a new template cannot miss it.
+  assert.equal(
+    /clientVisible/.test(withoutComments(component.text)),
+    false,
+    'the release rule belongs in the read, not in the template',
+  );
+});
+
 test('§ an internal reply on an update never reaches the portal', () => {
   // Dale, 2026-09-24: acknowledgements and comments are live. A contractor's
   // reply defaults to internal, and the portal must filter on that flag — the

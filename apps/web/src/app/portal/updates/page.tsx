@@ -1,5 +1,7 @@
-import { currentPortalProject, photosFor } from '@/lib/portal-data';
+import { currentPortalProject } from '@/lib/portal-data';
 import { getHubUpdateFeedback } from '@/lib/hub-db/update-feedback';
+import { getHubMedia } from '@/lib/hub-db/media';
+import { UpdatePhotos } from '@/components/update-photos';
 import { UpdateFeedback } from '@/components/update-feedback';
 
 import { scopeOfProject } from '@/lib/scope';
@@ -35,7 +37,25 @@ export default async function PortalUpdates({
     project.buildsuiteProjectId,
   );
   const updates = toClientUpdates(all, project);
-  const photos = (await photosFor(project));
+
+  // ── The photographs that belong to each update ────────────────────────────
+  //
+  // Until 2026-09-25 this took the two most recent photos on the whole project
+  // and pinned them to the newest update — a fixture behaviour the code openly
+  // admitted to — and then drew each one as a grey box with the word "Photo"
+  // in it. On a real project that meant every update showed either somebody
+  // else's photographs or none, and never the actual picture.
+  //
+  // `true` is the release gate: only photographs the contractor has released,
+  // one at a time. It is an argument of the read rather than a filter on the
+  // template, so a future template cannot forget it.
+  const mediaStore = getHubMedia();
+  const updatePhotos =
+    hubScope !== null && mediaStore.available
+      ? await mediaStore.media
+          .listForUpdates(hubScope, 'photo', updates.map((u) => u.id), true)
+          .catch(() => [])
+      : [];
 
   // What has already been said. The ids come from `updates`, which is the
   // published projection above — so nothing is read for an update this
@@ -64,10 +84,8 @@ export default async function PortalUpdates({
         />
       ) : (
         <div className="space-y-5">
-          {updates.map((u, index) => {
-            // Photos are attached to the most recent update in fixtures; with
-            // live data they carry their own source_update_id.
-            const attached = index === 0 ? photos.slice(0, 2) : [];
+          {updates.map((u) => {
+            const attached = updatePhotos.filter((p) => p.updateId === u.id);
             return (
               <Card key={u.id} className="p-5">
                 <div className="flex items-center gap-3">
@@ -87,19 +105,7 @@ export default async function PortalUpdates({
 
                 <p className="mt-4 text-sm leading-relaxed text-navy-700">{u.clientSummary}</p>
 
-                {attached.length > 0 && (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    {attached.map((p) => (
-                      <div key={p.id} className="overflow-hidden rounded-lg border border-navy-100">
-                        <div className="flex h-40 items-center justify-center bg-navy-50 text-xs text-navy-400">
-                          {/* Real photos arrive with the hub_photos table. */}
-                          Photo
-                        </div>
-                        <div className="px-3 py-2 text-xs text-navy-600">{p.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <UpdatePhotos photos={attached} />
 
                 {/* The conversation on this update. Only client-visible
                     comments: an internal note by the contractor is on the same

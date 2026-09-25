@@ -375,6 +375,29 @@ export async function submitFieldUpdate(formData: FormData) {
     clientDecisionNeeded: formData.get('clientDecisionNeeded') === 'on',
   });
 
+  // ── The photographs sent with it ──────────────────────────────────────────
+  //
+  // The uploader posts each photo the moment it is taken, so the rows already
+  // exist and the form carries their ids. Linking them here is what lets the
+  // homeowner's feed show the photographs that belong to this update instead
+  // of the two most recent on the project (0019).
+  //
+  // Failing to link must never lose the update: the update is the record of
+  // the day's work, and the photographs are still on the project's Photos page
+  // either way.
+  const photoIds = formData.getAll('photoId').map(String).filter((id) => id.trim() !== '');
+  let linked = 0;
+  if (photoIds.length > 0) {
+    const media = getHubMedia();
+    if (media.available) {
+      try {
+        linked = await media.media.linkToUpdate(fieldScope, 'photo', photoIds, updateId);
+      } catch (error) {
+        console.error('[field] photos did not link to the update', error);
+      }
+    }
+  }
+
   const result = await execute(
     planFieldUpdateSubmitted({
       buildsuiteProjectId: projectId,
@@ -425,7 +448,9 @@ export async function submitFieldUpdate(formData: FormData) {
     submittedBy: session.name,
     workCompleted: String(formData.get('workCompleted') ?? ''),
     blocker,
-    photoCount: 0,
+    // Was hardcoded to 0, so every submission told the PM there were no
+    // photographs — including the ones with six.
+    photoCount: linked > 0 ? linked : photoIds.length,
     clientDecisionNeeded: formData.get('clientDecisionNeeded') === 'on',
   });
 

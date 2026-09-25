@@ -1,4 +1,7 @@
 import { SubmitButton } from '@/components/submit-button';
+import { getHubMedia } from '@/lib/hub-db/media';
+import { UpdatePhotos } from '@/components/update-photos';
+import { PhotoRelease } from '@/components/photo-release';
 import { getHubUpdateFeedback } from '@/lib/hub-db/update-feedback';
 import { UpdateReply } from '@/components/update-reply';
 import { UNLISTED_PROJECT } from '@/lib/project-codes';
@@ -33,6 +36,17 @@ export default async function ReviewQueue() {
         .catch(() => ({ acknowledgements: [], comments: [] }))
     : { acknowledgements: [], comments: [] };
 
+  // The photographs on every update on this screen — the queue being reviewed
+  // and the ones already published. `false` means "not only the released ones":
+  // the PM is the person deciding which a homeowner may see, so they see all of
+  // them. The homeowner's read passes `true`.
+  const mediaStore = getHubMedia();
+  const photos = mediaStore.available
+    ? await mediaStore.media
+        .listForUpdates(scope, 'photo', [...queue, ...published].map((u) => u.id), false)
+        .catch(() => [])
+    : [];
+
   return (
     <div className="space-y-6">
       <div>
@@ -63,6 +77,16 @@ export default async function ReviewQueue() {
                   <span>{u.hoursWorked} hrs</span>
                   <span>{u.weather}</span>
                 </div>
+
+                {/* What the crew photographed. On the screen where the
+                    decision is made — a PM was approving words while the
+                    pictures sat on a different page entirely. */}
+                <UpdatePhotos
+                  photos={photos.filter((p) => p.updateId === u.id)}
+                  release={(photo) => (
+                    <PhotoRelease photoId={photo.id} released={photo.clientVisible} />
+                  )}
+                />
 
                 <div>
                   <div className="text-xs font-semibold tracking-wide text-navy-400 uppercase">

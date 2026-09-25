@@ -149,7 +149,15 @@ export async function postTaskUpdate(_previous: Notice, formData: FormData): Pro
   };
 }
 
-type UploadResult = { ok: true } | { ok: false; error: string };
+/**
+ * The id comes back so the form around the uploader can carry it.
+ *
+ * The crew's uploader posts each photo the moment it is taken, which is right —
+ * nothing is lost if the page closes halfway — but it means the row exists
+ * before the update does. Handing the id back is what lets the submission file
+ * the photograph against the update it was sent with (0019).
+ */
+type UploadResult = { ok: true; photoId?: string } | { ok: false; error: string };
 
 async function storePhoto(input: {
   file: FormDataEntryValue | null;
@@ -180,7 +188,7 @@ async function storePhoto(input: {
       contentType: file.type,
       body: await file.arrayBuffer(),
     });
-    await media.media.attach(
+    const saved = await media.media.attach(
       input.scope,
       'photo',
       {
@@ -192,7 +200,7 @@ async function storePhoto(input: {
       },
       { name: input.uploadedBy },
     );
-    return { ok: true };
+    return { ok: true, photoId: saved.id };
   } catch (error) {
     console.error('[photos] a field photo did not save', error);
     return { ok: false, error: 'The photo did not save. Check your signal and try again.' };

@@ -37,6 +37,8 @@ export type MediaKind = 'document' | 'photo';
 
 /** The columns 0015 adds. Absent until the migration is run; see column-support. */
 const TASK_LINK = ['task_id'] as const;
+/** 0019. A photo belongs to the update it was sent with. */
+const UPDATE_LINK = ['update_id'] as const;
 
 export interface MediaItem {
   id: string;
@@ -54,6 +56,8 @@ export interface MediaItem {
   takenAt: string | null;
   clientVisible: boolean;
   uploadedBy: string | null;
+  /** The daily update this was sent with (0019). Null when it was not. */
+  updateId: string | null;
   createdAt: string;
 }
 
@@ -77,6 +81,7 @@ interface MediaRow {
   taken_at?: string | null;
   client_visible: boolean | null;
   uploaded_by: string | null;
+  update_id?: string | null;
   created_at: string;
 }
 
@@ -97,6 +102,8 @@ function toItem(row: MediaRow, kind: MediaKind): MediaItem {
     takenAt: row.taken_at ?? null,
     clientVisible: row.client_visible === true,
     uploadedBy: row.uploaded_by,
+    // Null before 0019, and on anything uploaded outside an update.
+    updateId: row.update_id ?? null,
     createdAt: row.created_at,
   };
 }
@@ -229,6 +236,73 @@ export class HubMedia {
       limit: 100,
     });
     return rows.map((row) => toItem(row, kind));
+  }
+
+  /**
+   * The photographs sent with one update, or with several.
+   *
+   * Empty before migration 0019 — which is what the homeowner's feed showed
+   * before the link existed, and better than what it showed instead: the two
+   * most recent photos on the project, pinned to the newest update.
+   *
+   * `clientVisibleOnly` is the portal's switch. Release is still per
+   * photograph and still off by default; this only narrows the read, and a
+   * caller that forgets it is why the flag is a required argument rather than
+   * an option with a default.
+   */
+  async listForUpdates(
+    scope: TenantScope,
+    kind: MediaKind,
+    updateIds: readonly string[],
+    clientVisibleOnly: boolean,
+  ): Promise<MediaItem[]> {
+    const { filters } = this.tenant(scope, `${kind}s for update`);
+    const ids = updateIds.filter((id) => id.trim() !== '');
+    if (ids.length === 0) return [];
+    if (!(await columnSupport(this.client, TABLE[kind], UPDATE_LINK))) return [];
+
+    const rows = await this.client.select<MediaRow>({
+      from: TABLE[kind],
+      filters: {
+        ...filters,
+        update_id: `in.(${ids.join(',')})`,
+        archived_at: 'is.null',
+        ...(clientVisibleOnly ? { client_visible: 'is.true' } : {}),
+      },
+      order: 'created_at.asc',
+      limit: 200,
+    });
+    return rows.map((row) => toItem(row, kind));
+  }
+
+  /**
+   * File already-uploaded photographs against the update they were sent with.
+   *
+   * The crew's uploader posts each photo the moment it is taken, so the rows
+   * exist before the update does — there is no id to write at upload time.
+   * This is the second half: the form carries the ids it created, and the
+   * submission links them.
+   *
+   * Tenant-filtered, so an id from a form cannot reach another contractor's
+   * photograph. Silently does nothing before 0019, exactly like the task link.
+   */
+  async linkToUpdate(
+    scope: TenantScope,
+    kind: MediaKind,
+    itemIds: readonly string[],
+    updateId: string,
+  ): Promise<number> {
+    const { filters } = this.tenant(scope, `link ${kind}s to an update`);
+    const ids = itemIds.filter((id) => id.trim() !== '');
+    if (ids.length === 0 || updateId.trim() === '') return 0;
+    if (!(await columnSupport(this.client, TABLE[kind], UPDATE_LINK))) return 0;
+
+    const updated = await this.client.update<MediaRow>({
+      from: TABLE[kind],
+      filters: { ...filters, id: `in.(${ids.join(',')})` },
+      patch: { update_id: updateId },
+    });
+    return updated.length;
   }
 
   /** Edit the label, category and release state. The file itself never moves. */
