@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { useFieldUploads, countUploads } from '@/components/field-upload-context';
+import { MAX_UPLOAD_ATTEMPTS, retryDelayMs, shouldRetry } from '@/lib/field-upload-state';
+
 import { fitWithin, MAX_PHOTO_BYTES, PHOTO_MAX_EDGE } from '@/lib/field-task';
 
 /**
@@ -21,6 +24,12 @@ interface Item {
   preview: string;
   state: 'shrinking' | 'uploading' | 'saved' | 'failed';
   error?: string;
+  /** How many times we have tried to send this one. */
+  attempts: number;
+  /** Kept so a retry does not re-shrink a photo that already shrank fine. */
+  blob?: Blob;
+  /** The original, when shrinking is what failed. */
+  file: File;
   /**
    * The row this photo became, when the server told us.
    *
@@ -82,48 +91,101 @@ export function PhotoUploader({
   const patch = (key: string, next: Partial<Item>) =>
     setItems((all) => all.map((i) => (i.key === key ? { ...i, ...next } : i)));
 
+  /**
+   * One attempt at sending one photo.
+   *
+   * Retries itself, with a widening pause, and gives up after
+   * `MAX_UPLOAD_ATTEMPTS` rather than spinning — a crew member standing on a
+   * site watching a photo that will never send needs to be told, not soothed.
+   * The shrunk blob is kept so a retry does not re-do work that succeeded.
+   */
+  async function attempt(key: string, file: File, existing: Blob | undefined, attempts: number) {
+    const tries = attempts + 1;
+    try {
+      patch(key, { state: existing === undefined ? 'shrinking' : 'uploading', attempts: tries });
+      const blob = existing ?? (await shrink(file));
+      patch(key, { state: 'uploading', blob });
+
+      const form = new FormData();
+      const name = file.name.replace(/\.[^.]+$/, '') + (blob.type === 'image/jpeg' ? '.jpg' : '');
+      form.append('file', new File([blob], name || 'photo.jpg', { type: blob.type || file.type }));
+      for (const [k, v] of Object.entries(fields)) form.append(k, v);
+      const enclosing = root.current?.closest('form');
+      for (const fieldName of formFields) {
+        const field = enclosing?.elements.namedItem(fieldName);
+        if (field instanceof HTMLSelectElement || field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+          form.append(fieldName, field.value);
+        }
+      }
+
+      const result = await upload(form);
+      if (result.ok) {
+        patch(key, {
+          state: 'saved',
+          ...(result.photoId !== undefined ? { photoId: result.photoId } : {}),
+        });
+        return;
+      }
+      await giveUpOrRetry(key, file, blob, tries, result.error);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'The photo did not upload. Try again.';
+      await giveUpOrRetry(key, file, existing, tries, message);
+    }
+  }
+
+  async function giveUpOrRetry(
+    key: string,
+    file: File,
+    blob: Blob | undefined,
+    tries: number,
+    error: string,
+  ) {
+    if (!shouldRetry(tries)) {
+      patch(key, { state: 'failed', error, attempts: tries });
+      return;
+    }
+    patch(key, { state: 'failed', error, attempts: tries });
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs(tries)));
+    await attempt(key, file, blob, tries);
+  }
+
   function add(files: FileList | null) {
     if (files === null) return;
     for (const file of Array.from(files)) {
       const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const item: Item = { key, name: file.name, preview: URL.createObjectURL(file), state: 'shrinking' };
+      const item: Item = {
+        key,
+        name: file.name,
+        preview: URL.createObjectURL(file),
+        state: 'shrinking',
+        attempts: 0,
+        file,
+      };
       setItems((all) => [...all, item]);
 
       // One at a time: a site connection handles a queue better than a burst.
-      queue.current = queue.current.then(async () => {
-        try {
-          const blob = await shrink(file);
-          patch(key, { state: 'uploading' });
-          const form = new FormData();
-          const name = file.name.replace(/\.[^.]+$/, '') + (blob.type === 'image/jpeg' ? '.jpg' : '');
-          form.append('file', new File([blob], name || 'photo.jpg', { type: blob.type || file.type }));
-          for (const [k, v] of Object.entries(fields)) form.append(k, v);
-          const enclosing = root.current?.closest('form');
-          for (const fieldName of formFields) {
-            const field = enclosing?.elements.namedItem(fieldName);
-            if (field instanceof HTMLSelectElement || field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
-              form.append(fieldName, field.value);
-            }
-          }
-          const result = await upload(form);
-          patch(
-            key,
-            result.ok
-              ? { state: 'saved', ...(result.photoId !== undefined ? { photoId: result.photoId } : {}) }
-              : { state: 'failed', error: result.error },
-          );
-        } catch (error) {
-          patch(key, {
-            state: 'failed',
-            error: error instanceof Error ? error.message : 'The photo did not upload. Try again.',
-          });
-        }
-      });
+      queue.current = queue.current.then(() => attempt(key, file, undefined, 0));
     }
+  }
+
+  /** The crew member's own retry, after it has given up. */
+  function retry(key: string) {
+    const item = items.find((i) => i.key === key);
+    if (item === undefined) return;
+    queue.current = queue.current.then(() => attempt(key, item.file, item.blob, 0));
   }
 
   const saved = items.filter((i) => i.state === 'saved').length;
   const busy = items.some((i) => i.state === 'shrinking' || i.state === 'uploading');
+
+  // Tell the form around us what is happening, so its send button can wait for
+  // photos that are seconds away. Without a provider this goes nowhere, which
+  // is what the task screen wants.
+  const { report } = useFieldUploads();
+  useEffect(() => {
+    report(countUploads(items.map((i) => i.state)));
+  }, [items, report]);
   const button =
     'inline-flex min-h-10 cursor-pointer items-center justify-center rounded-lg border border-navy-200 bg-white px-3.5 text-sm font-medium text-navy-800 transition hover:bg-navy-50';
 
@@ -195,11 +257,24 @@ export function PhotoUploader({
         </ul>
       )}
 
-      {items.filter((i) => i.state === 'failed').map((i) => (
-        <p key={i.key} role="alert" className="text-xs text-red-700">
-          {i.error}
-        </p>
-      ))}
+      {items
+        .filter((i) => i.state === 'failed')
+        .map((i) => (
+          <p key={i.key} role="alert" className="flex flex-wrap items-center gap-2 text-xs text-red-700">
+            <span>{i.error}</span>
+            {/* Only once it has stopped trying on its own. Offering a retry
+                while a retry is already scheduled is two queues for one photo. */}
+            {i.attempts >= MAX_UPLOAD_ATTEMPTS && (
+              <button
+                type="button"
+                onClick={() => retry(i.key)}
+                className="min-h-7 rounded border border-red-300 px-2 font-semibold text-red-700"
+              >
+                Retry
+              </button>
+            )}
+          </p>
+        ))}
 
       <p className="text-xs text-navy-400" aria-live="polite">
         {busy

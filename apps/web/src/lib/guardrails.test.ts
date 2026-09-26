@@ -700,6 +700,56 @@ test('the connect prompt is on a contractor screen and nowhere else', () => {
   assert.match(withoutComments(banner.text), /connected !== false.*return null/s);
 });
 
+test('§ the crew cannot file an update while its photographs are still going up', () => {
+  // Dale, 2026-09-26, and it was my own defect. Since 0019 the link between a
+  // photo and its update travels as a hidden input the uploader renders once
+  // the photo has SAVED. Nothing stopped "Send update" being pressed before
+  // that, so the photograph was silently missing from the one place it was
+  // taken for. On a site with one bar that is the normal case.
+  const page = FILES.find((f) => rel(f.path) === 'app/field/update/page.tsx');
+  assert.ok(page, 'the field update page has moved');
+  const text = page.text;
+
+  // The gated button, not a plain one — and the provider around it, or the
+  // button has nothing to listen to.
+  assert.match(text, /<FieldSubmit/);
+  assert.match(text, /<FieldUploadProvider>/);
+  assert.equal(
+    /<SubmitButton/.test(text),
+    false,
+    'the ungated submit button must not come back to this form',
+  );
+
+  // The gate holds on IN FLIGHT and never on FAILED: a crew member in a
+  // basement with no signal must still be able to file their day.
+  const gate = FILES.find((f) => rel(f.path) === 'lib/field-upload-state.ts');
+  assert.ok(gate, 'lib/field-upload-state.ts has moved');
+  const logic = withoutComments(gate.text);
+  assert.match(logic, /inFlight > 0[\s\S]{0,200}canSubmit: false/);
+  assert.match(logic, /failed > 0[\s\S]{0,200}canSubmit: true/);
+});
+
+test('§ a half-written update is never thrown away before it is filed', () => {
+  // The draft is cleared on the screen the submission LANDS on, not when the
+  // form is submitted. A submission that fails — which on a site is the likely
+  // one — must leave what they wrote exactly where it was.
+  const today = FILES.find((f) => rel(f.path) === 'app/field/page.tsx');
+  const form = FILES.find((f) => rel(f.path) === 'app/field/update/page.tsx');
+  assert.ok(today && form);
+  assert.match(today.text, /submitted === '1' && <ClearFieldDraft \/>/);
+  assert.equal(
+    /ClearFieldDraft/.test(form.text),
+    false,
+    'the draft must not be cleared on the screen that writes it',
+  );
+
+  // And it is the crew's own words on the crew's own phone: never posted.
+  const draft = FILES.find((f) => rel(f.path) === 'components/field-draft.tsx');
+  assert.ok(draft, 'components/field-draft.tsx has moved');
+  const text = withoutComments(draft.text);
+  assert.equal(/fetch\(|action=|use server/.test(text), false, 'a draft never leaves the phone');
+});
+
 test('§ a homeowner sees released photographs, and sees them as photographs', () => {
   // Dale, 2026-09-25. Two separate failures lived on this screen:
   //
@@ -1202,6 +1252,10 @@ test('no form submits through a button that stays live during the round trip', (
       'components/submit-button.tsx',
       'components/account-switcher.tsx',
       'components/view-switcher.tsx',
+      // Disables on `useFormStatus` exactly like SubmitButton, AND holds the
+      // send while photographs are still uploading — which is more than this
+      // rule asks for, not less. Its own test above checks both.
+      'components/field-submit.tsx',
     ];
     if (handlesItsOwn.includes(path)) continue;
     if (/type="submit"/.test(file.text)) offenders.push(path);

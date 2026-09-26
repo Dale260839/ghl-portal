@@ -9,6 +9,7 @@ import { stageLabel } from '@/lib/data/types';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getHubSchedule, type ScheduleItem } from '@/lib/hub-db/schedule';
 import { appointmentsForField, splitByTime } from '@/lib/field-schedule';
+import { ClearFieldDraft } from '@/components/field-draft';
 
 /**
  * Field Interface (§12.2). Mobile-first, large tap targets, minimal typing.
@@ -63,6 +64,11 @@ export default async function FieldToday({
 
   return (
     <div className="space-y-5">
+      {/* The draft goes only when the update is actually filed. This screen is
+          where `submitFieldUpdate` lands on success, which is the first moment
+          it is safe to throw away what they wrote. */}
+      {submitted === '1' && <ClearFieldDraft />}
+
       {submitted === '1' && (
         <div className="rounded-lg border border-emerald-600/20 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
           Update submitted to your project manager for review.{' '}

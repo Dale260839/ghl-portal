@@ -1,4 +1,6 @@
-import { SubmitButton } from '@/components/submit-button';
+import { FieldUploadProvider } from '@/components/field-upload-context';
+import { FieldSubmit } from '@/components/field-submit';
+import { FieldDraft } from '@/components/field-draft';
 import { submitFieldUpdate } from '@/lib/actions';
 import { uploadFieldPhoto } from '@/lib/actions/field-tasks';
 import { PhotoUploader } from '@/components/photo-uploader';
@@ -43,6 +45,8 @@ export default async function FieldUpdate() {
       <Card>
         <CardHeader title="Add daily update" />
         <form action={submitFieldUpdate} className="space-y-4 px-4 py-4">
+          <FieldUploadProvider>
+          <FieldDraft />
           <div>
             <label htmlFor="projectId" className="text-xs font-medium text-navy-600">
               Project
@@ -174,14 +178,11 @@ export default async function FieldUpdate() {
             />
           </div>
 
-          <SubmitButton
-            className="w-full rounded-lg bg-navy-900 px-4 py-3 text-sm font-semibold text-white"
-          >
-            Submit to Project Manager
-          </SubmitButton>
+          <FieldSubmit>Submit to Project Manager</FieldSubmit>
           <p className="text-center text-xs text-navy-400">
             Submitting notifies your PM. It does not notify the client.
           </p>
+          </FieldUploadProvider>
         </form>
       </Card>
     </div>
