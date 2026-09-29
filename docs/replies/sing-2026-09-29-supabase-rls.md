@@ -25,7 +25,17 @@ other people will see: a hard error, not silently missing data.
 
 The same key read 115 projects on 25 September, so the change is today's.
 
-## Project Hub is down, and it is the sign-in that breaks first
+## Fixed and verified the same day
+
+Project Hub reads BuildSuite with the **service role key** now, as a server
+environment variable, and is back up. Verified on production this evening: a
+contractor signs in, awarded projects list, **BSA-052 [HUB TEST]** is fully
+populated including its signed proposal and payment schedule, and invoices load.
+
+No policy was added. The rest of this note is what we found and why the fix is
+the one you would have asked for.
+
+## What broke, and why sign-in went first
 
 Signing in resolves a GoHighLevel sub-account to `auth_profiles`. That read is
 now denied, so **no contractor can sign in at all** — they reach "this
@@ -44,7 +54,7 @@ side for it, and I am not asking for a policy.
 
 | App / workflow | Key type | Tables | Read or write | Server or browser | Working after test |
 |---|---|---|---|---|---|
-| **Project Hub → BuildSuite** | anon *(being changed to service role)* | `projects`, `proposals`, `deals`, `contractors`, `auth_profiles` | **Read only** | Server only | **No — 401 on every table** |
+| **Project Hub → BuildSuite** | **service role** (was anon) | `projects`, `proposals`, `deals`, `contractors`, `auth_profiles` | **Read only** | Server only | **Yes — fixed and verified, see below** |
 | **Project Hub → Hub database** (`nexpqqxarimqmntnvzff`, separate project) | service role (secret) | `hub_*` only — never BuildSuite | Read and write | Server only | Yes, unaffected |
 
 Three things about that first row, since they answer several of your questions
@@ -83,8 +93,8 @@ part of why this is an easy fix rather than a rotation.
 
 ## What we are doing, and what we are not
 
-**Doing:** switching Project Hub's BuildSuite reads to the **service role key**,
-as a server environment variable. Same reads, same tenancy — every BuildSuite
+**Done:** Project Hub's BuildSuite reads use the **service role key**, as a
+server environment variable. Same reads, same tenancy — every BuildSuite
 read is already filtered by the signed-in contractor's own auth profile ids in
 application code, and has been since August. RLS was never what kept one
 contractor out of another's projects here.
@@ -92,10 +102,11 @@ contractor out of another's projects here.
 **Not doing:** adding a policy, broad or narrow, to get it working again. Your
 point 4 is right and we would have asked for the same.
 
-**One question for you, purely about naming.** The variable is called
-`SUPABASE_ANON_KEY`. We can either put the service key into it — one minute, and
-the name then lies — or add `SUPABASE_SERVICE_KEY` and have the code prefer it.
-We are doing the second unless you would rather we did not.
+**On naming**, for the record: the key lives in a new `SUPABASE_SERVICE_KEY`
+rather than being pasted into the variable called `SUPABASE_ANON_KEY`. The old
+variable is still read as a fallback, and a key positively identified as anon
+now logs once, naming the variable to set, instead of leaving somebody reading
+401s and guessing.
 
 ---
 
