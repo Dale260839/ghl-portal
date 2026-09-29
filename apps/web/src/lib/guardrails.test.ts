@@ -700,6 +700,50 @@ test('the connect prompt is on a contractor screen and nowhere else', () => {
   assert.match(withoutComments(banner.text), /connected !== false.*return null/s);
 });
 
+test('§ the operator controls are gated on WHO, not only on a flag', () => {
+  // Dale, 2026-09-29: "only the Alliance For Contractors admin account should
+  // have these buttons." They were gated on environment flags, which cannot
+  // tell one contractor from another — and `DISABLE_VIEW_AS` is off by
+  // default, so with 149 sub-accounts live the role switcher was on for
+  // everybody unless somebody remembered to turn it off.
+  //
+  // Hiding a control is a UI fact. These are POST endpoints anybody can
+  // construct, so the actions behind them are where this has to hold.
+  const actions = FILES.find((f) => rel(f.path) === 'lib/actions.ts');
+  assert.ok(actions, 'lib/actions.ts has moved');
+  const text = withoutComments(actions.text);
+
+  for (const action of ['export async function viewAs', 'export async function switchAccount']) {
+    const start = text.indexOf(action);
+    assert.ok(start > 0, `${action} has moved`);
+    // Within the opening of each action, before it does anything else.
+    assert.match(
+      text.slice(start, start + 700),
+      /isAdminSession\(/,
+      `${action} must refuse a session that is not an operator`,
+    );
+  }
+
+  // The list of other contractors is itself the client book, so it is not
+  // built for anyone else either.
+  const accounts = FILES.find((f) => rel(f.path) === 'lib/dev-accounts.ts');
+  assert.ok(accounts, 'lib/dev-accounts.ts has moved');
+  assert.match(withoutComments(accounts.text), /isAdminSession\(/);
+
+  // And every screen that renders a switcher checks it too — otherwise a
+  // contractor sees a control that only fails when pressed.
+  for (const path of [
+    'app/dashboard/layout.tsx',
+    'app/field/layout.tsx',
+    'app/portal/layout.tsx',
+  ]) {
+    const file = FILES.find((f) => rel(f.path) === path);
+    assert.ok(file, `${path} has moved`);
+    if (!/ViewSwitcher|AccountSwitcher/.test(file.text)) continue;
+    assert.match(file.text, /isAdminSession\(/, `${path} renders a switcher without the gate`);
+  }
+});
+
 test('§ the crew cannot file an update while its photographs are still going up', () => {
   // Dale, 2026-09-26, and it was my own defect. Since 0019 the link between a
   // photo and its update travels as a hidden input the uploader renders once

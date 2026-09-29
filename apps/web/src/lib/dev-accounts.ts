@@ -1,4 +1,6 @@
 import 'server-only';
+import { getSession } from './session.ts';
+import { isAdminSession } from './admin-access.ts';
 
 import {
   BuildSuiteClient,
@@ -87,6 +89,10 @@ const accountsCache = createTtlCache<DevAccount[]>(5 * 60_000);
 
 export async function listDevAccounts(): Promise<DevAccount[]> {
   if (!accountSwitchEnabled()) return [];
+  // …and only for the agency's own sub-account. The list itself is other
+  // contractors' business names, so building it for anybody else leaks the
+  // client book before a single switch is made.
+  if (!isAdminSession(await getSession())) return [];
 
   const config = readBuildSuiteConfig();
   if (!config.configured) return [];

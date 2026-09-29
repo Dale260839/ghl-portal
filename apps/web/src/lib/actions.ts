@@ -35,6 +35,7 @@ import { getHubSchedule } from './hub-db/schedule.ts';
 import { getHubMessages } from './hub-db/messages.ts';
 import { getHubOperational } from './hub-db/operational.ts';
 import { getHubMedia } from './hub-db/media.ts';
+import { isAdminSession } from './admin-access.ts';
 import { CLIENT_FOLDER, DEFAULT_FOLDER, isFieldFolder } from './document-folders.ts';
 import { getHubSelections } from './hub-db/selections.ts';
 import { requireAccess } from './access.ts';
@@ -470,6 +471,12 @@ export async function submitFieldUpdate(formData: FormData) {
  */
 export async function viewAs(formData: FormData) {
   if (!viewAsEnabled()) throw new Error('View switching is disabled');
+  // The identity gate, not only the flag. Hiding the control is a UI fact and
+  // this is a POST anybody can construct; since 149 sub-accounts came online,
+  // "everyone with a contractor session" is not who this is for.
+  if (!isAdminSession(await getSession())) {
+    throw new Error('View switching is not available on this account');
+  }
 
   const target = String(formData.get('role') ?? '');
   if (target !== 'contractor' && target !== 'field' && target !== 'client') {
@@ -1040,6 +1047,12 @@ export async function switchAccount(formData: FormData) {
   if (session === null) throw new Error('not signed in');
   if (realIdentity(session).role !== 'contractor') {
     throw new Error('only a contractor account can switch');
+  }
+  // …and only the agency's own sub-account. Switching account reaches other
+  // contractors' records by design, so this is the one gate here that is a
+  // tenancy boundary rather than a convenience.
+  if (!isAdminSession(session)) {
+    throw new Error('account switching is not available on this account');
   }
 
   const account = await findDevAccount(String(formData.get('authProfileId') ?? ''));

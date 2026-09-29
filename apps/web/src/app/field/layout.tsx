@@ -10,6 +10,7 @@ import { DataModeBanner } from '@/components/ui';
 import { ViewSwitcher, ViewingAsBanner } from '@/components/view-switcher';
 import { FieldNav, type FieldNavItem } from '@/components/field-nav';
 import { isViewingAs, viewAsEnabled } from '@/lib/view-as';
+import { isAdminSession } from '@/lib/admin-access';
 import { tasksForField, unseenCount } from '@/lib/field-data';
 import { fieldProjectsFor } from '@/lib/field-scope';
 
@@ -70,7 +71,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {viewAsEnabled() && (session.role === 'contractor' || viewing) && (
+            {viewAsEnabled() && isAdminSession(session) && (session.role === 'contractor' || viewing) && (
               <ViewSwitcher current={session.role} viewing={viewing} />
             )}
             <form action={signOut}>

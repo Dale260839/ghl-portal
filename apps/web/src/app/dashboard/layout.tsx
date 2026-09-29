@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { isAdminSession } from '@/lib/admin-access';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/session';
 import { requireTenantScope } from '@/lib/scope';
@@ -125,7 +126,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
           >
             <AccountSwitcherSlot current={scope.authProfileIds[0]} />
           </Suspense>
-          {viewAsEnabled() && <ViewSwitcher current="contractor" viewing={false} />}
+          {viewAsEnabled() && isAdminSession(session) && (
+            <ViewSwitcher current="contractor" viewing={false} />
+          )}
         </>
       }
       banner={

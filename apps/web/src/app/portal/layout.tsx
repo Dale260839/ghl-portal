@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { isAdminSession } from '@/lib/admin-access';
 import { clientProjectsFor } from '@/lib/client-scope';
 import { requireAccess } from '@/lib/access';
 
@@ -161,7 +162,9 @@ export default async function PortalLayout({ children }: { children: React.React
               </span>
             )}
           </PortalLink>
-          {(session.role === 'contractor' || viewing) && viewAsEnabled() ? (
+          {(session.role === 'contractor' || viewing) &&
+          viewAsEnabled() &&
+          isAdminSession(session) ? (
             <ViewSwitcher current={session.role} viewing={viewing} />
           ) : null}
         </>
