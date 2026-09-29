@@ -20,20 +20,87 @@ export type BuildSuiteConfigResult =
   | { configured: true; config: BuildSuiteConfig }
   | { configured: false; missing: string[] };
 
+/**
+ * Which Supabase role a key acts as, read from the key itself. No network.
+ *
+ * Deliberately a local copy of the same three lines in `hub-db/client.ts`
+ * rather than an import. Those two clients are kept apart on purpose — one can
+ * only read BuildSuite, the other can write the Hub — and a shared module
+ * between them is the first step towards a shared client with a `method`
+ * parameter. Three lines is a cheaper price than that coupling.
+ */
+function keyRole(key: string): 'service' | 'anon' | 'unknown' {
+  const k = key.trim();
+  if (k.startsWith('sb_secret_')) return 'service';
+  if (k.startsWith('sb_publishable_')) return 'anon';
+  try {
+    const parts = k.split('.');
+    if (parts.length === 3) {
+      const payload = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8')) as {
+        role?: unknown;
+      };
+      if (payload.role === 'service_role') return 'service';
+      if (payload.role === 'anon') return 'anon';
+    }
+  } catch {
+    // Not a JWT after all. Left as unknown and given to the database to judge.
+  }
+  return 'unknown';
+}
+
+let warnedAnonKey = false;
+
+/**
+ * ---------------------------------------------------------------------------
+ * THE ANON KEY STOPPED WORKING ON 2026-09-29
+ *
+ * Row-level security was switched on across all 35 BuildSuite tables, and
+ * privileges were revoked from `anon`. Measured the same day: every table this
+ * client reads — projects, proposals, deals, contractors, auth_profiles —
+ * answers `401 42501 permission denied`. Not empty results; a hard refusal.
+ *
+ * Sign-in resolves a sub-account through `auth_profiles`, so the first thing
+ * that broke was every contractor's ability to open the Hub at all.
+ *
+ * So the key is the SERVICE key now, in `SUPABASE_SERVICE_KEY`. Three things
+ * make that safe here, and all three already existed:
+ *
+ *   · this client has no method that issues anything but GET, and `request()`
+ *     throws if a caller constructs a write — D-003 is structural;
+ *   · it is server-only, so the key cannot reach a browser;
+ *   · tenancy has never depended on RLS. Every read is filtered by the
+ *     signed-in contractor's own auth profile ids in application code (D-012).
+ *
+ * `SUPABASE_ANON_KEY` is still read as a fallback so nothing breaks in the
+ * window before the new variable is set — and a key that is positively
+ * identified as anon says so once, loudly, rather than leaving somebody
+ * reading 401s.
+ * ---------------------------------------------------------------------------
+ */
 export function readBuildSuiteConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): BuildSuiteConfigResult {
-  const missing = (['SUPABASE_URL', 'SUPABASE_ANON_KEY'] as const).filter((k) => {
-    const v = env[k];
-    return v === undefined || v.trim() === '';
-  });
+  const url = env.SUPABASE_URL;
+  const key = env.SUPABASE_SERVICE_KEY?.trim() || env.SUPABASE_ANON_KEY?.trim() || '';
+
+  const missing: string[] = [];
+  if (url === undefined || url.trim() === '') missing.push('SUPABASE_URL');
+  if (key === '') missing.push('SUPABASE_SERVICE_KEY');
   if (missing.length > 0) return { configured: false, missing };
+
+  if (keyRole(key) === 'anon' && !warnedAnonKey) {
+    warnedAnonKey = true;
+    console.error(
+      '[buildsuite] SUPABASE_SERVICE_KEY is not set and the key in use is the anon key. ' +
+        'Since 2026-09-29 anon has no privileges on BuildSuite tables, so every read will ' +
+        'return 401 42501 and nobody will be able to sign in. Set SUPABASE_SERVICE_KEY to the ' +
+        "project's service_role key (server-side only).",
+    );
+  }
+
   return {
     configured: true,
-    config: {
-      url: env.SUPABASE_URL!.replace(/\/+$/, ''),
-      key: env.SUPABASE_ANON_KEY!,
-    },
+    config: { url: url!.replace(/\/+$/, ''), key },
   };
 }
 

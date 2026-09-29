@@ -129,10 +129,40 @@ test('a 5xx is retryable', async () => {
 test('config reports which vars are missing rather than throwing', () => {
   const result = readBuildSuiteConfig({} as NodeJS.ProcessEnv);
   assert.equal(result.configured, false);
+  // Names the SERVICE key since 2026-09-29: anon has no privileges on
+  // BuildSuite tables any more, so telling somebody to set it would send them
+  // to a key that cannot read a row.
   assert.deepEqual(result.configured === false ? result.missing : [], [
     'SUPABASE_URL',
-    'SUPABASE_ANON_KEY',
+    'SUPABASE_SERVICE_KEY',
   ]);
+});
+
+test('§ the service key is preferred, and the anon key still works until it is set', () => {
+  // The fallback is what keeps the window between deploying this and setting
+  // the variable uneventful. It is not a preference — anon is refused by the
+  // database now — it is just not an extra outage.
+  const both = readBuildSuiteConfig({
+    SUPABASE_URL: 'https://b.test',
+    SUPABASE_SERVICE_KEY: 'sb_secret_service',
+    SUPABASE_ANON_KEY: 'sb_publishable_anon',
+  } as unknown as NodeJS.ProcessEnv);
+  assert.equal(both.configured === true ? both.config.key : '', 'sb_secret_service');
+
+  const onlyAnon = readBuildSuiteConfig({
+    SUPABASE_URL: 'https://b.test',
+    SUPABASE_ANON_KEY: 'sb_publishable_anon',
+  } as unknown as NodeJS.ProcessEnv);
+  assert.equal(onlyAnon.configured, true, 'still configured, so the screens say what they said');
+  assert.equal(onlyAnon.configured === true ? onlyAnon.config.key : '', 'sb_publishable_anon');
+
+  // A blank service key is not a key: it must not win over a usable fallback.
+  const blank = readBuildSuiteConfig({
+    SUPABASE_URL: 'https://b.test',
+    SUPABASE_SERVICE_KEY: '   ',
+    SUPABASE_ANON_KEY: 'sb_secret_real',
+  } as unknown as NodeJS.ProcessEnv);
+  assert.equal(blank.configured === true ? blank.config.key : '', 'sb_secret_real');
 });
 
 // ── Normalization ────────────────────────────────────────────────────────────
