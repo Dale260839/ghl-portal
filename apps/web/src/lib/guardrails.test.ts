@@ -570,6 +570,21 @@ test('anything that acts on another sub-account uses that sub-account’s token'
   const resolver = FILES.find((f) => rel(f.path) === 'lib/ghl/resolve-config.ts');
   assert.ok(resolver, 'lib/ghl/resolve-config.ts has moved');
   assert.match(withoutComments(resolver.text), /withLocationToken\(/);
+
+  // The custom-object data source too (closed 2026-09-30). It built the
+  // session's location with the DEFAULT token — the very pattern this test
+  // forbids elsewhere — and went unnoticed only because GHL_PROJECT_OBJECT_KEY
+  // has never been set. A dormant cross-tenant read is still a cross-tenant
+  // read the day somebody sets a key.
+  const source = FILES.find((f) => rel(f.path) === 'lib/data/source.ts');
+  assert.ok(source, 'lib/data/source.ts has moved');
+  const sourceText = withoutComments(source.text);
+  assert.match(sourceText, /withLocationToken\(/, 'the data source must take the location’s token');
+  assert.equal(
+    /new GhlDataSource\(\{ \.\.\.result\.config/.test(sourceText),
+    false,
+    'the data source must not pair a session location with the default token',
+  );
 });
 
 test('§ the install callback always has a gate, before it spends the code', () => {

@@ -1,4 +1,4 @@
-import { canReadProjectObject, readGhlConfig } from '../ghl/config.ts';
+import { canReadProjectObject, readGhlConfig, withLocationToken } from '../ghl/config.ts';
 import { getBuildSuiteReader } from '../buildsuite/projects.ts';
 import { BuildSuiteDataSource } from './buildsuite-source.ts';
 import { assertScope, ownedByScope, type TenantScope } from '../tenancy.ts';
@@ -158,9 +158,33 @@ export function getDataSource(scope?: TenantScope): ProjectDataSource {
 
     const existing = sources.get(locationId);
     if (existing !== undefined) return existing;
-    const created: ProjectDataSource = new GhlDataSource({ ...result.config, locationId });
-    sources.set(locationId, created);
-    return created;
+
+    // ── THE CREDENTIAL MUST BELONG TO THAT SUB-ACCOUNT ────────────────────
+    //
+    // This built `{ ...result.config, locationId }` — the session's location
+    // with the DEFAULT token. Measured on 17 Sep: a Private Integration token
+    // only opens the sub-account it was made in, so that combination either
+    // 401s or, worse, reads the wrong account's data if the two ever belonged
+    // together. It is the exact pattern the guardrail forbids in the invoice,
+    // email and rail paths, and the only reason it has never fired is that
+    // `GHL_PROJECT_OBJECT_KEY` has never been set.
+    //
+    // So the location's own token is required. `withLocationToken` is
+    // deliberately the synchronous half — this factory has ~40 callers and
+    // making it async to reach the Marketplace install would be a refactor,
+    // not a fix. A sub-account with no PIT falls through to BuildSuite below,
+    // which is the honest answer and not a cross-tenant read.
+    const located = withLocationToken(result.config, locationId);
+    if (located.token === result.config.token && locationId !== result.config.locationId) {
+      console.warn(
+        `[data] no credential for sub-account ${locationId} — reading BuildSuite instead of ` +
+          'the Project custom object. Set GHL_LOCATION_TOKENS or connect the Marketplace app.',
+      );
+    } else {
+      const created: ProjectDataSource = new GhlDataSource(located);
+      sources.set(locationId, created);
+      return created;
+    }
   }
 
   const reader = getBuildSuiteReader();

@@ -10,14 +10,13 @@ const base = {
   signInUrl: 'https://hub.example/signin',
 };
 
-test('an update email carries the client summary, the code and the sign-in link, and nothing else', () => {
+test('an update email carries the client summary and the sign-in link, and nothing else', () => {
   const m = buildHomeownerEmail({
     ...base,
     event: { kind: 'update', clientSummary: 'Drywall hung on the north wall today.', publishDate: '2026-09-14' },
   });
   assert.match(m.subject, /progress update/);
   assert.match(m.html, /Drywall hung on the north wall today\./);
-  assert.match(m.html, /BSA-APS-002/);
   assert.match(m.html, /https:\/\/hub\.example\/signin/);
   assert.match(m.html, /Hi Michael,/);
   for (const forbidden of ['internal', 'Internal', 'markup', 'margin', 'cost', 'crew', 'hours']) {
@@ -63,11 +62,34 @@ test('HTML in user text is escaped, never rendered', () => {
   assert.match(m.html, /&lt;script&gt;/);
 });
 
-test('with no project code the code line is omitted rather than printed blank', () => {
-  const m = buildHomeownerEmail({
+test('§ the project code is NEVER printed — it is the homeowner’s password', () => {
+  // It used to be, in every update, change-order and message notification:
+  // "sign in with the email this was sent to and your project code BSA-0xx."
+  // That code never expires and is on their documents, so the password
+  // travelled in every email we sent — forwardable, searchable, sitting in an
+  // inbox for years. Found in the audit, 2026-09-30.
+  //
+  // The reminder that remains says where to find the code without being it.
+  for (const event of [
+    { kind: 'update' as const, clientSummary: 'x', publishDate: '2026-09-14' },
+    { kind: 'message' as const, author: 'Dana', body: 'y' },
+    {
+      kind: 'changeOrder' as const,
+      number: 'CO-1',
+      title: 'Extra socket',
+      netAmount: 120,
+      scheduleImpactDays: 0,
+    },
+  ]) {
+    const m = buildHomeownerEmail({ ...base, event });
+    assert.equal(m.html.includes('BSA-APS-002'), false, `${event.kind} email leaks the code`);
+  }
+
+  // And with no code at all, nothing changes and nothing prints blank.
+  const none = buildHomeownerEmail({
     ...base,
     projectCode: null,
     event: { kind: 'update', clientSummary: 'x', publishDate: '2026-09-14' },
   });
-  assert.equal(m.html.includes('project code'), false);
+  assert.equal(none.html.includes('BSA'), false);
 });

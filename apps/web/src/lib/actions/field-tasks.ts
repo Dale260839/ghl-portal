@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { allowUpload } from '../upload-limits.ts';
 
 import { requireAccess } from '../access.ts';
 import { assertCan, ownsTask } from '../permissions.ts';
@@ -170,6 +171,12 @@ async function storePhoto(input: {
 }): Promise<UploadResult> {
   const { file } = input;
   if (!(file instanceof File)) return { ok: false, error: 'No photo was received.' };
+
+  // A cost ceiling, not a security boundary (see `upload-limits.ts`). The
+  // realistic case is not an attacker: it is a poor signal, a Retry tapped
+  // twenty times, and a storage bill that arrives quietly a month later.
+  const limit = allowUpload(input.uploadedBy);
+  if (!limit.allowed) return { ok: false, error: limit.message };
   const check = acceptablePhoto({ type: file.type, size: file.size });
   if (!check.ok) return { ok: false, error: check.reason };
 

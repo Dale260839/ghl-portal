@@ -9,6 +9,7 @@ import { hubScopeOfProject } from '../tenant-scope.ts';
 import { toClientUpdates } from '../client-view.ts';
 import { getHubUpdateFeedback } from '../hub-db/update-feedback.ts';
 import { requireTenantScope } from '../scope.ts';
+import { allowClientWrite } from '../upload-limits.ts';
 
 /**
  * A homeowner answering an update, and a contractor answering back
@@ -97,6 +98,11 @@ export async function commentOnUpdate(formData: FormData): Promise<Result> {
 
   const found = await clientUpdate(projectId, updateId);
   if (found === null) return { ok: false, error: PORTAL_OFF };
+
+  // Keyed on the person, after they are known. A key taken from the form would
+  // be the attacker's to choose, which is not a limit at all.
+  const limit = allowClientWrite(found.access.session.email || found.access.session.name);
+  if (!limit.allowed) return { ok: false, error: limit.message };
 
   const hub = getHubUpdateFeedback();
   if (!hub.available) return { ok: false, error: 'That could not be saved right now.' };

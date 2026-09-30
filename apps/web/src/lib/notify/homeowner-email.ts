@@ -35,13 +35,26 @@ function firstName(full: string): string {
 
 /** Subject and HTML body for one event. */
 export function buildHomeownerEmail(input: HomeownerEmailInput): { subject: string; html: string } {
-  const { event, projectName, projectCode, clientName, signInUrl } = input;
-  const code = projectCode ?? '';
+  // `projectCode` is deliberately NOT destructured. It is still on the input
+  // because callers have it and removing it would churn them, but nothing in
+  // this function may reach for it: the password does not go in the email.
+  const { event, projectName, clientName, signInUrl } = input;
   const greeting = `Hi ${escapeHtml(firstName(clientName))},`;
+  // ── THE CODE IS NOT PRINTED HERE ────────────────────────────────────────
+  //
+  // It used to be: "sign in with the email this was sent to and your project
+  // code BSA-0xx." That code is their PASSWORD. It never expires, it is on
+  // their documents, and putting it in the body of every update, change-order
+  // and message notification meant the password travelled in every one —
+  // forwardable, searchable, sitting in an inbox for years.
+  //
+  // The reminder that remains says where the code comes from without being the
+  // code. Somebody who has lost it asks their contractor, which is one message
+  // rather than a standing exposure. (Found in the audit, 2026-09-30. The
+  // proper fix is a tapped link instead of a typed code; this stops the
+  // bleeding meanwhile.)
   const codeLine =
-    code === ''
-      ? ''
-      : `<p style="color:#4a5568;font-size:13px">Sign in with the email this was sent to and your project code <strong>${escapeHtml(code)}</strong>.</p>`;
+    `<p style="color:#4a5568;font-size:13px">Sign in with the email this was sent to and your project code — it is on your contract and your invoices. Your contractor can resend it.</p>`;
   const footer = `<p><a href="${escapeHtml(signInUrl)}" style="display:inline-block;background:#0f172a;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">Open your Project Hub</a></p>${codeLine}<p style="color:#718096;font-size:12px">You are receiving this because ${escapeHtml(projectName)} is your project. Replies go to your contractor.</p>`;
 
   if (event.kind === 'update') {

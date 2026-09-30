@@ -75,9 +75,9 @@ conversation is a lie with a timestamp on it.
 
 ---
 
-## 3 · Open, with a recommendation
+## 3 · Was open — three fixed the same day, one cannot be
 
-### 3.1 No rate limit on authenticated writes — **the real API-abuse surface**
+### 3.1 No rate limit on authenticated writes — **FIXED**
 
 Rate limiting stops at the three sign-in doors. Everything behind a session is
 unmetered:
@@ -87,32 +87,57 @@ unmetered:
   first: it costs money, and no legitimate user goes near a limit.
 - Acknowledgements, comments, issues and messages — nuisance rather than cost.
 
-Not urgent in the sense of a hole, since every one needs a real account on a
-real project. Urgent in the sense that storage bills arrive monthly.
+**Fixed.** Uploads are capped at 60 an hour per person, other client writes at
+120. Keyed on the person, not the project — a crew member on four jobs is one
+phone and one bill. Deliberately generous: a crew member documenting a full day
+uploads perhaps twenty, and a limit a real user can feel is the wrong number.
 
-### 3.2 Unsigned menu links are still accepted in production
+Stated plainly in the code: this is in memory, per instance, so on several
+instances the effective ceiling is higher. It is a **cost ceiling, not a
+security boundary**.
+
+### 3.2 Unsigned menu links — **cannot be fixed cheaply after all**
 
 `GHL_MENU_LINK_SECRET` is unset, so a sign-in link is accepted on the strength
 of the sub-account id in the URL. The API check that the sub-account is ours is
 the only thing standing between a leaked link and a session — which is now the
 **agency** credential, so it says yes for all 149.
 
-Known since the audit on 22 September and unchanged. The proper fix is SSO; the
-cheap one is setting that secret and signing the links.
+I said on 22 September that the cheap fix was to set `GHL_MENU_LINK_SECRET` and
+sign the links. **That is no longer available**, and it is worth writing down
+why: the menu link is now a single agency-level link carrying `{{location.id}}`
+as a merge field. One URL, 149 sub-accounts — so there is nowhere to put a
+per-location signature, and a signature over a merge field signs nothing.
 
-### 3.3 The homeowner's password is printed in every email we send them
+The options are honest ones: go back to a per-sub-account menu link (149 of
+them, by hand, undoing yesterday's zero-touch onboarding), or do SSO, where
+GoHighLevel signs the identity for us. **SSO is the answer.** Left open
+deliberately rather than papered over.
+
+### 3.3 The homeowner's password printed in every email — **FIXED**
 
 Their project code is their password, never expires, and appears in the body of
 every update, change-order and message notification. Forwardable.
 
-Recommended before, and it remains the single highest-value change on the client
-side: a tapped link instead of a typed code.
+**Fixed.** The code is gone from the body of every notification. What remains
+says where to find it — "on your contract and your invoices, your contractor can
+resend it" — which is a pointer, not a password. `projectCode` is no longer even
+destructured in that module, so nothing can quietly start printing it again, and
+a test asserts its absence across all three email kinds.
 
-### 3.4 `lib/data/source.ts` swaps location while keeping the default token
+This stops the bleeding. The real fix is still a tapped link instead of a typed
+code.
 
-Dormant, because `GHL_PROJECT_OBJECT_KEY` is unset. It would read one
-contractor's sub-account with another's credential the day that key is set.
-**Do not set it until this is fixed.**
+### 3.4 `lib/data/source.ts` swapped location while keeping the default token — **FIXED**
+
+**Fixed.** It now requires that sub-account's own token; without one it falls
+through to BuildSuite and logs which sub-account is missing a credential, rather
+than reading with somebody else's. `GHL_PROJECT_OBJECT_KEY` is safe to set when
+you want it.
+
+The guardrail that already forbade this pattern in the invoice, email and rail
+paths now covers the data source too — it was the one caller nobody had added to
+the list.
 
 ---
 
