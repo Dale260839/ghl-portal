@@ -700,6 +700,62 @@ test('the connect prompt is on a contractor screen and nowhere else', () => {
   assert.match(withoutComments(banner.text), /connected !== false.*return null/s);
 });
 
+test('§ the file route holds a crew member to their own projects', () => {
+  // Found in the audit, 2026-09-30. /api/files checked the TENANT and nothing
+  // else, so a crew member holding any file id belonging to their contractor
+  // could fetch it: a signed contract with its pricing, a file on a project
+  // they were never assigned, a document in the Client folder. Their screens
+  // enforce both rules; a screen is not a permission.
+  //
+  // Ids are uuids, so this was never enumerable — which makes it the quiet
+  // kind: a link that keeps working after somebody is taken off a job.
+  const route = FILES.find((f) => rel(f.path) === 'app/api/files/route.ts');
+  assert.ok(route, 'the files route has moved');
+  const text = withoutComments(route.text);
+
+  // Both ways in are checked, not just the one somebody thought of — and the
+  // call is pinned to the refusal that uses it. Asking only whether the name
+  // appears passes happily while the condition next to it says `false`, which
+  // is exactly what the first version of this test did.
+  assert.match(
+    text,
+    /if \(!\(await fieldMaySee\(/,
+    'the id branch must refuse on fieldMaySee, not merely mention it',
+  );
+  assert.match(
+    text,
+    /!\(await fieldMayReachPath\(/,
+    'the path branch must refuse on fieldMayReachPath, not merely mention it',
+  );
+
+  // The rules themselves: assigned projects, and field folders for documents.
+  assert.match(text, /fieldProjectsFor\(/);
+  assert.match(text, /isFieldFolder\(/);
+
+  // A refusal is a 404, not a 403. Telling a crew member that a document
+  // exists but is not theirs is itself a disclosure.
+  assert.equal(/status: 403/.test(text), false, 'a refusal here must not confirm existence');
+});
+
+test('§ no screen invents data when its database is unreachable', () => {
+  // The crew's Messages screen fell back to the fixture thread — invented
+  // conversations between invented people — whenever the Hub was unreachable.
+  // On 29 September a key was revoked and screens went blank for an afternoon;
+  // had it been that database, a crew member would have read fabricated
+  // messages from their PM and answered them.
+  //
+  // A blank list is a fact. A made-up conversation is a lie with a timestamp.
+  for (const file of FILES) {
+    const path = rel(file.path);
+    if (!path.startsWith('app/field/') && !path.startsWith('app/portal/')) continue;
+    assert.equal(
+      /portal-fixtures|data\/fixtures/.test(file.text),
+      false,
+      `${path} can still show fixture data to a crew member or a homeowner`,
+    );
+  }
+});
+
 test('§ the operator controls are gated on WHO, not only on a flag', () => {
   // Dale, 2026-09-29: "only the Alliance For Contractors admin account should
   // have these buttons." They were gated on environment flags, which cannot

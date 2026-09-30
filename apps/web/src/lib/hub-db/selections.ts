@@ -253,6 +253,31 @@ export class HubSelections {
 
   // ── Change orders ─────────────────────────────────────────────────────────
 
+  /**
+   * Every change order on this contractor's projects.
+   *
+   * Added 2026-09-30, because the contractor's dashboard was counting change
+   * orders — and totalling the money waiting on a client — from the FIXTURES
+   * file, unconditionally. Not as a fallback: the real rows were never read on
+   * that screen, so the headline figure a project manager saw first thing was
+   * fiction that happened to look plausible.
+   *
+   * The per-project read exists and is correct; nothing had ever asked the same
+   * question across projects.
+   */
+  async listAllChangeOrders(scope: TenantScope): Promise<ChangeOrderRecord[]> {
+    const { filters } = this.tenant(scope, 'change orders');
+
+    const rows = await this.client.select<Record<string, unknown>>({
+      from: 'hub_change_orders',
+      filters: { ...filters, archived_at: 'is.null' },
+      order: 'created_at.desc',
+      limit: 500,
+    });
+
+    return rows.map((r) => this.toChangeOrder(r));
+  }
+
   async listChangeOrders(scope: TenantScope, projectId: string): Promise<ChangeOrderRecord[]> {
     const { filters } = this.tenant(scope, 'change orders');
     if (projectId.trim() === '') return [];
@@ -264,29 +289,33 @@ export class HubSelections {
       limit: 300,
     });
 
-    return rows.map((r) => ({
-      id: String(r.id),
-      projectId: String(r.project_id),
-      changeOrderNumber: text(r.change_order_number),
-      title: text(r.title),
-      description: text(r.description),
-      reason: text(r.reason),
-      requestedBy: text(r.requested_by),
-      addedCost: money(r.added_cost),
-      creditAmount: money(r.credit_amount),
-      tax: money(r.tax),
-      scheduleImpactDays: num(r.schedule_impact_days) ?? 0,
-      revisedCompletionDate: (r.revised_completion_date as string | null) ?? null,
-      approvalDeadline: (r.approval_deadline as string | null) ?? null,
-      paymentRequirement: text(r.payment_requirement),
-      status: text(r.status) || 'Draft',
-      clientComments: text(r.client_comments),
-      approvedBy: text(r.approved_by),
-      approvalDate: (r.approval_date as string | null) ?? null,
-      clientVisible: r.client_visible === true,
-      createdAt: String(r.created_at),
-      createdBy: (r.created_by as string | null) ?? null,
-    }));
+    return rows.map((r) => this.toChangeOrder(r));
+  }
+
+  private toChangeOrder(r: Record<string, unknown>): ChangeOrderRecord {
+    return {
+    id: String(r.id),
+    projectId: String(r.project_id),
+    changeOrderNumber: text(r.change_order_number),
+    title: text(r.title),
+    description: text(r.description),
+    reason: text(r.reason),
+    requestedBy: text(r.requested_by),
+    addedCost: money(r.added_cost),
+    creditAmount: money(r.credit_amount),
+    tax: money(r.tax),
+    scheduleImpactDays: num(r.schedule_impact_days) ?? 0,
+    revisedCompletionDate: (r.revised_completion_date as string | null) ?? null,
+    approvalDeadline: (r.approval_deadline as string | null) ?? null,
+    paymentRequirement: text(r.payment_requirement),
+    status: text(r.status) || 'Draft',
+    clientComments: text(r.client_comments),
+    approvedBy: text(r.approved_by),
+    approvalDate: (r.approval_date as string | null) ?? null,
+    clientVisible: r.client_visible === true,
+    createdAt: String(r.created_at),
+    createdBy: (r.created_by as string | null) ?? null,
+    };
   }
 
   async createChangeOrder(

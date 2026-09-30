@@ -5,7 +5,7 @@ import { RowMenu } from '@/components/row-menu';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getProposalsReader } from '@/lib/buildsuite/proposals';
-import { CHANGE_ORDERS } from '@/lib/data/portal-fixtures';
+import { getHubSelections } from '@/lib/hub-db/selections';
 import {
   hasFinancials,
   hasOperationalDetail,
@@ -110,7 +110,24 @@ export default async function PortfolioDashboard() {
   const clientWaiting = active.filter((p) => p.clientActionRequired);
   const pendingReview = updates.filter((u) => u.managerApprovalStatus === 'Pending');
 
-  const openChangeOrders = CHANGE_ORDERS.filter(
+  // ── Change orders, from the database ──────────────────────────────────────
+  //
+  // These came from the FIXTURES file until 2026-09-30 — not as a fallback,
+  // unconditionally. So the count on this screen, and the money said to be
+  // waiting on a client, were fiction that happened to look plausible, on the
+  // first screen a project manager opens. The per-project screen has read the
+  // real rows all along; nothing had ever asked across projects.
+  //
+  // Empty when the Hub is unreachable, which is the honest answer: a number
+  // invented to fill a tile is how somebody chases a client about a change
+  // order that does not exist.
+  const selections = getHubSelections();
+  const changeOrders =
+    selections.available && scope.contractorId !== undefined
+      ? await selections.selections.listAllChangeOrders(scope).catch(() => [])
+      : [];
+
+  const openChangeOrders = changeOrders.filter(
     (c) => activeIds.has(c.projectId) && (c.status === 'Draft' || c.status === 'Awaiting Client'),
   );
   const coPending = openChangeOrders
@@ -145,10 +162,13 @@ export default async function PortfolioDashboard() {
           : 'logged a field update',
       where: nameOf(u.projectId),
     })),
-    ...CHANGE_ORDERS.filter((c) => activeIds.has(c.projectId) && c.status === 'Approved').map(
+    ...changeOrders.filter((c) => activeIds.has(c.projectId) && c.status === 'Approved').map(
       (c) => ({
         id: c.id,
-        date: c.approvalDate !== '' ? c.approvalDate : c.createdDate,
+        // `approvalDate` is nullable in the database, where the fixture had an
+        // empty string. Falling back to when it was raised keeps an approved
+        // change order in the feed rather than sorting it to 1970.
+        date: (c.approvalDate ?? '') !== '' ? c.approvalDate! : c.createdAt.slice(0, 10),
         icon: IconChangeOrders,
         who: c.approvedBy !== '' ? c.approvedBy : c.requestedBy,
         what: `approved ${c.changeOrderNumber}`,

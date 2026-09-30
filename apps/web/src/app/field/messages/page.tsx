@@ -4,13 +4,11 @@ import { projectById } from '@/lib/project-codes';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { Card, shortDate } from '@/components/ui';
-import { fieldMessages } from '@/lib/field-data';
 import { fieldProjectsFor } from '@/lib/field-scope';
 import { requireAccess } from '@/lib/access';
 import { sendFieldMessage } from '@/lib/actions';
 import { getHubMessages } from '@/lib/hub-db/messages';
 import { FieldConfirmation } from '@/components/field-nav';
-import { MESSAGES } from '@/lib/data/portal-fixtures';
 
 /**
  * Field ↔ PM conversation (D2 Step 3, D4 §5).
@@ -72,13 +70,17 @@ export default async function FieldMessages({
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
   } else {
-    thread = fieldMessages(MESSAGES, new Set(mineIds)).map((m) => ({
-      id: m.id,
-      projectId: m.projectId,
-      sender: m.sender,
-      body: m.message,
-      date: m.sentDate,
-    }));
+    // ── NOT the fixture thread ────────────────────────────────────────────
+    //
+    // This used to fall back to `MESSAGES` — invented conversations between
+    // invented people — whenever the Hub was unreachable. On 29 September the
+    // BuildSuite key was revoked and screens went blank for an afternoon; had
+    // this been that database, a crew member would have read fabricated
+    // messages from their PM and answered them.
+    //
+    // Empty, and the screen says why. A blank list is a fact; a made-up
+    // conversation is a lie with a timestamp on it.
+    thread = [];
   }
 
   // The project itself, so the row can print its name AND its code. The old
@@ -97,7 +99,11 @@ export default async function FieldMessages({
 
       {thread.length === 0 ? (
         <Card className="px-4 py-8 text-center">
-          <p className="text-sm text-navy-400">No messages yet. Ask your PM anything below.</p>
+          <p className="text-sm text-navy-400">
+            {hub.available
+              ? 'No messages yet. Ask your PM anything below.'
+              : 'Messages are not available right now — nothing is missing from your projects, the app cannot reach them. Try again shortly.'}
+          </p>
         </Card>
       ) : (
         <ul className="space-y-3">
