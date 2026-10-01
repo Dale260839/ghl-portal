@@ -9,7 +9,8 @@ import { hubScopeOfProject } from '@/lib/tenant-scope';
 import { currentAccess } from '@/lib/access';
 import { currentDataSource } from '@/lib/data/current-source';
 import { fieldProjectsFor } from '@/lib/field-scope';
-import { isFieldFolder } from '@/lib/document-folders';
+import { mayReadStaffFile } from '@/lib/file-access';
+import type { Access } from '@/lib/access';
 import type { TenantScope } from '@/lib/tenancy';
 
 /**
@@ -57,48 +58,36 @@ async function signedFor(storagePath: string, scope: TenantScope): Promise<strin
  * crew member took most of them, and the release flag is about the homeowner.
  */
 async function fieldMaySee(
-  session: NonNullable<Awaited<ReturnType<typeof getSession>>>,
+  access: Access,
   item: { projectId: string; category: string },
   kind: MediaKind,
 ): Promise<boolean> {
-  if (session.role !== 'field') return true;
-
-  if (kind === 'document' && !isFieldFolder(item.category)) return false;
-
-  const access = await currentAccess();
-  if (!access.ok) return false;
-
-  const scope = await actionTenantScope(session);
+  if (access.role !== 'field') return mayReadStaffFile(access, { ...item, kind }, []);
+  const scope = await actionTenantScope(access.session);
   const db = await currentDataSource(scope);
   const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
-  return fieldProjectsFor(access.access, projects, tasks).some(
-    (p) => p.buildsuiteProjectId === item.projectId,
+  return mayReadStaffFile(
+    access, { ...item, kind },
+    fieldProjectsFor(access, projects, tasks).map((p) => p.buildsuiteProjectId),
   );
 }
 
 /**
- * The project rule, applied to a raw storage path.
- *
- * A path is `contractorId/projectId/kind/uuid-filename`, so the project is the
- * second segment. A path shaped differently is refused rather than guessed at:
- * this decides access, and a path we cannot read is one we cannot check.
+ * A raw path must resolve a non-archived tenant row, then obey the same
+ * category, project and live-resource checks as the id route.
  */
 async function fieldMayReachPath(
-  session: NonNullable<Awaited<ReturnType<typeof getSession>>>,
+  access: Access,
   path: string,
 ): Promise<boolean> {
-  const projectId = path.split('/')[1] ?? '';
-  if (projectId.trim() === '') return false;
-
-  const access = await currentAccess();
-  if (!access.ok) return false;
-
-  const scope = await actionTenantScope(session);
-  const db = await currentDataSource(scope);
-  const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
-  return fieldProjectsFor(access.access, projects, tasks).some(
-    (p) => p.buildsuiteProjectId === projectId,
-  );
+  const segment = path.split('/')[2];
+  const kind = segment === 'photos' ? 'photo' : segment === 'documents' ? 'document' : null;
+  if (kind === null) return false;
+  const media = getHubMedia();
+  if (!media.available) return false;
+  const scope = await actionTenantScope(access.session);
+  const item = await media.media.getByStoragePath(scope, kind, path);
+  return item !== null && await fieldMaySee(access, item, kind);
 }
 
 export async function GET(request: NextRequest) {
@@ -106,6 +95,9 @@ export async function GET(request: NextRequest) {
   if (session === null) {
     return NextResponse.json({ error: 'not signed in' }, { status: 401 });
   }
+  const live = await currentAccess();
+  if (!live.ok) return NextResponse.json({ error: 'not found' }, { status: 404 });
+  const access = live.access;
 
   const id = (request.nextUrl.searchParams.get('id') ?? '').trim();
   const kind = request.nextUrl.searchParams.get('kind');
@@ -115,9 +107,10 @@ export async function GET(request: NextRequest) {
     if (!isKind(kind)) {
       return NextResponse.json({ error: 'kind must be photo or document' }, { status: 400 });
     }
+    if (!access.can('read', kind)) return NextResponse.json({ error: 'not found' }, { status: 404 });
 
     // ── A homeowner: their own projects, through the portal's gates ────────
-    if (session.role === 'client') {
+    if (access.role === 'client') {
       try {
         const { allProjects } = await currentPortalProject({});
         for (const project of allProjects) {
@@ -155,10 +148,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'file storage is not connected' }, { status: 503 });
     }
     try {
-      const scope = await actionTenantScope(session);
+      const scope = await actionTenantScope(access.session);
       const item = await media.media.getById(scope, kind, id);
       if (item === null) return NextResponse.json({ error: 'not found' }, { status: 404 });
-      if (!(await fieldMaySee(session, item, kind))) {
+      if (!(await fieldMaySee(access, item, kind))) {
         // The same answer an id that does not exist gets. Telling a crew member
         // that a document exists but is not theirs is itself a disclosure.
         return NextResponse.json({ error: 'not found' }, { status: 404 });
@@ -188,12 +181,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const scope = await actionTenantScope(session);
-    // The same restriction as the id branch, read out of the path itself:
-    // `contractorId/projectId/kind/uuid-filename`. `signedUrl` already refuses
-    // another contractor's prefix; this is the project rule a crew member is
-    // held to everywhere else.
-    if (session.role === 'field' && !(await fieldMayReachPath(session, path))) {
+    if (access.role === 'client') return NextResponse.json({ error: 'not found' }, { status: 404 });
+    const scope = await actionTenantScope(access.session);
+    // A tenant prefix alone is insufficient: resolve the row and its permissions.
+    if (!(await fieldMayReachPath(access, path))) {
       return NextResponse.json({ error: 'not found' }, { status: 404 });
     }
     const url = await storage.storage.signedUrl(scope, path);

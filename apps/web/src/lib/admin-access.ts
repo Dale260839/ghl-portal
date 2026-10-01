@@ -62,6 +62,11 @@ export function isAdminSession(
   // where the very next line would have refused it.
   const location = real.ghlLocationId;
   if (typeof location !== 'string' || location.trim() === '') return false;
+  if (real.ghlIdentityVerified !== true || !real.ghlUserId) return false;
+  const allowedUsers = (env.ADMIN_GHL_USER_IDS ?? '').split(/[,\s]+/).filter(Boolean);
+  if (allowedUsers.length > 0 ? !allowedUsers.includes(real.ghlUserId) : real.ghlRole !== 'admin') {
+    return false;
+  }
 
   return adminLocationIds(env).includes(location.trim());
 }

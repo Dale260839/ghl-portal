@@ -27,6 +27,10 @@ export interface Session {
   authProfileIds?: readonly string[];
   /** The GHL sub-account this session is working in (D-013). */
   ghlLocationId?: string;
+  ghlUserId?: string;
+  ghlIdentityVerified?: boolean;
+  ghlRole?: 'admin' | 'user';
+  ghlEmbedded?: boolean;
   /**
    * `hub_memberships.id`, for a user who arrived through an invitation rather
    * than through GoHighLevel.
@@ -48,6 +52,10 @@ export interface Session {
     email: string;
     authProfileIds?: readonly string[];
     ghlLocationId?: string;
+    ghlUserId?: string;
+    ghlIdentityVerified?: boolean;
+    ghlRole?: 'admin' | 'user';
+    ghlEmbedded?: boolean;
   };
 }
 

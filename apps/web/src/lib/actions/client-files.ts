@@ -11,7 +11,7 @@ import { getHubMedia } from '../hub-db/media.ts';
 import { getHubStorage } from '../hub-db/storage.ts';
 import { CLIENT_FOLDER } from '../document-folders.ts';
 import { acceptablePhoto } from '../field-task.ts';
-import { allowUpload } from '../upload-limits.ts';
+import { uploadActor, UploadBudgetError } from '../hub-db/upload-budget.ts';
 
 /**
  * A homeowner sending their contractor a file (John, 2026-09-19).
@@ -65,9 +65,6 @@ export async function uploadClientFile(formData: FormData): Promise<UploadResult
     return { ok: false, error: 'This project is not linked to a contractor, so nothing can be filed under it.' };
   }
 
-  const limit = allowUpload(access.session.email || access.session.name);
-  if (!limit.allowed) return { ok: false, error: limit.message };
-
   const file = formData.get('file');
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: 'No file was received.' };
   if (!ALLOWED.test(file.type)) return { ok: false, error: 'Send a photo or a PDF.' };
@@ -91,6 +88,7 @@ export async function uploadClientFile(formData: FormData): Promise<UploadResult
       filename: file.name || 'upload',
       contentType: file.type,
       body: await file.arrayBuffer(),
+      actorId: uploadActor(access.session),
     });
     await media.media.attach(
       scope,
@@ -106,6 +104,7 @@ export async function uploadClientFile(formData: FormData): Promise<UploadResult
       { name: access.session.name },
     );
   } catch (error) {
+    if (error instanceof UploadBudgetError) return { ok: false, error: error.message };
     console.error('[client-files] a homeowner upload did not save', error);
     return { ok: false, error: 'That file did not send. Check your connection and try again.' };
   }

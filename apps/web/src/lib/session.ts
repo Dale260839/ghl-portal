@@ -37,6 +37,10 @@ export async function getSession(): Promise<Session | null> {
 
   const { role } = result.payload;
   if (!isRole(role)) return null;
+  // Expire cookies minted by the former unsigned menu-link login.
+  const identity = result.payload.returnTo ?? result.payload;
+  if (process.env.NODE_ENV === 'production' && identity.ghlLocationId &&
+      !result.payload.membershipId && identity.ghlIdentityVerified !== true) return null;
   return result.payload;
 }
 
@@ -46,18 +50,26 @@ function isRole(value: unknown): value is Role {
 
 export async function setSession(session: Session): Promise<void> {
   const token = sign({ ...session }, resolveSessionSecret(), { ttlSeconds: SESSION_TTL_SECONDS });
+  const embedded = process.env.NODE_ENV === 'production' && session.ghlEmbedded === true;
   (await cookies()).set(COOKIE, token, {
     // Signed, so tampering is detectable — but still httpOnly and, in
     // production, Secure. Defence in depth: the signature is the guarantee,
     // these reduce how often it has to be relied on.
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: embedded ? 'none' : 'lax',
+    partitioned: embedded,
     path: '/',
     maxAge: SESSION_TTL_SECONDS,
   });
 }
 
 export async function clearSession(): Promise<void> {
-  (await cookies()).delete(COOKIE);
+  const session = await getSession();
+  const embedded = process.env.NODE_ENV === 'production' && session?.ghlEmbedded === true;
+  (await cookies()).set(COOKIE, '', {
+    maxAge: 0, path: '/', httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: embedded ? 'none' : 'lax', partitioned: embedded,
+  });
 }

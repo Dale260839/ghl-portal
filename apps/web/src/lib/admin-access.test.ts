@@ -24,6 +24,9 @@ const session = (over: Partial<Session> = {}): Session =>
     email: 'someone@example.com',
     authProfileIds: ['profile-1'],
     ghlLocationId: AFC,
+    ghlUserId: 'operator-1',
+    ghlIdentityVerified: true,
+    ghlRole: 'admin',
     ...over,
   }) as Session;
 
@@ -70,6 +73,9 @@ test('§ viewing as somebody else does not revoke it', () => {
       email: 'admin@alliance4contractors.com',
       authProfileIds: ['profile-1'],
       ghlLocationId: AFC,
+      ghlUserId: 'operator-1',
+      ghlIdentityVerified: true,
+      ghlRole: 'admin',
     },
   } as Partial<Session>);
 
@@ -87,4 +93,12 @@ test('§ a homeowner or a crew member is never an operator', () => {
 test('a session with no sub-account is not an operator, whatever is configured', () => {
   assert.equal(isAdminSession(session({ ghlLocationId: '' }), env(AFC)), false);
   assert.equal(isAdminSession(session({ ghlLocationId: undefined }), env(AFC)), false);
+});
+
+test('a location alone never grants operator access', () => {
+  assert.equal(isAdminSession(session({ ghlIdentityVerified: false }), env(AFC)), false);
+  assert.equal(isAdminSession(session({ ghlUserId: undefined }), env(AFC)), false);
+  assert.equal(isAdminSession(session({ ghlRole: 'user' }), env(AFC)), false);
+  assert.equal(isAdminSession(session(), { ...env(AFC), ADMIN_GHL_USER_IDS: 'different-user' }), false);
+  assert.equal(isAdminSession(session({ ghlRole: 'user' }), { ...env(AFC), ADMIN_GHL_USER_IDS: 'operator-1' }), true);
 });

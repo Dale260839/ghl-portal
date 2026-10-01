@@ -15,10 +15,11 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  *
  * So the landing is only trusted when it is *proven*, by one of:
  *
- *   1. **A signature** — GHL appends an HMAC we can check against a shared
- *      secret. Cheapest, works with a plain menu link.
- *   2. **API verification** — we call GHL with our own credential and confirm
- *      the user and location exist and are related. Slower, no shared secret.
+ *   1. **A signature** — a trusted server-side bridge authenticates the user
+ *      and appends an HMAC. GHL merge-field menu links do not sign themselves.
+ * A location lookup with our own API credential is not authentication of the
+ * caller. An unsigned menu link is allowed only by an explicit development
+ * opt-in; production needs a signed identity or Marketplace user context.
  *
  * In production, an unproven landing is refused. In development it can be
  * allowed explicitly, because otherwise nobody can work on the flow before the
@@ -27,10 +28,10 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 export interface LandingParams {
   locationId?: string;
-  /** Optional. BuildSuite's own menu link sends locationId alone. */
+  /** Required for signed production links; optional only for development. */
   userId?: string;
   email?: string;
-  /** HMAC over the other params, when GHL is configured to send one. */
+  /** HMAC over the other params, produced by a trusted identity bridge. */
   signature?: string;
   /** Unix seconds, when sent. Bounds how long a captured URL stays usable. */
   timestamp?: string;
@@ -69,7 +70,7 @@ export type LandingResult =
 const SIGNED_FIELDS = ['locationId', 'userId', 'email', 'timestamp'] as const;
 
 export function canonicalString(params: LandingParams): string {
-  return SIGNED_FIELDS.map((field) => `${field}=${params[field] ?? ''}`).join('&');
+  return SIGNED_FIELDS.map((field) => `${field}=${encodeURIComponent(params[field] ?? '')}`).join('&');
 }
 
 export function signLanding(params: LandingParams, secret: string): string {
@@ -90,12 +91,11 @@ export function verifyLanding(params: LandingParams, policy: LandingPolicy): Lan
   // Identity first — a landing that can't say who or where is not worth
   // verifying, and reporting that separately makes a misconfigured menu link
   // obvious instead of looking like a signature problem.
-  // BuildSuite's Custom Menu Link passes only `locationId`, and the tenant is
-  // the sub-account rather than a person — so a user id is welcome but not
-  // required. Matching that shape is deliberate (D-015).
+  // Location-only links can be accepted only by the explicit development path.
   if (locationId === '') return { ok: false, reason: 'missing_location' };
 
   if (policy.signingSecret !== undefined && policy.signingSecret !== '') {
+    if (userId === '') return { ok: false, reason: 'missing_user' };
     if (params.signature === undefined || params.signature === '') {
       return { ok: false, reason: 'unsigned' };
     }
@@ -106,11 +106,12 @@ export function verifyLanding(params: LandingParams, policy: LandingPolicy): Lan
     // A valid signature is forever unless it's bounded. Without this, a URL
     // captured from a browser history or a shared screenshot is a permanent
     // key to that contractor's account.
-    if (params.timestamp !== undefined && params.timestamp !== '') {
+    if (params.timestamp === undefined || params.timestamp === '') return { ok: false, reason: 'stale' };
+    {
       const issued = Number(params.timestamp);
       const now = policy.now ?? Math.floor(Date.now() / 1000);
       const maxAge = policy.maxAgeSeconds ?? 300;
-      if (!Number.isFinite(issued) || Math.abs(now - issued) > maxAge) {
+      if (!Number.isSafeInteger(issued) || issued <= 0 || Math.abs(now - issued) > maxAge) {
         return { ok: false, reason: 'stale' };
       }
     }

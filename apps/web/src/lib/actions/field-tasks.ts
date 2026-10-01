@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { allowUpload } from '../upload-limits.ts';
+import { uploadActor, UploadBudgetError } from '../hub-db/upload-budget.ts';
 
 import { requireAccess } from '../access.ts';
 import { assertCan, ownsTask } from '../permissions.ts';
@@ -168,6 +168,7 @@ async function storePhoto(input: {
   taskId?: string | null;
   scope: Awaited<ReturnType<typeof actionTenantScope>>;
   uploadedBy: string;
+  actorId: string;
 }): Promise<UploadResult> {
   const { file } = input;
   if (!(file instanceof File)) return { ok: false, error: 'No photo was received.' };
@@ -175,8 +176,6 @@ async function storePhoto(input: {
   // A cost ceiling, not a security boundary (see `upload-limits.ts`). The
   // realistic case is not an attacker: it is a poor signal, a Retry tapped
   // twenty times, and a storage bill that arrives quietly a month later.
-  const limit = allowUpload(input.uploadedBy);
-  if (!limit.allowed) return { ok: false, error: limit.message };
   const check = acceptablePhoto({ type: file.type, size: file.size });
   if (!check.ok) return { ok: false, error: check.reason };
 
@@ -194,6 +193,7 @@ async function storePhoto(input: {
       filename: file.name || 'photo.jpg',
       contentType: file.type,
       body: await file.arrayBuffer(),
+      actorId: input.actorId,
     });
     const saved = await media.media.attach(
       input.scope,
@@ -209,6 +209,7 @@ async function storePhoto(input: {
     );
     return { ok: true, photoId: saved.id };
   } catch (error) {
+    if (error instanceof UploadBudgetError) return { ok: false, error: error.message };
     console.error('[photos] a field photo did not save', error);
     return { ok: false, error: 'The photo did not save. Check your signal and try again.' };
   }
@@ -232,6 +233,7 @@ export async function uploadTaskPhoto(formData: FormData): Promise<UploadResult>
     taskId: context.task.id,
     scope: context.scope,
     uploadedBy: context.access.session.name,
+    actorId: uploadActor(context.access.session),
   });
   if (result.ok) revalidateTask(context.task.id, context.task.projectId);
   return result;
@@ -260,6 +262,7 @@ export async function uploadFieldPhoto(formData: FormData): Promise<UploadResult
     caption,
     scope,
     uploadedBy: access.session.name,
+    actorId: uploadActor(access.session),
   });
   if (result.ok) {
     revalidatePath('/field/photos');

@@ -23,6 +23,10 @@ const contractor: Session = {
   email: 'marcus@allianceproservices.com',
   authProfileIds: [OWN_PROFILE],
   ghlLocationId: ALLIANCE,
+  ghlUserId: 'operator',
+  ghlIdentityVerified: true,
+  ghlRole: 'admin',
+  ghlEmbedded: true,
 };
 
 function assumed(target: 'field' | 'client', from: Session = contractor): Session {
@@ -110,6 +114,10 @@ test('returning restores the original contractor exactly', () => {
     email: 'marcus@allianceproservices.com',
     authProfileIds: [OWN_PROFILE],
     ghlLocationId: ALLIANCE,
+    ghlUserId: 'operator',
+    ghlIdentityVerified: true,
+    ghlRole: 'admin',
+    ghlEmbedded: true,
   });
   assert.equal(isViewingAs(result.session), false);
 });
@@ -124,6 +132,10 @@ test('switching between assumed views does not nest', () => {
     email: 'marcus@allianceproservices.com',
     authProfileIds: [OWN_PROFILE],
     ghlLocationId: ALLIANCE,
+    ghlUserId: 'operator',
+    ghlIdentityVerified: true,
+    ghlRole: 'admin',
+    ghlEmbedded: true,
   });
 
   const back = planReturn(chained);

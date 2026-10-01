@@ -21,6 +21,9 @@ import {
 } from './auth/sign-in-request.ts';
 import { resolveEmailSender } from './email/sender.ts';
 import { accountForEmail, clearSession, getSession, homeFor, setSession, type Session } from './session';
+import { uploadActor } from './hub-db/upload-budget';
+import { allowClientWrite } from './upload-limits';
+import { fieldProjectsFor } from './field-scope';
 import { demoSignInEnabled } from './demo-accounts';
 
 /** One limiter for the password path, for the life of the process. */
@@ -392,7 +395,7 @@ export async function submitFieldUpdate(formData: FormData) {
     const media = getHubMedia();
     if (media.available) {
       try {
-        linked = await media.media.linkToUpdate(fieldScope, 'photo', photoIds, updateId);
+        linked = await media.media.linkToUpdate(fieldScope, 'photo', photoIds, updateId, projectId);
       } catch (error) {
         console.error('[field] photos did not link to the update', error);
       }
@@ -545,13 +548,21 @@ export async function markTaskSeen(formData: FormData) {
  * sharing the client's.
  */
 export async function sendFieldMessage(formData: FormData) {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const access = await requireAccess();
+  const session = access.session;
   assertCan(session.role, 'create', 'message');
 
   const projectId = String(formData.get('projectId') ?? '');
   const body = String(formData.get('body') ?? '').trim();
   if (projectId === '' || body === '') return;
+  const scope = await actionTenantScope(session);
+  const db = await currentDataSource(scope);
+  const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
+  if (!fieldProjectsFor(access, projects, tasks).some((p) => p.buildsuiteProjectId === projectId)) {
+    throw new Error('project not assigned');
+  }
+  const limit = allowClientWrite(scope.contractorId + ':' + uploadActor(session));
+  if (!limit.allowed) throw new Error(limit.message);
 
   // Written to the Hub where there is one, so the note survives the request and
   // the contractor sees it on their side. Internal, and stored with the field
@@ -560,7 +571,7 @@ export async function sendFieldMessage(formData: FormData) {
   const hub = getHubMessages();
   if (hub.available) {
     await hub.messages.post(
-      await actionTenantScope(session),
+      scope,
       { projectId, body, clientVisible: false },
       { name: session.name, role: 'field' },
     );
@@ -1064,6 +1075,11 @@ export async function switchAccount(formData: FormData) {
     email: account.email,
     authProfileIds: [account.authProfileId],
     ghlLocationId: account.locationId,
+    ghlUserId: realIdentity(session).ghlUserId,
+    ghlIdentityVerified: realIdentity(session).ghlIdentityVerified,
+    ghlRole: realIdentity(session).ghlRole,
+    returnTo: realIdentity(session),
+    ghlEmbedded: session.ghlEmbedded,
   });
 
   // Everything reads through the scope, so every surface changes at once.
@@ -1824,8 +1840,8 @@ export async function archiveMilestone(formData: FormData) {
 // project it belonged to, so an uploaded file was unreachable.
 
 async function mediaContext() {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const access = await requireAccess();
+  const session = access.session;
 
   const hub = getHubMedia();
   if (!hub.available) {
@@ -1846,6 +1862,7 @@ async function mediaContext() {
  */
 export async function attachProjectFile(formData: FormData) {
   const { session, scope, media } = await mediaContext();
+  if (session.role !== 'contractor') throw new Error('only a contractor may attach files here');
 
   const kind = String(formData.get('kind') ?? '') as 'document' | 'photo';
   if (kind !== 'document' && kind !== 'photo') throw new Error('kind must be document or photo');
@@ -1853,6 +1870,10 @@ export async function attachProjectFile(formData: FormData) {
 
   const projectId = String(formData.get('projectId') ?? '');
   if (projectId === '') throw new Error('projectId is required');
+  const project = await (await currentDataSource(scope)).getProject(scope, projectId);
+  if (project === null) throw new Error('project not found');
+  const access = await requireAccess();
+  if (access.projectIds !== null && !access.projectIds.includes(projectId)) throw new Error('project not assigned');
 
   const label = String(formData.get('label') ?? '');
   const externalUrl = String(formData.get('externalUrl') ?? '').trim();
@@ -1870,6 +1891,7 @@ export async function attachProjectFile(formData: FormData) {
       filename: file.name,
       contentType: file.type || 'application/octet-stream',
       body: await file.arrayBuffer(),
+      actorId: uploadActor(session),
     });
     storagePath = stored.path;
   }

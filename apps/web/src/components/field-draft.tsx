@@ -23,9 +23,8 @@ import { useEffect, useRef, useState } from 'react';
  * empty form — they would file yesterday's work as today's without noticing.
  * So it is a question, with the date it was written, and discarding is one tap.
  *
- * NOTHING SENSITIVE LIVES HERE. It is the crew's own words, on the crew's own
- * device, cleared the moment the update is filed. It is never read by the
- * server and never leaves the phone.
+ * Drafts can contain internal notes. Keep them per user and tenant in this
+ * tab's session storage, expire them after one day, and clear them on sign-out.
  * ---------------------------------------------------------------------------
  */
 
@@ -41,19 +40,24 @@ const FIELDS = ['projectId', 'workCompleted', 'internalNotes', 'clientSummary', 
  * and a key per project would leave four half-written days on the phone, each
  * offering itself back on a different selection.
  */
-const KEY = 'bs_field_draft:update';
+const LEGACY_KEY = 'bs_field_draft:update';
 
 interface Draft {
   savedAt: string;
   values: Record<string, string>;
 }
 
-function read(): Draft | null {
+function read(key: string): Draft | null {
   try {
-    const raw = window.localStorage.getItem(KEY);
+    const raw = window.sessionStorage.getItem(key);
     if (raw === null) return null;
     const parsed = JSON.parse(raw) as Draft;
-    return typeof parsed?.savedAt === 'string' && parsed.values ? parsed : null;
+    const savedAt = Date.parse(parsed?.savedAt);
+    if (!Number.isFinite(savedAt) || Date.now() - savedAt > 86_400_000 || savedAt > Date.now()) {
+      window.sessionStorage.removeItem(key);
+      return null;
+    }
+    return parsed.values && Object.values(parsed.values).every((v) => typeof v === 'string') ? parsed : null;
   } catch {
     // Private mode, cleared storage, a corrupted value. A draft is a
     // convenience; nothing here may throw its way onto the screen.
@@ -66,7 +70,9 @@ type Field = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 function fieldsIn(form: HTMLFormElement): Record<string, Field> {
   const found: Record<string, Field> = {};
   for (const name of FIELDS) {
-    const element = form.elements.namedItem(name);
+    const element = Array.from(form.elements).find((e) =>
+      (e instanceof HTMLSelectElement || e instanceof HTMLInputElement || e instanceof HTMLTextAreaElement) &&
+      e.name === name && !(e instanceof HTMLInputElement && e.type === 'hidden'));
     if (
       element instanceof HTMLInputElement ||
       element instanceof HTMLTextAreaElement ||
@@ -78,15 +84,19 @@ function fieldsIn(form: HTMLFormElement): Record<string, Field> {
   return found;
 }
 
-export function FieldDraft() {
+export function FieldDraft({ draftKey }: { draftKey: string | null }) {
   const anchor = useRef<HTMLDivElement>(null);
   const [offer, setOffer] = useState<Draft | null>(null);
 
   useEffect(() => {
     const form = anchor.current?.closest('form');
     if (!(form instanceof HTMLFormElement)) return;
+    setOffer(null);
+    // Do not offer the old browser-wide draft to whichever user signs in next.
+    try { window.localStorage.removeItem(LEGACY_KEY); } catch {}
+    if (draftKey === null) return;
 
-    const existing = read();
+    const existing = read(draftKey);
     // The project alone is not a draft — the dropdown always has a value.
     const written = ({ projectId: _project, ...words }: Record<string, string>) =>
       Object.values(words).some((v) => v.trim() !== '');
@@ -100,11 +110,11 @@ export function FieldDraft() {
         for (const [name, element] of Object.entries(fieldsIn(form))) values[name] = element.value;
         const { projectId: _project, ...words } = values;
         if (Object.values(words).every((v) => v.trim() === '')) {
-          window.localStorage.removeItem(KEY);
+          window.sessionStorage.removeItem(draftKey);
           return;
         }
-        window.localStorage.setItem(
-          KEY,
+        window.sessionStorage.setItem(
+          draftKey,
           JSON.stringify({ savedAt: new Date().toISOString(), values } satisfies Draft),
         );
       } catch {
@@ -122,21 +132,30 @@ export function FieldDraft() {
       form.removeEventListener('input', save);
       form.removeEventListener('change', save);
     };
-  }, []);
+  }, [draftKey]);
 
   function restore() {
     const form = anchor.current?.closest('form');
     if (!(form instanceof HTMLFormElement) || offer === null) return;
+    const project = fieldsIn(form).projectId;
+    if (project instanceof HTMLSelectElement &&
+        !Array.from(project.options).some((o) => o.value === offer.values.projectId)) {
+      discard();
+      return;
+    }
     for (const [name, element] of Object.entries(fieldsIn(form))) {
       const value = offer.values[name];
-      if (typeof value === 'string') element.value = value;
+      if (typeof value === 'string') {
+        element.value = value;
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+      }
     }
     setOffer(null);
   }
 
   function discard() {
     try {
-      window.localStorage.removeItem(KEY);
+      if (draftKey !== null) window.sessionStorage.removeItem(draftKey);
     } catch {
       // Nothing to do, and nothing worth saying.
     }
@@ -182,14 +201,15 @@ export function FieldDraft() {
  * submission — not on submit. A submission that fails must leave the draft
  * exactly where it was, which is the whole point of keeping one.
  */
-export function ClearFieldDraft() {
+export function ClearFieldDraft({ draftKey }: { draftKey: string | null }) {
   useEffect(() => {
     try {
-      window.localStorage.removeItem(KEY);
+      window.localStorage.removeItem(LEGACY_KEY);
+      if (draftKey !== null) window.sessionStorage.removeItem(draftKey);
     } catch {
       // Nothing to do.
     }
-  }, []);
+  }, [draftKey]);
 
   return null;
 }

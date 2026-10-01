@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { HubMedia } from './media.ts';
 import { TenancyError, type TenantScope } from '../tenancy.ts';
+import { resetColumnSupport } from './column-support.ts';
 
 const SCOPE: TenantScope = {
   locationId: 'loc-1',
@@ -142,4 +143,35 @@ test('removal archives the ROW and leaves the file in the bucket', async () => {
   assert.equal(calls[0]!.op, 'update');
   assert.equal(calls[0]!.args.from, 'hub_documents');
   assert.equal((calls[0]!.args.patch as Record<string, unknown>).archived_by, 'Ralph');
+});
+
+test('raw storage paths resolve an active row inside the tenant before signing', async () => {
+  const { media, calls } = recording();
+  await media.getByStoragePath(SCOPE, 'document', 'contractor-1/p1/documents/file.pdf');
+  assert.deepEqual(calls[0]!.args.filters, {
+    contractor_id: 'eq.contractor-1', storage_path: 'eq.contractor-1/p1/documents/file.pdf', archived_at: 'is.null',
+  });
+  assert.equal(await media.getByStoragePath(SCOPE, 'document', 'other/p1/documents/file.pdf'), null);
+  assert.equal(calls.length, 1);
+});
+
+test('linking never crosses projects or overwrites an existing photo link', async () => {
+  resetColumnSupport();
+  const calls: Record<string, unknown>[] = [];
+  const client = {
+    async select(args: Record<string, unknown>) {
+      calls.push(args);
+      return args.from === 'hub_daily_updates' ? [{ id: 'u1' }] : [];
+    },
+    async update(args: Record<string, unknown>) { calls.push(args); return [{ id: 'photo1' }]; },
+  };
+  const media = new HubMedia(client as never);
+  assert.equal(await media.linkToUpdate(SCOPE, 'photo', ['photo1'], 'u1', 'p1'), 1);
+  assert.deepEqual(calls.at(-1)!.filters, {
+    contractor_id: 'eq.contractor-1', id: 'in.(photo1)', project_id: 'eq.p1',
+    update_id: 'is.null', archived_at: 'is.null',
+  });
+  assert.deepEqual(calls.find((c) => c.from === 'hub_daily_updates')!.filters, {
+    contractor_id: 'eq.contractor-1', id: 'eq.u1', project_id: 'eq.p1', archived_at: 'is.null',
+  });
 });

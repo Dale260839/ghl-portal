@@ -10,6 +10,7 @@ import { getSession } from '@/lib/session';
 import { Card, CardHeader } from '@/components/ui';
 import { fieldProjectsFor } from '@/lib/field-scope';
 import { requireAccess } from '@/lib/access';
+import { fieldDraftKey } from '@/lib/field-draft-key';
 
 /**
  * The daily update form (§12.2).
@@ -44,9 +45,9 @@ export default async function FieldUpdate() {
 
       <Card>
         <CardHeader title="Add daily update" />
-        <form action={submitFieldUpdate} className="space-y-4 px-4 py-4">
+        <form key={session === null ? 'signed-out' : fieldDraftKey(session, scope)} action={submitFieldUpdate} className="space-y-4 px-4 py-4">
           <FieldUploadProvider>
-          <FieldDraft />
+          <FieldDraft draftKey={session === null ? null : fieldDraftKey(session, scope)} />
           <div>
             <label htmlFor="projectId" className="text-xs font-medium text-navy-600">
               Project

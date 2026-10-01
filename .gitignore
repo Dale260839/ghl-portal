@@ -36,3 +36,6 @@ next-env.d.ts
 .*.txt
 _*.mjs
 _*.html
+
+# Local smoke-test screenshots and browser artifacts.
+.artifacts/

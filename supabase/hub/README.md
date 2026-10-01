@@ -19,16 +19,29 @@ Run the files in **this** directory instead.
 
 ## Running a migration
 
-The Hub connects with a **publishable** key. It is subject to RLS and it cannot
-execute DDL — deliberately, because a running application should never be able
-to change its own schema. So migrations are run by a person:
+The production Hub backend uses a **server-only secret/service-role key**.
+The publishable/anonymous key has no Hub table access after migration 0010;
+do not restore that access. The application checks tenant and user permissions
+before using the server key. Never expose the key to the browser. Schema changes
+are an explicit operator step, not something the running application performs:
 
 1. Supabase dashboard → the **Project Hub** project (`nexpqqxarimqmntnvzff`)
 2. **SQL Editor** → **New query**
 3. Paste the whole file
 4. **Run**
 
-Every file is `create ... if not exists`, so re-running one is safe.
+Review each migration before running it. Do not replay the whole directory:
+older development policies are historical and must not be restored in production.
+
+### Pilot Guardrails
+
+- `0019_photo_update_link.sql`: adds the nullable update link and its foreign key.
+- `0020_upload_budget_and_photo_guards.sql`: requires 0019; adds server-only
+  atomic upload reservations and same-project photo-link validation. Install
+  before deploying the application that calls the budget RPC.
+- `0021_browser_truncate_revoke.sql`: removes whole-table deletion privileges
+  from browser roles on Hub tables only, retaining service-role and ordinary
+  read/write privileges.
 
 ### Verify it worked
 
@@ -58,11 +71,10 @@ it: every Hub read is filtered by a project id resolved through a tenant-scoped
 BuildSuite read. The constraint was never enforceable across a network boundary,
 so its absence is a design decision rather than an oversight.
 
-**RLS is on with no policy.** The publishable key can therefore read and write
-nothing until a policy is added, one screen at a time, each reviewed on its own.
-Shipping a permissive policy "to tighten later" is how BuildSuite's
-`contractors` table ended up fully readable by a key that should never have seen
-it. Not repeating that.
+**RLS is on with no browser policy.** Production access is through the backend's
+server key and application permission checks. Do not add permissive policies to
+make a browser key work. RLS does not constrain the service role, so backend
+tenant, membership and visibility checks remain mandatory.
 
 **Archive, never delete.** `archived_at` plus who and why. The approval model
 depends on being able to say who published what, so destroying a row destroys

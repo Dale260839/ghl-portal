@@ -21,7 +21,11 @@ function looksUnsubstituted(locationId: string): boolean {
   return locationId.includes('{{') || locationId.includes('}}');
 }
 
-export function Connecting({ locationId }: { locationId: string }) {
+export function Connecting({ locationId, signedQuery, parentOrigins }: {
+  locationId: string;
+  signedQuery: string;
+  parentOrigins: string[];
+}) {
   const router = useRouter();
   const [state, setState] = useState<State>({ phase: 'connecting' });
 
@@ -45,30 +49,61 @@ export function Connecting({ locationId }: { locationId: string }) {
     }
 
     let cancelled = false;
+    let removeListener = () => {};
+
+    const encryptedContext = (): Promise<string> => new Promise((resolve, reject) => {
+      let parentOrigin = '';
+      try { parentOrigin = new URL(document.referrer).origin; } catch {}
+      if (!parentOrigins.includes(parentOrigin)) {
+        reject(new Error('Open Project Hub inside the configured GoHighLevel custom page.'));
+        return;
+      }
+      const timer = setTimeout(() => {
+        removeListener();
+        reject(new Error('GoHighLevel did not respond. Reopen Project Hub from its custom page.'));
+      }, 10_000);
+      const listener = (event: MessageEvent) => {
+        if (event.source !== window.parent || event.origin !== parentOrigin ||
+            event.data?.message !== 'REQUEST_USER_DATA_RESPONSE' ||
+            typeof event.data.payload !== 'string') return;
+        removeListener();
+        resolve(event.data.payload);
+      };
+      removeListener = () => {
+        clearTimeout(timer);
+        window.removeEventListener('message', listener);
+      };
+      window.addEventListener('message', listener);
+      window.parent.postMessage({ message: 'REQUEST_USER_DATA' }, parentOrigin);
+    });
 
     void (async () => {
       try {
-        const response = await fetch(
-          `/api/auth/ghl?json=1&locationId=${encodeURIComponent(locationId)}`,
-          { cache: 'no-store' },
-        );
-        const body = (await response.json()) as { ok?: boolean; error?: string };
+        const response = window.parent !== window && !new URLSearchParams(signedQuery).has('signature')
+          ? await fetch('/api/auth/ghl?json=1', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ encryptedData: await encryptedContext(), locationId }),
+            cache: 'no-store',
+          })
+          : await fetch(`/api/auth/ghl?json=1&${signedQuery}`, { cache: 'no-store' });
+        const body = (await response.json()) as { ok?: boolean; error?: string; redirectTo?: string };
         if (cancelled) return;
 
         if (body.ok === true) {
           setState({ phase: 'done' });
           // replace, not push — nobody should be able to go "back" into a
           // half-finished sign-in.
-          router.replace('/dashboard');
+          router.replace(body.redirectTo?.startsWith('/') && !body.redirectTo.startsWith('//') ? body.redirectTo : '/dashboard');
           return;
         }
 
         setState({ phase: 'failed', message: body.error ?? 'Sign-in failed.' });
-      } catch {
+      } catch (error) {
         if (cancelled) return;
         setState({
           phase: 'failed',
-          message: "Couldn't reach the server.",
+          message: error instanceof Error ? error.message : "Couldn't reach the server.",
           hint: 'Check your connection and open the link again from GoHighLevel.',
         });
       }
@@ -76,8 +111,9 @@ export function Connecting({ locationId }: { locationId: string }) {
 
     return () => {
       cancelled = true;
+      removeListener();
     };
-  }, [locationId, router]);
+  }, [locationId, signedQuery, parentOrigins, router]);
 
   return (
     <main className="grid min-h-dvh place-items-center bg-navy-50 px-6">

@@ -88,6 +88,10 @@ export function realIdentity(session: Session): NonNullable<Session['returnTo']>
       email: session.email,
       authProfileIds: session.authProfileIds,
       ghlLocationId: session.ghlLocationId,
+      ghlUserId: session.ghlUserId,
+      ghlIdentityVerified: session.ghlIdentityVerified,
+      ghlRole: session.ghlRole,
+      ghlEmbedded: session.ghlEmbedded,
     }
   );
 }
@@ -131,6 +135,7 @@ export function planViewAs(current: Session | null, target: Role): ViewAsResult 
         authProfileIds: real.authProfileIds,
         ghlLocationId: real.ghlLocationId,
         returnTo: real,
+        ghlEmbedded: real.ghlEmbedded,
       },
       redirectTo: homeFor('field'),
     };
@@ -146,6 +151,7 @@ export function planViewAs(current: Session | null, target: Role): ViewAsResult 
       contactId,
       // Deliberately no tenant keys — a client is scoped by contact (§9.1).
       returnTo: real,
+      ghlEmbedded: real.ghlEmbedded,
     },
     redirectTo: homeFor('client'),
   };
@@ -170,6 +176,10 @@ export function planReturn(current: Session | null): ViewAsResult {
       email: real.email,
       authProfileIds: real.authProfileIds,
       ghlLocationId: real.ghlLocationId,
+      ghlUserId: real.ghlUserId,
+      ghlIdentityVerified: real.ghlIdentityVerified,
+      ghlRole: real.ghlRole,
+      ghlEmbedded: real.ghlEmbedded,
       // No `returnTo` — the view has been handed back.
     },
     redirectTo: homeFor(real.role),
