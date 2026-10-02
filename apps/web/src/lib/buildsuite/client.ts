@@ -206,20 +206,35 @@ export class BuildSuiteClient {
     url.searchParams.set('select', 'id');
     for (const [key, value] of Object.entries(filters)) url.searchParams.set(key, value);
 
-    const response = await this.fetchImpl(url.toString(), {
-      method: 'GET',
-      signal: AbortSignal.timeout(this.timeoutMs),
-      headers: {
-        apikey: this.config.key,
-        Authorization: `Bearer ${this.config.key}`,
-        Prefer: 'count=exact',
-        Range: '0-0',
-      },
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url.toString(), {
+        method: 'GET',
+        signal: AbortSignal.timeout(this.timeoutMs),
+        headers: {
+          apikey: this.config.key,
+          Authorization: `Bearer ${this.config.key}`,
+          Prefer: 'count=exact',
+          Range: '0-0',
+        },
+      });
+    } catch {
+      throw new BuildSuiteReadError(`count failed: ${from}`, null, true);
+    }
+    if (!response.ok) {
+      throw new BuildSuiteReadError(
+        `BuildSuite count ${response.status} on ${from}`,
+        response.status,
+        response.status >= 500,
+      );
+    }
 
     const range = response.headers.get('content-range');
-    const total = range?.split('/')[1];
-    const parsed = Number(total);
-    return Number.isFinite(parsed) ? parsed : 0;
+    const match = range?.match(/^(?:\d+-\d+|\*)\/(\d+)$/);
+    const parsed = match === null || match === undefined ? NaN : Number(match[1]);
+    if (!Number.isSafeInteger(parsed) || parsed < 0) {
+      throw new BuildSuiteReadError(`Exact count unavailable: ${from}`, response.status, false);
+    }
+    return parsed;
   }
 }

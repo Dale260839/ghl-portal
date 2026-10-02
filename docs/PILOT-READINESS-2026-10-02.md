@@ -62,10 +62,18 @@ guard were present. Detailed evidence is in the Desktop audit folder.
   credential details. Writes are never automatically retried because an uncertain
   write may already have committed. This is not a confirmed fix for the live
   Overview digest below.
+- BuildSuite exact counts now reject failed HTTP/transport reads and missing or
+  invalid totals instead of silently showing zero projects. Confirmed exact
+  zero remains zero. The new regressions failed on the former implementation.
+- Overview reports an optional proposal/team read outage in that section, not
+  as a missing contract or an empty access list. A proposal outage no longer
+  takes down the rest of a successfully loaded overview. Mandatory ownership,
+  project, overlay and operational reads still fail closed. Actual GHL money
+  remains usable when only the optional BuildSuite proposal read fails.
 
 ## Verification
 
-- Web: 1,261 tests passed, zero failures.
+- Web: 1,270 tests passed, zero failures.
 - Shared contracts: 40 tests passed, zero failures.
 - Workspace typecheck and optimized production build passed.
 - Production dependency audit: zero reported vulnerabilities.
@@ -80,6 +88,9 @@ guard were present. Detailed evidence is in the Desktop audit folder.
   Vercel capacity, live Postgres contention or a real authentication test.
 - Local 390 x 844 and 1440 x 900 pages rendered without horizontal overflow;
   sign-out, unsigned-login refusal, forged origin and revoked access passed.
+- `scripts/test-overview-ui.mjs` renders actual Overview JSX with application
+  CSS and mocked reads/editor at 390/1440 px. Both outage notices are visible
+  without overflow; screenshots are local fixtures, not live product evidence.
 - Reintroducing the former writer fallback made the new regression fail;
   the fixed source was restored and the full suite passed afterward.
 - Database tests cover quota rollback and photo/update trigger boundaries using
@@ -89,6 +100,8 @@ guard were present. Detailed evidence is in the Desktop audit folder.
 
 1. Authorized owning-account access to the feature release and logs. No need
    for Chris specifically, no shared password and no disabled protection.
+   A fresh owning-project Logs check still returned Vercel 404 while Dale's
+   Work account was signed in; the loading shell was not actual log access.
 2. Configure and verify the replacement GHL Custom Page iframe and server-side
    SSO settings from the 1 October cutover document. An API token alone does
    not authenticate a contractor. Promoting before this test could lock out
