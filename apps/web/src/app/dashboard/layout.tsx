@@ -93,6 +93,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
     // per project now — on that project's People section.
     { href: '/dashboard/team', label: 'Team', icon: IconTeam },
     { href: '/dashboard/pipeline', label: 'Reports', icon: IconReports },
+    // Operator-only, and hidden rather than refused — a contractor who is not
+    // an operator has no business knowing the page exists.
+    ...(isAdminSession(session)
+      ? [{ href: '/dashboard/health', label: 'Health', icon: IconReports }]
+      : []),
   ];
 
   return (

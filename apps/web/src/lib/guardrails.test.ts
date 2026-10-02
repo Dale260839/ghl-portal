@@ -789,6 +789,35 @@ test('§ no screen invents data when its database is unreachable', () => {
   }
 });
 
+test('§ the health surfaces are operator-only and say nothing about customers', () => {
+  // Added 2026-10-02. A health page is a map of where to push: which
+  // migrations have landed, whether email is on, whether the demo door is
+  // open. Useful to us, and a gift to anybody else.
+  const page = FILES.find((f) => rel(f.path) === 'app/dashboard/health/page.tsx');
+  const route = FILES.find((f) => rel(f.path) === 'app/api/health/route.ts');
+  assert.ok(page && route, 'a health surface has moved');
+
+  // Both gated on the operator identity, not on merely having a session.
+  assert.match(page.text, /isAdminSession\(/);
+  assert.match(route.text, /isAdminSession\(/);
+
+  // The page is invisible rather than refused, and the route answers 404 — a
+  // 401 confirms the route exists, which is half of what an attacker wanted.
+  assert.match(page.text, /notFound\(\)/);
+  assert.match(route.text, /status: 404/);
+
+  // And neither reads anything belonging to a contractor or a client.
+  const logic = FILES.find((f) => rel(f.path) === 'lib/health.ts');
+  assert.ok(logic, 'lib/health.ts has moved');
+  for (const forbidden of ['listProjects', 'clientName', 'projectName', 'listDailyUpdates']) {
+    assert.equal(
+      withoutComments(logic.text).includes(forbidden),
+      false,
+      `the health report must not reach for ${forbidden}`,
+    );
+  }
+});
+
 test('§ the operator controls are gated on WHO, not only on a flag', () => {
   // Dale, 2026-09-29: "only the Alliance For Contractors admin account should
   // have these buttons." They were gated on environment flags, which cannot
