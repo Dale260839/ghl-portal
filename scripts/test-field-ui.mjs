@@ -1,20 +1,31 @@
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readdir, readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const cssFolder = path.join(repo, 'apps/web/.next/static/css');
+const css = (await Promise.all((await readdir(cssFolder)).filter(name => name.endsWith('.css'))
+  .map(name => readFile(path.join(cssFolder,name),'utf8')))).join('\n');
 const result = await build({
   absWorkingDir: path.join(repo, 'apps/web'), entryPoints: ['tests/field-ui-harness.tsx'],
   bundle: true, write: false, jsx: 'automatic', format: 'iife',
 });
 const server = createServer((req, res) => {
+  if (req.url === '/styles.css') {
+    res.setHeader('Content-Type','text/css');res.end(css);return;
+  }
+  if (req.url.startsWith('/api/files?')) {
+    // Image fixture only: live file authorization is exercised elsewhere.
+    res.setHeader('Content-Type','image/png');
+    res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64'));return;
+  }
   res.setHeader('Content-Type', req.url === '/bundle.js' ? 'application/javascript' : 'text/html');
   res.end(req.url === '/bundle.js' ? result.outputFiles[0].contents :
-    '<!doctype html><meta name="viewport" content="width=device-width"><div id="root"></div><script src="/bundle.js"></script>');
+    '<!doctype html><meta name="viewport" content="width=device-width"><link rel="stylesheet" href="/styles.css"><style>main{max-width:640px;margin:auto;padding:12px}label{display:block}input,textarea,select{border:1px solid #aaa}textarea{width:100%}</style><div id="root"></div><script src="/bundle.js"></script>');
 });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const url = 'http://127.0.0.1:' + server.address().port;
@@ -36,6 +47,11 @@ try {
   await page.getByRole('button', { name: 'Bring it back' }).click();
   assert.equal(await page.getByLabel('Internal notes').inputValue(), 'Private notes for user one');
 
+  await page.getByLabel('Crew', {exact:true}).fill('3');
+  await page.getByLabel('Hours', {exact:true}).fill('6.5');
+  await page.getByLabel('Weather', {exact:true}).fill('Rain');
+  await page.getByLabel('Client decision needed', {exact:true}).check();
+
   const file = { name: 'site.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') };
   await page.locator('input[type=file]').last().setInputFiles(file);
   await page.getByText('Retrying…', { exact: true }).waitFor();
@@ -43,9 +59,64 @@ try {
   assert.equal(await page.getByLabel('Project').isEnabled(), false);
   await page.getByText('Saved', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Send update' }).click();
+  await page.waitForFunction(() => document.querySelector('output').textContent.includes('test-photo-2'));
   const posted = JSON.parse(await page.locator('output').innerText());
   assert.equal(posted.projectId, 'p1');
   assert.equal(posted.photoId, 'test-photo-2');
+
+  const recoveredDraft = await page.evaluate(() => JSON.parse(sessionStorage.getItem('bs_field_draft:v2:one')));
+  assert.deepEqual(recoveredDraft.photoIds, ['test-photo-2']);
+  await page.reload();
+  await page.getByRole('button', { name: 'Bring it back' }).click();
+  assert.equal(await page.getByLabel('Internal notes').inputValue(), 'Private notes for user one');
+  assert.equal(await page.getByLabel('Crew', {exact:true}).inputValue(), '3');
+  assert.equal(await page.getByLabel('Hours', {exact:true}).inputValue(), '6.5');
+  assert.equal(await page.getByLabel('Weather', {exact:true}).inputValue(), 'Rain');
+  assert.equal(await page.getByLabel('Client decision needed', {exact:true}).isChecked(), true);
+  assert.equal(await page.getByLabel('Project').isEnabled(), false);
+  assert.equal(await page.locator('input[name=photoId]').count(), 1);
+  await mkdir(path.join(repo, '.artifacts'), {recursive:true});
+  await page.waitForFunction(() => {
+    const image=document.querySelector('img[alt="Saved draft photo"]');
+    return image?.complete && image.naturalWidth>0;
+  });
+  for (const [width,height] of [[390,844],[1440,900]]) {
+    await page.setViewportSize({width,height});
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth<=innerWidth),true);
+    const tile = await page.locator('img[alt="Saved draft photo"]').boundingBox();
+    const detach = await page.getByRole('button',{name:'Detach photo from draft'}).boundingBox();
+    assert.ok(detach.x>=tile.x && detach.x+detach.width<=tile.x+tile.width && detach.y>=tile.y && detach.y+detach.height<=tile.y+tile.height);
+    await page.screenshot({path:path.join(repo,`.artifacts/draft-recovery-${width}.png`),fullPage:true});
+  }
+  await page.setViewportSize({width:390,height:844});
+  await page.getByRole('button', { name: 'Change user' }).click();
+  assert.equal(await page.locator('input[name=photoId]').count(), 0);
+  await page.getByRole('button', { name: 'Change user' }).click();
+  await page.getByRole('button', { name: 'Bring it back' }).click();
+  await page.getByRole('button', { name: 'Send update' }).click();
+  assert.deepEqual(JSON.parse(await page.locator('output').innerText()).photoIds, ['test-photo-2']);
+
+  await page.getByRole('button', {name:'Detach photo from draft'}).click();
+  assert.equal(await page.locator('input[name=photoId]').count(),0);
+  assert.equal(await page.getByLabel('Project').isEnabled(),true);
+  assert.deepEqual(await page.evaluate(() => JSON.parse(sessionStorage.getItem('bs_field_draft:v2:one')).photoIds),[]);
+  assert.equal(await page.getByLabel('Internal notes').inputValue(),'Private notes for user one');
+  await page.getByRole('button', {name:'Successful update landing'}).click();
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('bs_field_draft:v2:one')),null);
+  await page.getByRole('button', {name:'New daily update'}).click();
+  assert.equal(await page.locator('input[name=photoId]').count(),0);
+
+  // Upload completion alone creates a recoverable draft: no typing event is needed.
+  await page.locator('input[type=file]').last().setInputFiles(file);
+  await page.getByText('Saved', {exact:true}).waitFor();
+  const photoOnly = await page.evaluate(() => JSON.parse(sessionStorage.getItem('bs_field_draft:v2:one')));
+  assert.equal(photoOnly.photoIds.length,1);
+  await page.reload();
+  await page.getByRole('button', {name:'Bring it back'}).click();
+  assert.equal(await page.locator('input[name=photoId]').count(),1);
+  assert.equal(await page.getByLabel('Internal notes').inputValue(),'');
+  await page.getByRole('button', {name:'Successful update landing'}).click();
+  await page.getByRole('button', {name:'New daily update'}).click();
 
   await page.reload();
   await page.getByLabel('Fail all uploads').check();
@@ -126,7 +197,7 @@ try {
   await page.screenshot({ path: path.join(repo, '.artifacts/field-ui-mobile.png') });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.screenshot({ path: path.join(repo, '.artifacts/field-ui-desktop.png') });
-  console.log('PASS: real React retry/submit controls, 12-photo queue, unique photo links, per-user drafts, expired/future/corrupt drafts, removed-project restoration, rejected task submission retention, and task retry gating/reset without repeated photo IDs.');
+  console.log('PASS: real React retry/submit controls, 12-photo queue, unique photo links, per-user drafts, all daily values and saved photos restored after reload, photo-only draft recovery, detach without losing text, successful draft cleanup, expired/future/corrupt drafts, removed-project restoration, rejected task submission retention, and task retry gating/reset without repeated photo IDs.');
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));

@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useFieldUploads } from '@/components/field-upload-context';
+import { DAILY_DRAFT_FIELDS, hasDraftContents, parseFieldDraft, type FieldDraftState } from '@/lib/field-draft-state';
 
 /**
  * The crew's half-written update, kept while they write it.
@@ -33,7 +35,7 @@ import { useEffect, useRef, useState } from 'react';
  * the words without it and a crew member files Tuesday's basement work against
  * whichever job happens to be first in the list.
  */
-const FIELDS = ['projectId', 'workCompleted', 'internalNotes', 'clientSummary', 'blocker'] as const;
+const FIELDS = DAILY_DRAFT_FIELDS;
 
 /**
  * One draft, not one per project. A crew member writes one update at a time,
@@ -42,22 +44,13 @@ const FIELDS = ['projectId', 'workCompleted', 'internalNotes', 'clientSummary', 
  */
 const LEGACY_KEY = 'bs_field_draft:update';
 
-interface Draft {
-  savedAt: string;
-  values: Record<string, string>;
-}
-
-function read(key: string): Draft | null {
+function read(key: string): FieldDraftState | null {
   try {
     const raw = window.sessionStorage.getItem(key);
     if (raw === null) return null;
-    const parsed = JSON.parse(raw) as Draft;
-    const savedAt = Date.parse(parsed?.savedAt);
-    if (!Number.isFinite(savedAt) || Date.now() - savedAt > 86_400_000 || savedAt > Date.now()) {
-      window.sessionStorage.removeItem(key);
-      return null;
-    }
-    return parsed.values && Object.values(parsed.values).every((v) => typeof v === 'string') ? parsed : null;
+    const parsed = parseFieldDraft(raw);
+    if (parsed === null) window.sessionStorage.removeItem(key);
+    return parsed;
   } catch {
     // Private mode, cleared storage, a corrupted value. A draft is a
     // convenience; nothing here may throw its way onto the screen.
@@ -86,7 +79,9 @@ function fieldsIn(form: HTMLFormElement): Record<string, Field> {
 
 export function FieldDraft({ draftKey }: { draftKey: string | null }) {
   const anchor = useRef<HTMLDivElement>(null);
-  const [offer, setOffer] = useState<Draft | null>(null);
+  const [offer, setOffer] = useState<FieldDraftState | null>(null);
+  const { restorePhotos } = useFieldUploads();
+  const restoring = useRef(false);
 
   useEffect(() => {
     const form = anchor.current?.closest('form');
@@ -97,25 +92,32 @@ export function FieldDraft({ draftKey }: { draftKey: string | null }) {
     if (draftKey === null) return;
 
     const existing = read(draftKey);
-    // The project alone is not a draft — the dropdown always has a value.
-    const written = ({ projectId: _project, ...words }: Record<string, string>) =>
-      Object.values(words).some((v) => v.trim() !== '');
-    if (existing !== null && written(existing.values)) {
+    const defaults: Record<string, string> = {};
+    for (const [name, element] of Object.entries(fieldsIn(form))) {
+      defaults[name] = element instanceof HTMLInputElement && element.type === 'checkbox'
+        ? (element.defaultChecked ? 'on' : 'off') : element instanceof HTMLSelectElement ? '' : element.defaultValue;
+    }
+    if (existing !== null && hasDraftContents(existing.values, existing.photoIds, defaults)) {
       setOffer(existing);
     }
 
     const save = () => {
+      if (restoring.current) return;
       try {
         const values: Record<string, string> = {};
-        for (const [name, element] of Object.entries(fieldsIn(form))) values[name] = element.value;
-        const { projectId: _project, ...words } = values;
-        if (Object.values(words).every((v) => v.trim() === '')) {
+        for (const [name, element] of Object.entries(fieldsIn(form))) {
+          values[name] = element instanceof HTMLInputElement && element.type === 'checkbox'
+            ? (element.checked ? 'on' : 'off') : element.value;
+        }
+        const photoIds = [...new Set(new FormData(form).getAll('photoId').map(String).filter(Boolean))];
+        setOffer(null);
+        if (!hasDraftContents(values, photoIds, defaults)) {
           window.sessionStorage.removeItem(draftKey);
           return;
         }
         window.sessionStorage.setItem(
           draftKey,
-          JSON.stringify({ savedAt: new Date().toISOString(), values } satisfies Draft),
+          JSON.stringify({ savedAt: new Date().toISOString(), values, photoIds } satisfies FieldDraftState),
         );
       } catch {
         // Storage full or blocked. Typing must not break because a draft
@@ -143,13 +145,17 @@ export function FieldDraft({ draftKey }: { draftKey: string | null }) {
       discard();
       return;
     }
+    restoring.current = true;
     for (const [name, element] of Object.entries(fieldsIn(form))) {
       const value = offer.values[name];
       if (typeof value === 'string') {
-        element.value = value;
+        if (element instanceof HTMLInputElement && element.type === 'checkbox') element.checked = value === 'on';
+        else element.value = value;
         element.dispatchEvent(new Event('change', { bubbles: true }));
       }
     }
+    restorePhotos(offer.photoIds.length > 0 ? { projectId: offer.values.projectId!, photoIds: offer.photoIds } : null);
+    restoring.current = false;
     setOffer(null);
   }
 

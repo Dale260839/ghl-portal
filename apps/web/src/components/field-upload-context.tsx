@@ -3,6 +3,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 
 import { countUploads, submitGate, type UploadCounts } from '@/lib/field-upload-state';
+import type { RestoredDraftPhotos } from '@/lib/field-draft-state';
 
 /**
  * The uploader tells the form whether it is ready to be sent.
@@ -26,17 +27,22 @@ import { countUploads, submitGate, type UploadCounts } from '@/lib/field-upload-
 interface UploadStatus {
   counts: UploadCounts;
   report: (counts: UploadCounts) => void;
+  restoredPhotos: RestoredDraftPhotos | null;
+  restorePhotos: (photos: RestoredDraftPhotos | null) => void;
 }
 
 const EMPTY: UploadCounts = { saved: 0, inFlight: 0, failed: 0 };
 
-const Context = createContext<UploadStatus>({ counts: EMPTY, report: () => {} });
+const Context = createContext<UploadStatus>({ counts: EMPTY, report: () => {}, restoredPhotos: null, restorePhotos: () => {} });
 
 export function FieldUploadProvider({ children }: { children: ReactNode }) {
   const [counts, setCounts] = useState<UploadCounts>(EMPTY);
+  const [restoredPhotos, restorePhotos] = useState<RestoredDraftPhotos | null>(null);
   const value = useMemo<UploadStatus>(
     () => ({
       counts,
+      restoredPhotos,
+      restorePhotos,
       report: (next) =>
         // Only when something actually moved. The uploader reports on every
         // render of its list, and setting state unconditionally from a child's
@@ -47,7 +53,7 @@ export function FieldUploadProvider({ children }: { children: ReactNode }) {
             : next,
         ),
     }),
-    [counts],
+    [counts, restoredPhotos],
   );
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

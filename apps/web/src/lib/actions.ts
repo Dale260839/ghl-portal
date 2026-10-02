@@ -360,6 +360,27 @@ export async function submitFieldUpdate(formData: FormData) {
   const project = await (await currentDataSource(fieldScope)).getProject(fieldScope, projectId);
   if (project === null) throw new Error('project not found');
 
+  const photoIds = [...new Set(formData.getAll('photoId').map(String).map((id) => id.trim()).filter(Boolean))];
+  const media = getHubMedia();
+  if (photoIds.length > 0) {
+    if (!media.available) throw new Error('Photos cannot be checked right now. Nothing was submitted; your draft is kept.');
+    // Read exact references, not only the newest page of project photos.
+    // Batches bound concurrent reads when a saved draft contains many photos.
+    for (let start = 0; start < photoIds.length; start += 8) {
+      let photos;
+      try {
+        photos = await Promise.all(photoIds.slice(start, start + 8).map((id) =>
+          media.media.getById(fieldScope, 'photo', id)));
+      } catch (error) {
+        console.error('[field] photos could not be checked', error);
+        throw new Error('Photos could not be checked. Nothing was submitted; your draft is kept.');
+      }
+      if (photos.some((photo) => photo === null || photo.projectId !== projectId || photo.updateId !== null)) {
+        throw new Error('One of those photos is not available for this update. Remove it from the draft before sending.');
+      }
+    }
+  }
+
   // Goes to the Hub's database when there is one. It used to go to an in-memory
   // array that the read path never consulted, so submitting did nothing
   // visible and anything that worked vanished on restart.
@@ -389,16 +410,12 @@ export async function submitFieldUpdate(formData: FormData) {
   // Failing to link must never lose the update: the update is the record of
   // the day's work, and the photographs are still on the project's Photos page
   // either way.
-  const photoIds = formData.getAll('photoId').map(String).filter((id) => id.trim() !== '');
   let linked = 0;
-  if (photoIds.length > 0) {
-    const media = getHubMedia();
-    if (media.available) {
-      try {
-        linked = await media.media.linkToUpdate(fieldScope, 'photo', photoIds, updateId, projectId);
-      } catch (error) {
-        console.error('[field] photos did not link to the update', error);
-      }
+  if (photoIds.length > 0 && media.available) {
+    try {
+      linked = await media.media.linkToUpdate(fieldScope, 'photo', photoIds, updateId, projectId);
+    } catch (error) {
+      console.error('[field] photos did not link to the update', error);
     }
   }
 
@@ -452,16 +469,17 @@ export async function submitFieldUpdate(formData: FormData) {
     submittedBy: session.name,
     workCompleted: String(formData.get('workCompleted') ?? ''),
     blocker,
-    // Was hardcoded to 0, so every submission told the PM there were no
-    // photographs — including the ones with six.
-    photoCount: linked > 0 ? linked : photoIds.length,
+    // Only confirmed links belong to this update. Saved project files are not
+    // evidence of attachment when the second write fails.
+    photoCount: linked,
     clientDecisionNeeded: formData.get('clientDecisionNeeded') === 'on',
   });
 
   revalidatePath('/field');
   revalidatePath('/dashboard/updates');
   revalidatePath('/dashboard');
-  redirect(`/field?submitted=1&pm=${notified.sent ? 'sent' : 'no'}`);
+  const photoResult = linked < photoIds.length ? '&photos=partial' : '';
+  redirect(`/field?submitted=1&pm=${notified.sent ? 'sent' : 'no'}${photoResult}`);
 }
 
 /**

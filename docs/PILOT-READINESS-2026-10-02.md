@@ -83,6 +83,23 @@ guard were present. Detailed evidence is in the Desktop audit folder.
 - The example environment now documents current/legacy webhook keys, the
   server-only SSO configuration and the required server credentials for both
   databases. No live keys, grants, secrets or menu links were changed.
+- Daily draft recovery now includes saved photo IDs, crew/hours, weather and
+  the decision checkbox. Upload completion persists references without needing
+  another typing event, including a photo-only draft. Restoring photos locks
+  the original project; detaching a reference preserves the text and never
+  deletes a stored file. Legacy text-only drafts remain compatible. References
+  use the authenticated file route, not cached storage paths or signed URLs.
+- Daily update submission rechecks every saved reference against its tenant,
+  project and unlinked status before any write, with at most eight concurrent
+  reads. Missing/stale/wrong-project references fail closed. A later link
+  failure preserves the update and displays a partial-filing warning; the PM
+  message counts only confirmed links, not IDs supplied by the form.
+
+Draft recovery is limited to this user's tab-session storage for one day.
+Unsaved file bytes and in-flight upload queues are NOT restored after a reload,
+and closing the tab can discard session storage. This is not full offline mode.
+Operational submission/photo linking are still separate database writes;
+bounded preflight reads do not make those writes transactional.
 
 ## Webhook Integration Gap
 
@@ -104,7 +121,7 @@ supports inspecting deliveries and manually retrying failed latest deliveries.
 
 ## Verification
 
-- Web: 1,283 tests passed, zero failures.
+- Web: 1,297 tests passed, zero failures.
 - Shared contracts: 40 tests passed, zero failures.
 - Workspace typecheck and optimized production build passed.
 - Production dependency audit: zero reported vulnerabilities.
@@ -130,6 +147,17 @@ supports inspecting deliveries and manually retrying failed latest deliveries.
   keys. They cover valid schemes, tampering, wrong algorithm, missing config,
   downgrade refusal (including a blank current header), successive resource
   updates, old record dates and repeated unexecuted workflow requests.
+- Fourteen further draft-state/daily-action tests cover backward compatibility,
+  expiry/corruption, safe reference shapes, meaningful default-value changes,
+  duplicate/stale/wrong-project references, bounded reads and partial linking.
+  The actual daily action is bundled with isolated read/write/notification
+  adapters; this is not live database execution.
+- The real React harness also proves saved photo/all-field restoration after
+  reload, user isolation of references, photo-only recovery, detach without
+  losing text, original-project locking and successful cleanup. The regression
+  failed before the recovery change. Application CSS at 390/1440 px passes
+  overflow/control-containment checks. Screenshot photo responses are mocked,
+  not live file-authorization evidence.
 
 ## Remaining Release Gates
 

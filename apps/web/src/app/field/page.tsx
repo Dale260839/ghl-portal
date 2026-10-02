@@ -23,9 +23,9 @@ import { fieldDraftKey } from '@/lib/field-draft-key';
 export default async function FieldToday({
   searchParams,
 }: {
-  searchParams: Promise<{ submitted?: string; pm?: string }>;
+  searchParams: Promise<{ submitted?: string; pm?: string; photos?: string }>;
 }) {
-  const { submitted, pm } = await searchParams;
+  const { submitted, pm, photos } = await searchParams;
   const scope = await requireTenantScope();
   const db = await currentDataSource(scope);
   const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
@@ -78,6 +78,13 @@ export default async function FieldToday({
           {pm === 'sent'
             ? 'They have been emailed.'
             : 'Nobody was emailed — tell them if it is urgent.'}
+        </div>
+      )}
+
+      {submitted === '1' && photos === 'partial' && (
+        <div role="alert" className="rounded-lg border border-amber-600/25 bg-amber-soft px-4 py-3 text-sm text-amber-800">
+          Some photos could not be linked to this update. They remain on the project.
+          Your update is saved; do not resend it. Ask your PM to check the photos.
         </div>
       )}
 

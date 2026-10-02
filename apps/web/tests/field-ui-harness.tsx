@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { PhotoUploader } from '../src/components/photo-uploader';
 import { FieldUploadProvider } from '../src/components/field-upload-context';
 import { FieldSubmit } from '../src/components/field-submit';
-import { FieldDraft } from '../src/components/field-draft';
+import { ClearFieldDraft, FieldDraft } from '../src/components/field-draft';
 import { NoticeForm } from '../src/components/notice-form';
 import { TaskUpdateFields } from '../src/components/task-update-fields';
 
@@ -16,12 +16,17 @@ function Harness() {
   const [posted, setPosted] = useState('');
   const [taskMode, setTaskMode] = useState(false);
   const [rejectTask, setRejectTask] = useState(true);
+  const [dailyLanding, setDailyLanding] = useState(false);
   async function upload(form: FormData) {
     requests.current.push(String(form.get('projectId') ?? form.get('taskId')));
     await new Promise((resolve) => setTimeout(resolve, 200));
     if (failures.current || requests.current.length === 1) return { ok: false as const, error: 'Test connection failed' };
     return { ok: true as const, photoId: `test-photo-${requests.current.length}` };
   }
+  if (dailyLanding) return <main>
+    <ClearFieldDraft draftKey={'bs_field_draft:v2:' + user} />
+    <button onClick={() => setDailyLanding(false)}>New daily update</button>
+  </main>;
   if (taskMode) return <main>
     <label><input type="checkbox" checked={rejectTask} onChange={(event) => setRejectTask(event.target.checked)} />Reject task submission</label>
     <NoticeForm action={async (_previous, data) => {
@@ -36,6 +41,7 @@ function Harness() {
   return <main>
     <button onClick={() => { requests.current = []; setPosted(''); setTaskMode(true); }}>Task mode</button>
     <button onClick={() => setUser(user === 'one' ? 'two' : 'one')}>Change user</button>
+    <button onClick={() => setDailyLanding(true)}>Successful update landing</button>
     <label><input type="checkbox" checked={failAll} onChange={(e) => setFailAll(e.target.checked)} />Fail all uploads</label>
     <form key={user} onSubmit={(e) => {
       e.preventDefault();
@@ -47,6 +53,10 @@ function Harness() {
         <label>Project<select name="projectId" defaultValue="p1"><option value="p1">Job One</option><option value="p2">Job Two</option></select></label>
         <label>Work<textarea name="workCompleted" /></label>
         <label>Internal notes<textarea name="internalNotes" /></label>
+        <label>Crew<input name="crewOnsite" type="number" defaultValue={2} /></label>
+        <label>Hours<input name="hoursWorked" type="number" step={0.5} defaultValue={8} /></label>
+        <label>Weather<input name="weather" defaultValue="Clear" /></label>
+        <label><input name="clientDecisionNeeded" type="checkbox" />Client decision needed</label>
         <PhotoUploader upload={upload} formFields={['projectId']} />
         <FieldSubmit>Send update</FieldSubmit>
       </FieldUploadProvider>

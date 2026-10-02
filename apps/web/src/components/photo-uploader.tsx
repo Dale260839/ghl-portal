@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useFieldUploads, countUploads } from '@/components/field-upload-context';
 import { MAX_UPLOAD_ATTEMPTS, retryDelayMs, shouldRetry } from '@/lib/field-upload-state';
@@ -87,9 +87,16 @@ export function PhotoUploader({
   const root = useRef<HTMLDivElement>(null);
   const queue = useRef(Promise.resolve());
   const mounted = useRef(true);
+  const hadDraftPhotos = useRef(false);
   const currentItems = useRef(items);
   currentItems.current = items;
-  const lockedValues = items[0]?.formValues;
+  const { report, restoredPhotos, restorePhotos } = useFieldUploads();
+  // Restored references keep their original project just like new uploads.
+  const lockedValues = useMemo(() => items[0]?.formValues ??
+    (restoredPhotos === null ? undefined : { projectId: restoredPhotos.projectId }), [items, restoredPhotos]);
+  const restoredIds = restoredPhotos?.photoIds ?? [];
+  const savedIds = [...new Set([...restoredIds, ...items.flatMap((item) =>
+    item.state === 'saved' && item.photoId !== undefined ? [item.photoId] : [])])];
 
   useEffect(() => {
     const form = root.current?.closest('form');
@@ -212,14 +219,19 @@ export function PhotoUploader({
     queue.current = queue.current.then(() => attempt(key, item.file, item.blob, 0, item.formValues));
   }
 
-  const saved = items.filter((i) => i.state === 'saved').length;
+  const saved = savedIds.length + items.filter((i) => i.state === 'saved' && i.photoId === undefined).length;
   const busy = countUploads(items.map((i) => i.state)).inFlight > 0;
 
   // Daily and task forms wait for in-flight photos; upload-only screens do not.
-  const { report } = useFieldUploads();
   useEffect(() => {
-    report(countUploads(items.map((i) => i.state)));
-  }, [items, report]);
+    report(countUploads([...items.map((i) => i.state), ...restoredIds.map(() => 'saved' as const)]));
+    // Hidden references have committed to the form. Persist them even when
+    // the crew has not typed anything since the upload finished.
+    if (items.length > 0 || restoredPhotos !== null || hadDraftPhotos.current) {
+      root.current?.closest('form')?.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    hadDraftPhotos.current = restoredPhotos !== null;
+  }, [items, restoredPhotos, report]);
   const button =
     'inline-flex min-h-10 cursor-pointer items-center justify-center rounded-lg border border-navy-200 bg-white px-3.5 text-sm font-medium text-navy-800 transition hover:bg-navy-50';
 
@@ -260,14 +272,26 @@ export function PhotoUploader({
       {countFieldName !== undefined && <input type="hidden" name={countFieldName} value={saved} />}
 
       {/* One per saved photo. The server reads them all with getAll(). */}
-      {items
-        .filter((i) => i.state === 'saved' && i.photoId !== undefined)
-        .map((i) => (
-          <input key={i.photoId} type="hidden" name="photoId" value={i.photoId} />
-        ))}
+      {savedIds.map((id) => (
+        <input key={id} type="hidden" name="photoId" value={id} />
+      ))}
 
-      {items.length > 0 && (
+      {(items.length > 0 || restoredIds.length > 0) && (
         <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {restoredIds.map((id) => (
+            <li key={`draft-${id}`} className="relative overflow-hidden rounded-lg border border-navy-100 bg-navy-50">
+              {/* The authenticated file route rechecks live project access. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/api/files?kind=photo&id=${encodeURIComponent(id)}`} alt="Saved draft photo" className="aspect-square w-full object-cover" />
+              <span className="absolute inset-x-0 bottom-0 bg-navy-900/70 px-1.5 py-1 text-[11px] font-medium text-white">From draft</span>
+              <button type="button" aria-label="Detach photo from draft" title="Detach photo from draft"
+                className="absolute right-1 top-1 min-h-10 rounded border border-navy-200 bg-white px-2 text-xs font-medium text-navy-800"
+                onClick={() => {
+                  const remaining = restoredIds.filter((savedId) => savedId !== id);
+                  restorePhotos(remaining.length === 0 ? null : { projectId: restoredPhotos!.projectId, photoIds: remaining });
+                }}>Detach</button>
+            </li>
+          ))}
           {items.map((item) => (
             <li key={item.key} className="relative overflow-hidden rounded-lg border border-navy-100 bg-navy-50">
               {/* eslint-disable-next-line @next/next/no-img-element */}
