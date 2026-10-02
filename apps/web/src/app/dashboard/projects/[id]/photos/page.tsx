@@ -5,7 +5,6 @@ import { notFound } from 'next/navigation';
 
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
-import { PHOTOS } from '@/lib/data/portal-fixtures';
 import { Card, shortDate } from '@/components/ui';
 import { ControlEmpty, ControlHeader, ControlNote, VisibilityTag } from '@/components/control';
 

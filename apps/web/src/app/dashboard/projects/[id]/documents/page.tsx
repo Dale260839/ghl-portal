@@ -6,7 +6,6 @@ import { notFound } from 'next/navigation';
 
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
-import { DOCUMENTS } from '@/lib/data/portal-fixtures';
 import { Badge, Card, shortDate } from '@/components/ui';
 import { ControlEmpty, ControlHeader, ControlNote, VisibilityTag } from '@/components/control';
 

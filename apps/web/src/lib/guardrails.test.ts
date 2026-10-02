@@ -752,6 +752,24 @@ test('§ the file route holds a crew member to their own projects', () => {
   assert.equal(/status: 403/.test(text), false, 'a refusal here must not confirm existence');
 });
 
+test('§ no screen anywhere imports fixtures', () => {
+  // Widened on 2026-10-02 from "no field or portal screen" to every screen.
+  //
+  // The audit found the contractor's dashboard computing open change orders —
+  // and the money said to be waiting on a client — from the fixtures file,
+  // unconditionally. Four more screens imported fixtures they no longer used,
+  // which is how the next one starts using them again.
+  //
+  // Sample data belongs in tests. On a screen it is indistinguishable from the
+  // real thing, which is the entire problem: nobody doubts a number that looks
+  // plausible.
+  const offenders = FILES.filter(
+    (f) => rel(f.path).startsWith('app/') && /portal-fixtures|data\/fixtures/.test(f.text),
+  ).map((f) => rel(f.path));
+
+  assert.deepEqual(offenders, [], 'a screen imports fixture data');
+});
+
 test('§ no screen invents data when its database is unreachable', () => {
   // The crew's Messages screen fell back to the fixture thread — invented
   // conversations between invented people — whenever the Hub was unreachable.
