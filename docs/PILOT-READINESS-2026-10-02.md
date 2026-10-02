@@ -45,6 +45,46 @@ All 23 Hub tables had RLS enabled, the media bucket was private, no browser
 TRUNCATE grants were found, and the service-only budget function and photo
 guard were present. Detailed evidence is in the Desktop audit folder.
 
+## Live Sign-In Configuration
+
+The existing Alliance Work Chrome tab allowed a read-only agency settings
+inspection on 2 October, around 3:45-4:00 PM Manila. No settings were saved.
+
+- Agency Custom Menu Links has an existing `Project Hub` row with URL
+  `https://project-hub-one-vert.vercel.app/auth/ghl?locationId={{location.id}}`.
+- Its open mode is `New Tab`, visibility is `Agency, Account`, and account
+  selection is `All`. The editor displays role visibility `Admin`. This is
+  menu placement, not proof that every sub-account is connected or that every
+  user can access project data. The editor was cancelled without changes.
+- Agency Marketplace > Installed Apps shows `ProjectHub`, Free, Active,
+  installed by Dale Tamargo on 23 September 2026 at 12:10 PM in that UI.
+  Installation is confirmed; its Custom Page module and shared-secret/server
+  pairing were not exposed by this installed-app table and remain unverified.
+- The protected feature preview still displays `Request Sent` for
+  `dale@alliance4contractors.com`. No approval or preview access is proven.
+- A fresh company-main fetch remains `11b0fce`; GitHub reports a successful
+  Vercel status for that commit. The locally hardened code at `236f59e` has not
+  been pushed or deployed by this audit.
+
+The current New Tab URL carries a location claim, not a verified user identity.
+The hardened release deliberately refuses it. Do not promote first and discover
+the replacement is missing. The required cutover is the existing Marketplace
+app's Custom Page/parent-context integration and matching server configuration,
+followed by an actual signed-in iframe test with partitioned cookies. Simply
+changing an ordinary custom menu link to Embedded Page is not proof that the
+Marketplace context provider works or that the correct secret is configured.
+
+The official [HighLevel user-context protocol](https://marketplace.gohighlevel.com/docs/2021-07-28/other/user-context-marketplace-apps/index.html)
+documents requesting encrypted context from the parent Custom Page and
+decrypting it server-side with the app's shared secret. No secret was copied,
+generated or changed in this inspection. Any required live app/module, menu,
+environment or deployment changes still need specific approval under D-003.
+
+Screenshots in the Desktop audit folder: `live-ghl-menu-configuration.jpg` and
+`live-ghl-marketplace-installation.jpg`. Structured findings:
+`release-entry-check.json`. The current access/configuration gap belongs to
+the owning account; Chris specifically is not required for engineering checks.
+
 ## Local Fixes
 
 - Task submissions validate saved photo IDs against the authorized task/project
