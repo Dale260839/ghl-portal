@@ -756,6 +756,24 @@ test('§ the file route holds a crew member to their own projects', () => {
   assert.equal(/status: 403/.test(text), false, 'a refusal here must not confirm existence');
 });
 
+test('§ no screen anywhere imports fixtures', () => {
+  // Widened on 2026-10-02 from "no field or portal screen" to every screen.
+  //
+  // The audit found the contractor's dashboard computing open change orders —
+  // and the money said to be waiting on a client — from the fixtures file,
+  // unconditionally. Four more screens imported fixtures they no longer used,
+  // which is how the next one starts using them again.
+  //
+  // Sample data belongs in tests. On a screen it is indistinguishable from the
+  // real thing, which is the entire problem: nobody doubts a number that looks
+  // plausible.
+  const offenders = FILES.filter(
+    (f) => rel(f.path).startsWith('app/') && /portal-fixtures|data\/fixtures/.test(f.text),
+  ).map((f) => rel(f.path));
+
+  assert.deepEqual(offenders, [], 'a screen imports fixture data');
+});
+
 test('§ no screen invents data when its database is unreachable', () => {
   // The crew's Messages screen fell back to the fixture thread — invented
   // conversations between invented people — whenever the Hub was unreachable.
@@ -771,6 +789,35 @@ test('§ no screen invents data when its database is unreachable', () => {
       /portal-fixtures|data\/fixtures/.test(file.text),
       false,
       `${path} can still show fixture data to a crew member or a homeowner`,
+    );
+  }
+});
+
+test('§ the health surfaces are operator-only and say nothing about customers', () => {
+  // Added 2026-10-02. A health page is a map of where to push: which
+  // migrations have landed, whether email is on, whether the demo door is
+  // open. Useful to us, and a gift to anybody else.
+  const page = FILES.find((f) => rel(f.path) === 'app/dashboard/health/page.tsx');
+  const route = FILES.find((f) => rel(f.path) === 'app/api/health/route.ts');
+  assert.ok(page && route, 'a health surface has moved');
+
+  // Both gated on the operator identity, not on merely having a session.
+  assert.match(page.text, /isAdminSession\(/);
+  assert.match(route.text, /isAdminSession\(/);
+
+  // The page is invisible rather than refused, and the route answers 404 — a
+  // 401 confirms the route exists, which is half of what an attacker wanted.
+  assert.match(page.text, /notFound\(\)/);
+  assert.match(route.text, /status: 404/);
+
+  // And neither reads anything belonging to a contractor or a client.
+  const logic = FILES.find((f) => rel(f.path) === 'lib/health.ts');
+  assert.ok(logic, 'lib/health.ts has moved');
+  for (const forbidden of ['listProjects', 'clientName', 'projectName', 'listDailyUpdates']) {
+    assert.equal(
+      withoutComments(logic.text).includes(forbidden),
+      false,
+      `the health report must not reach for ${forbidden}`,
     );
   }
 });
