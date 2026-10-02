@@ -24,6 +24,7 @@ import { accountForEmail, clearSession, getSession, homeFor, setSession, type Se
 import { uploadActor } from './hub-db/upload-budget';
 import { allowClientWrite } from './upload-limits';
 import { fieldProjectsFor } from './field-scope';
+import { isDraftRevision } from './field-draft-state.ts';
 import { demoSignInEnabled } from './demo-accounts';
 
 /** One limiter for the password path, for the life of the process. */
@@ -479,7 +480,9 @@ export async function submitFieldUpdate(formData: FormData) {
   revalidatePath('/dashboard/updates');
   revalidatePath('/dashboard');
   const photoResult = linked < photoIds.length ? '&photos=partial' : '';
-  redirect(`/field?submitted=1&pm=${notified.sent ? 'sent' : 'no'}${photoResult}`);
+  const draftRevision = formData.get('draftRevision');
+  const draftResult = isDraftRevision(draftRevision) ? `&draft=${draftRevision}` : '';
+  redirect(`/field?submitted=1&pm=${notified.sent ? 'sent' : 'no'}${photoResult}${draftResult}`);
 }
 
 /**

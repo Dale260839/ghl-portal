@@ -106,6 +106,18 @@ try {
   await page.getByRole('button', {name:'New daily update'}).click();
   assert.equal(await page.locator('input[name=photoId]').count(),0);
 
+  await page.getByLabel('Internal notes').fill('New unsent update after the previous success');
+  const newerDraft = await page.evaluate(() => sessionStorage.getItem('bs_field_draft:v2:one'));
+  await page.getByRole('button', {name:'Revisit previous success'}).click();
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('bs_field_draft:v2:one')),newerDraft,
+    'an old success landing must not clear a newer unsent update');
+  await page.getByRole('button', {name:'New daily update'}).click();
+  await page.getByRole('button', {name:'Bring it back'}).click();
+  assert.equal(await page.getByLabel('Internal notes').inputValue(),'New unsent update after the previous success');
+  await page.getByRole('button', {name:'Successful update landing'}).click();
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('bs_field_draft:v2:one')),null);
+  await page.getByRole('button', {name:'New daily update'}).click();
+
   // Upload completion alone creates a recoverable draft: no typing event is needed.
   await page.locator('input[type=file]').last().setInputFiles(file);
   await page.getByText('Saved', {exact:true}).waitFor();
@@ -197,7 +209,7 @@ try {
   await page.screenshot({ path: path.join(repo, '.artifacts/field-ui-mobile.png') });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.screenshot({ path: path.join(repo, '.artifacts/field-ui-desktop.png') });
-  console.log('PASS: real React retry/submit controls, 12-photo queue, unique photo links, per-user drafts, all daily values and saved photos restored after reload, photo-only draft recovery, detach without losing text, successful draft cleanup, expired/future/corrupt drafts, removed-project restoration, rejected task submission retention, and task retry gating/reset without repeated photo IDs.');
+  console.log('PASS: real React retry/submit controls, 12-photo queue, unique photo links, per-user drafts, all daily values and saved photos restored after reload, photo-only draft recovery, detach without losing text, matching successful draft cleanup and old success landing preserves newer draft, expired/future/corrupt drafts, removed-project restoration, rejected task submission retention, and task retry gating/reset without repeated photo IDs.');
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));

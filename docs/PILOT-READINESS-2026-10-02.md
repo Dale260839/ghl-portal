@@ -94,12 +94,33 @@ guard were present. Detailed evidence is in the Desktop audit folder.
   reads. Missing/stale/wrong-project references fail closed. A later link
   failure preserves the update and displays a partial-filing warning; the PM
   message counts only confirmed links, not IDs supplied by the form.
+- Successful daily draft cleanup now matches the exact opaque revision sent
+  with that submission. Revisiting an earlier success URL cannot erase a later
+  unsent update. Legacy success URLs without a marker do not clear drafts.
+  Only the marker is returned in the redirect, not private draft content.
+  This is browser cleanup metadata, not server-side submission idempotency.
 
 Draft recovery is limited to this user's tab-session storage for one day.
 Unsaved file bytes and in-flight upload queues are NOT restored after a reload,
 and closing the tab can discard session storage. This is not full offline mode.
 Operational submission/photo linking are still separate database writes;
 bounded preflight reads do not make those writes transactional.
+
+## Backup Evidence
+
+The actual Hub project's Database > Backups page was read without changing
+settings. It states that the Free plan does not include project backups.
+Screenshot: `live-backup-availability.jpg` in the Desktop audit folder.
+This proves managed backup availability, not the absence of every possible
+external/manual backup. No backup archive or successful restore was verified.
+
+The official [Supabase backup documentation](https://supabase.com/docs/guides/platform/backups)
+also states that database backups exclude Storage object bytes. Restoring the
+database alone would not restore deleted photos or PDFs. Before client launch,
+verify protected database exports plus file copies and a restore to an isolated,
+approved target. Do not restore over production, create a new hosted project,
+upgrade a plan, or transmit production backups elsewhere without specific
+approval. No upgrade, export or restore was performed in this audit.
 
 ## Webhook Integration Gap
 
@@ -121,7 +142,7 @@ supports inspecting deliveries and manually retrying failed latest deliveries.
 
 ## Verification
 
-- Web: 1,297 tests passed, zero failures.
+- Web: 1,301 tests passed, zero failures.
 - Shared contracts: 40 tests passed, zero failures.
 - Workspace typecheck and optimized production build passed.
 - Production dependency audit: zero reported vulnerabilities.
@@ -158,6 +179,11 @@ supports inspecting deliveries and manually retrying failed latest deliveries.
   failed before the recovery change. Application CSS at 390/1440 px passes
   overflow/control-containment checks. Screenshot photo responses are mocked,
   not live file-authorization evidence.
+- Four additional revision tests cover malformed/legacy metadata, exact-match
+  cleanup, preserving a later draft and actual action redirect validation.
+  The React regression reproduced deletion by the former cleanup code; the
+  fixed component preserves new text when an old success landing is revisited,
+  while clearing a matching successful submission normally.
 
 ## Remaining Release Gates
 
@@ -176,7 +202,8 @@ supports inspecting deliveries and manually retrying failed latest deliveries.
    Test PDF/upload-limit failure without opening browser database access.
 5. Establish real cross-project and revoked-membership file-denial evidence.
    Chrome ERR_BLOCKED_BY_CLIENT on the earlier probe is not server 403/404 proof.
-6. Verify usable backup/recovery. Implement and verify the missing durable
+6. Verify usable database AND photo/PDF backup/recovery; managed project backups
+   are not included on this project's current Free plan. Implement and verify the missing durable
    webhook ingestion/workflow execution with confirmed record mappings and
    specific approval for any live changes. Verify real retry behavior and
    stage-sync configuration; GHL remains the owner of stage movement.

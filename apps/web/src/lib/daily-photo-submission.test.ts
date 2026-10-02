@@ -114,3 +114,17 @@ test('an unassigned project is refused before checking photos or making any writ
   await assert.rejects(action.submitFieldUpdate(data),/project not assigned/);
   assert.deepEqual(action.state.events,[]);
 });
+
+test('successful daily submission returns only a valid opaque draft revision for cleanup',async()=>{
+  const revision='e4bdb8d0-0e2f-4e5a-a23d-f79fae25bf93';
+  for (const marker of [revision,'bad&photos=partial','']) {
+    const action=await harness();const data=form([]);data.set('draftRevision',marker);
+    await assert.rejects(action.submitFieldUpdate(data),(error:Error)=>{
+      const url=new URL(error.message.slice('REDIRECT:'.length),'http://localhost');
+      assert.equal(url.searchParams.get('draft'),marker===revision?revision:null);
+      assert.equal(url.searchParams.get('photos'),null);
+      return true;
+    });
+    assert.deepEqual(action.state.events,['create','notify']);
+  }
+});

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useFieldUploads } from '@/components/field-upload-context';
-import { DAILY_DRAFT_FIELDS, hasDraftContents, parseFieldDraft, type FieldDraftState } from '@/lib/field-draft-state';
+import { DAILY_DRAFT_FIELDS, hasDraftContents, parseFieldDraft, shouldClearFieldDraft, type FieldDraftState } from '@/lib/field-draft-state';
 
 /**
  * The crew's half-written update, kept while they write it.
@@ -79,6 +79,8 @@ function fieldsIn(form: HTMLFormElement): Record<string, Field> {
 
 export function FieldDraft({ draftKey }: { draftKey: string | null }) {
   const anchor = useRef<HTMLDivElement>(null);
+  const revisionField = useRef<HTMLInputElement>(null);
+  const [revision, setRevision] = useState('');
   const [offer, setOffer] = useState<FieldDraftState | null>(null);
   const { restorePhotos } = useFieldUploads();
   const restoring = useRef(false);
@@ -103,6 +105,8 @@ export function FieldDraft({ draftKey }: { draftKey: string | null }) {
 
     const save = () => {
       if (restoring.current) return;
+      setRevision('');
+      if (revisionField.current !== null) revisionField.current.value = '';
       try {
         const values: Record<string, string> = {};
         for (const [name, element] of Object.entries(fieldsIn(form))) {
@@ -115,10 +119,17 @@ export function FieldDraft({ draftKey }: { draftKey: string | null }) {
           window.sessionStorage.removeItem(draftKey);
           return;
         }
-        window.sessionStorage.setItem(
+        const previous = read(draftKey);
+        const unchanged = previous?.revision !== undefined &&
+          JSON.stringify(previous.values) === JSON.stringify(values) &&
+          JSON.stringify(previous.photoIds) === JSON.stringify(photoIds);
+        const revision = unchanged ? previous.revision! : crypto.randomUUID();
+        if (!unchanged) window.sessionStorage.setItem(
           draftKey,
-          JSON.stringify({ savedAt: new Date().toISOString(), values, photoIds } satisfies FieldDraftState),
+          JSON.stringify({ savedAt: new Date().toISOString(), values, photoIds, revision } satisfies FieldDraftState),
         );
+        setRevision(revision);
+        if (revisionField.current !== null) revisionField.current.value = revision;
       } catch {
         // Storage full or blocked. Typing must not break because a draft
         // cannot be kept.
@@ -157,9 +168,12 @@ export function FieldDraft({ draftKey }: { draftKey: string | null }) {
     restorePhotos(offer.photoIds.length > 0 ? { projectId: offer.values.projectId!, photoIds: offer.photoIds } : null);
     restoring.current = false;
     setOffer(null);
+    form.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
   function discard() {
+    setRevision('');
+    if (revisionField.current !== null) revisionField.current.value = '';
     try {
       if (draftKey !== null) window.sessionStorage.removeItem(draftKey);
     } catch {
@@ -170,6 +184,7 @@ export function FieldDraft({ draftKey }: { draftKey: string | null }) {
 
   return (
     <div ref={anchor}>
+      <input ref={revisionField} type="hidden" name="draftRevision" value={revision} />
       {offer !== null && (
         <div className="rounded-lg border border-amber-600/25 bg-amber-soft px-3.5 py-3 text-xs text-amber-800">
           <p className="font-medium">
@@ -207,15 +222,21 @@ export function FieldDraft({ draftKey }: { draftKey: string | null }) {
  * submission — not on submit. A submission that fails must leave the draft
  * exactly where it was, which is the whole point of keeping one.
  */
-export function ClearFieldDraft({ draftKey }: { draftKey: string | null }) {
+export function ClearFieldDraft({ draftKey, submittedRevision }: {
+  draftKey: string | null;
+  submittedRevision?: string | null;
+}) {
   useEffect(() => {
     try {
       window.localStorage.removeItem(LEGACY_KEY);
-      if (draftKey !== null) window.sessionStorage.removeItem(draftKey);
+      // Old success URLs can be revisited after another draft has been started.
+      if (draftKey !== null && shouldClearFieldDraft(window.sessionStorage.getItem(draftKey), submittedRevision)) {
+        window.sessionStorage.removeItem(draftKey);
+      }
     } catch {
       // Nothing to do.
     }
-  }, [draftKey]);
+  }, [draftKey, submittedRevision]);
 
   return null;
 }

@@ -17,6 +17,8 @@ function Harness() {
   const [taskMode, setTaskMode] = useState(false);
   const [rejectTask, setRejectTask] = useState(true);
   const [dailyLanding, setDailyLanding] = useState(false);
+  const [landingRevision, setLandingRevision] = useState<string | null>(null);
+  const lastSubmission = useRef<string | null>(null);
   async function upload(form: FormData) {
     requests.current.push(String(form.get('projectId') ?? form.get('taskId')));
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -24,7 +26,7 @@ function Harness() {
     return { ok: true as const, photoId: `test-photo-${requests.current.length}` };
   }
   if (dailyLanding) return <main>
-    <ClearFieldDraft draftKey={'bs_field_draft:v2:' + user} />
+    <ClearFieldDraft draftKey={'bs_field_draft:v2:' + user} submittedRevision={landingRevision} />
     <button onClick={() => setDailyLanding(false)}>New daily update</button>
   </main>;
   if (taskMode) return <main>
@@ -41,7 +43,13 @@ function Harness() {
   return <main>
     <button onClick={() => { requests.current = []; setPosted(''); setTaskMode(true); }}>Task mode</button>
     <button onClick={() => setUser(user === 'one' ? 'two' : 'one')}>Change user</button>
-    <button onClick={() => setDailyLanding(true)}>Successful update landing</button>
+    <button onClick={() => {
+      const form = document.querySelector('form')!;
+      lastSubmission.current = new FormData(form).get('draftRevision') as string | null;
+      setLandingRevision(lastSubmission.current);
+      setDailyLanding(true);
+    }}>Successful update landing</button>
+    <button onClick={() => { setLandingRevision(lastSubmission.current); setDailyLanding(true); }}>Revisit previous success</button>
     <label><input type="checkbox" checked={failAll} onChange={(e) => setFailAll(e.target.checked)} />Fail all uploads</label>
     <form key={user} onSubmit={(e) => {
       e.preventDefault();

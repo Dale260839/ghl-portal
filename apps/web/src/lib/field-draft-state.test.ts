@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { hasDraftContents, parseFieldDraft } from './field-draft-state.ts';
+import { hasDraftContents, isDraftRevision, parseFieldDraft, shouldClearFieldDraft } from './field-draft-state.ts';
 
 const now = Date.parse('2026-10-02T05:00:00Z');
 const encode = (values: object, extra: object = {}) => JSON.stringify({savedAt:new Date(now).toISOString(),values,...extra});
@@ -45,5 +45,31 @@ test('photos alone, modified numbers, weather and a decision flag are meaningful
   assert.equal(hasDraftContents({projectId:'p1'},['photo1'],defaults),true);
   for (const [name,value] of Object.entries({crewOnsite:'3',hoursWorked:'6.5',weather:'Rain',clientDecisionNeeded:'on'})) {
     assert.equal(hasDraftContents({projectId:'p1',...defaults,[name]:value},[],defaults),true);
+  }
+});
+
+const revision = 'e4bdb8d0-0e2f-4e5a-a23d-f79fae25bf93';
+
+test('draft revision metadata survives recovery without changing legacy compatibility', () => {
+  assert.equal(parseFieldDraft(encode({internalNotes:'Keep'}, {revision}),now)?.revision,revision);
+  for (const invalid of ['',null,42,'../../other','token&draft=other']) {
+    assert.equal(isDraftRevision(invalid),false);
+    assert.equal(parseFieldDraft(encode({}, {revision:invalid}),now),null);
+  }
+});
+
+test('successful cleanup clears only the exact submitted revision, never a later draft', () => {
+  const raw=encode({internalNotes:'Keep'}, {revision});
+  assert.equal(shouldClearFieldDraft(raw,revision),true);
+  assert.equal(shouldClearFieldDraft(raw,'d8df1244-eebc-4431-a410-e0fb9849185f'),false);
+  assert.equal(shouldClearFieldDraft(raw,null),false);
+  assert.equal(shouldClearFieldDraft(raw,undefined),false);
+  assert.equal(shouldClearFieldDraft(encode({internalNotes:'Legacy'}),revision),false);
+});
+
+test('cleanup refuses malformed storage and missing or invalid revision markers', () => {
+  for (const raw of [null,'{','null','[]','{}']) assert.equal(shouldClearFieldDraft(raw,revision),false);
+  for (const marker of [null,undefined,'',42,'../other']) {
+    assert.equal(shouldClearFieldDraft(encode({}, {revision}),marker),false);
   }
 });
