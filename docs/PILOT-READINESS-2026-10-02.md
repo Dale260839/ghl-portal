@@ -10,10 +10,13 @@ change was made in this audit. BuildSuite remained read-only throughout.
 ## Current Release
 
 - Branch: `codex/photo-flow-hardening`, starting from `ec2e9b1`.
-- Refreshed company main: `11b0fcefc3fe26c9634f268faf0458358d83661d`.
-  Its only change from `ded0aed` adds `docs/HANDOFF.md`; no app code changed.
-- GitHub's Vercel status for `11b0fce` is success:
-  https://vercel.com/allianceforcontractors-2450s-projects/project-hub/6TAJgufBQYraVg1E2WHjA7xTACsp
+- Latest company main: `4f0b573b9986aed64a45eb2afe7bfa5c241f0d92`.
+  Since the earlier `11b0fce` check, it adds health reporting, month-grouped
+  homeowner photos and project-specific crew message threads, plus removes
+  four redundant project-link headings. This upstream work is now merged into
+  the local hardening branch; nothing was pushed or deployed by this audit.
+- GitHub's Vercel status for `4f0b573` is success:
+  https://vercel.com/allianceforcontractors-2450s-projects/project-hub/HRmMkD7a8kqCgL1VDHNqWWXLwqyM
 - The feature preview still shows Request Sent for the authorized Dale Work
   account. Approval remains pending. Keep deployment protection enabled.
 - The new handoff's migration/SSO checklist is historical, not proof of current
@@ -40,6 +43,12 @@ participate in further local debugging.
 Live SQL confirmed a genuine gap: the pilot photo has the correct task_id but
 its update_id is null. The local task-action fix below addresses that gap for
 new submissions; existing production records were not silently repaired.
+
+After the newer upstream deployment, the existing actual test-homeowner
+session was used for a read-only gallery check. `/portal/photos` shows
+October 2026, one photo, and the approved pilot image loads at 960 x 640.
+Screenshot: `live-new-month-gallery.jpg`. This confirms that selected live
+gallery view, not 400-photo capacity or the undeployed update-link fix.
 
 All 23 Hub tables had RLS enabled, the media bucket was private, no browser
 TRUNCATE grants were found, and the service-only budget function and photo
@@ -152,6 +161,14 @@ the owning account; Chris specifically is not required for engineering checks.
   reads cannot fall back to a fixture save or report success. Explicit fixture
   development remains supported. A crew task acknowledgement also rechecks
   current project assignment as well as task ownership.
+- The newly merged health report no longer prints raw database error bodies
+  or treats a failed/cached compatibility probe as proof that a migration did
+  not run. It probes required columns freshly, reports failed checks as failures
+  and distinguishes column readability from full migration verification.
+  OAuth configuration no longer falsely requires a fallback PIT. User-context
+  configuration, unsigned-link refusal and absent durable webhook execution
+  are reported without claiming verified live sign-in or delivery history.
+  This correction is local, not a change to the deployed health page.
 
 Draft recovery is limited to this user's tab-session storage for one day.
 Unsaved file bytes and in-flight upload queues are NOT restored after a reload,
@@ -195,7 +212,7 @@ supports inspecting deliveries and manually retrying failed latest deliveries.
 
 ## Verification
 
-- Web: 1,352 tests passed, zero failures.
+- Web: 1,374 tests passed, zero failures after merging latest company main.
 - Shared contracts: 40 tests passed, zero failures.
 - Workspace typecheck and optimized production build passed.
 - Production dependency audit: zero reported vulnerabilities.
@@ -246,6 +263,10 @@ supports inspecting deliveries and manually retrying failed latest deliveries.
   supply current access, with an added 100-request revoked-access burst that
   claims no draft and calls no external invoice service. All duplicate and
   uncertain-save invoice cases continue to pass.
+- Six new bundled actual-health-report tests use isolated database readers,
+  covering error-text redaction, non-Error failures, outage versus migration
+  absence, same-process recovery, secure-entry/webhook reporting and OAuth
+  without a fallback PIT. These are local checks, not live health execution.
 
 ## Remaining Release Gates
 

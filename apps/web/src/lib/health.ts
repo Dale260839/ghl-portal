@@ -1,7 +1,6 @@
 import 'server-only';
 
 import { getHubClient } from './hub-db/client.ts';
-import { columnSupport } from './hub-db/column-support.ts';
 import { getBuildSuiteReader } from './buildsuite/projects.ts';
 import { readGhlConfig, readLocationTokens } from './ghl/config.ts';
 import { oauthEnabled, agencyEnabled, autoConnectEnabled } from './ghl/oauth-config.ts';
@@ -57,6 +56,15 @@ function worst(checks: readonly Check[]): CheckState {
   return 'ok';
 }
 
+function readFailure(error: unknown): string {
+  const status = typeof error === 'object' && error !== null && 'status' in error
+    ? (error as { status: unknown }).status
+    : null;
+  return typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599
+    ? `read failed (HTTP ${status})`
+    : 'read could not be confirmed';
+}
+
 /** A migration, identified by the column it adds rather than by its number. */
 const MIGRATIONS: { id: string; table: string; columns: string[]; why: string }[] = [
   {
@@ -108,7 +116,7 @@ async function databaseChecks(): Promise<Check[]> {
       checks.push({
         name: 'buildsuite',
         state: 'fail',
-        detail: `read failed — ${(error as Error).message.slice(0, 120)}. If this is a 401 or 42501, SUPABASE_SERVICE_KEY is the thing to check.`,
+      detail: `${readFailure(error)}. Check server credentials and database availability.`,
       });
     }
   }
@@ -131,18 +139,27 @@ async function databaseChecks(): Promise<Check[]> {
     checks.push({
       name: 'hub-database',
       state: 'fail',
-      detail: `read failed — ${(error as Error).message.slice(0, 120)}`,
+      detail: readFailure(error),
     });
     return checks;
   }
 
   for (const migration of MIGRATIONS) {
-    const landed = await columnSupport(hub.client, migration.table, migration.columns);
-    checks.push({
-      name: `migration-${migration.id}`,
-      state: landed ? 'ok' : 'warn',
-      detail: landed ? 'applied' : `NOT RUN — ${migration.why}`,
-    });
+    // Health must probe now, not reuse a process-wide compatibility result.
+    try {
+      await hub.client.select({ from: migration.table, columns: migration.columns, limit: 0 });
+      checks.push({
+        name: `migration-${migration.id}`,
+        state: 'ok',
+        detail: 'required columns readable; full migration state not verified',
+      });
+    } catch (error) {
+      checks.push({
+        name: `migration-${migration.id}`,
+        state: 'fail',
+        detail: `${readFailure(error)}; column availability unconfirmed. ${migration.why}.`,
+      });
+    }
   }
 
   return checks;
@@ -154,15 +171,17 @@ function configChecks(env: NodeJS.ProcessEnv): Check[] {
 
   checks.push({
     name: 'ghl-credentials',
-    state: ghl.configured ? 'ok' : 'fail',
-    detail: ghl.configured ? 'configured' : `missing ${ghl.missing.join(', ')}`,
+    state: ghl.configured || oauthEnabled(env) || agencyEnabled(env) ? 'ok' : 'fail',
+    detail: ghl.configured || oauthEnabled(env) || agencyEnabled(env)
+      ? 'credential configuration present; token validity and installation not verified'
+      : `missing ${ghl.missing.join(', ')}`,
   });
 
   checks.push({
     name: 'ghl-marketplace',
     state: oauthEnabled(env) ? 'ok' : 'warn',
     detail: oauthEnabled(env)
-      ? 'on — sub-accounts use their own install'
+      ? 'configured; individual installs and token validity not verified'
       : 'off — everything runs on Private Integration tokens',
   });
 
@@ -170,7 +189,7 @@ function configChecks(env: NodeJS.ProcessEnv): Check[] {
     name: 'ghl-agency-signin',
     state: agencyEnabled(env) ? 'ok' : 'warn',
     detail: agencyEnabled(env)
-      ? 'on — any sub-account in the agency can sign in'
+      ? 'credential configuration present; user sign-in not verified'
       : 'off — a sub-account with no credential of its own cannot sign in',
   });
 
@@ -210,17 +229,27 @@ function configChecks(env: NodeJS.ProcessEnv): Check[] {
     state: (env.GHL_MENU_LINK_SECRET ?? '').trim() === '' ? 'warn' : 'ok',
     detail:
       (env.GHL_MENU_LINK_SECRET ?? '').trim() === ''
-        ? 'unsigned links are accepted — known, and not cheaply fixable (see the audit)'
-        : 'links must be signed',
+      ? 'signed bridge not configured; unsigned location links are refused'
+      : 'signed bridge configured; live sign-in not verified',
+  });
+
+  const ssoConfigured = (env.GHL_APP_SHARED_SECRET ?? '').trim() !== '' &&
+    (env.GHL_SSO_COMPANY_ID ?? '').trim() !== '';
+  checks.push({
+    name: 'ghl-user-context',
+    state: ssoConfigured ? 'ok' : 'warn',
+    detail: ssoConfigured
+      ? 'server context configuration present; Custom Page handshake not verified'
+      : 'server context configuration incomplete; verify secure GHL entry before release',
   });
 
   checks.push({
     name: 'webhooks',
-    state: (env.GHL_WEBHOOK_SECRET ?? '').trim() === '' ? 'warn' : 'ok',
-    detail:
-      (env.GHL_WEBHOOK_SECRET ?? '').trim() === ''
-        ? 'no secret — no GoHighLevel event has ever been received'
-        : 'secret set',
+    state: 'warn',
+    detail: [env.GHL_WEBHOOK_ED25519_PUBLIC_KEY, env.GHL_WEBHOOK_PUBLIC_KEY, env.GHL_WEBHOOK_SECRET]
+      .some((key) => (key ?? '').trim() !== '')
+      ? 'verification configuration present; durable workflow execution unavailable'
+      : 'verification configuration absent; delivery history and execution not verified',
   });
 
   checks.push({
