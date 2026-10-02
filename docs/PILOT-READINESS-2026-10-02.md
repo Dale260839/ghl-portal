@@ -99,6 +99,19 @@ guard were present. Detailed evidence is in the Desktop audit folder.
   unsent update. Legacy success URLs without a marker do not clear drafts.
   Only the marker is returned in the redirect, not private draft content.
   This is browser cleanup metadata, not server-side submission idempotency.
+- Contractor mutation entry points now use the existing current-access check
+  before trusting a session role. Revoked invited users cannot use a stale
+  contractor cookie for project, team, schedule, task, selection or invoice
+  writes; a role downgrade is applied before PM review/publishing. This keeps
+  the existing permission matrix and read-only grant semantics unchanged.
+  Native GHL sessions without a membership still follow the existing access
+  model; this does not add GHL staff revocation or prove live SSO readiness.
+- Visibility changes now prove ownership through the tenant-scoped project
+  reader before upserting a project-ID-keyed row. Restricted assignments are
+  checked too. Missing live storage, invalid live IDs and failed ownership
+  reads cannot fall back to a fixture save or report success. Explicit fixture
+  development remains supported. A crew task acknowledgement also rechecks
+  current project assignment as well as task ownership.
 
 Draft recovery is limited to this user's tab-session storage for one day.
 Unsaved file bytes and in-flight upload queues are NOT restored after a reload,
@@ -142,7 +155,7 @@ supports inspecting deliveries and manually retrying failed latest deliveries.
 
 ## Verification
 
-- Web: 1,301 tests passed, zero failures.
+- Web: 1,352 tests passed, zero failures.
 - Shared contracts: 40 tests passed, zero failures.
 - Workspace typecheck and optimized production build passed.
 - Production dependency audit: zero reported vulnerabilities.
@@ -184,6 +197,15 @@ supports inspecting deliveries and manually retrying failed latest deliveries.
   The React regression reproduced deletion by the former cleanup code; the
   fixed component preserves new text when an old success landing is revisited,
   while clearing a matching successful submission normally.
+- Fifty actual-action isolation tests cover stale/revoked sessions at
+  34 mutation entry points, current role downgrade, permitted PM review paths,
+  cross-project visibility, assignment changes, storage/read outages and
+  explicit fixture-mode controls. The new visibility regressions failed before
+  the ownership/failure-handling fix. Adapters are mocked; these are not live
+  production revocation tests. The invoice concurrency harness was updated to
+  supply current access, with an added 100-request revoked-access burst that
+  claims no draft and calls no external invoice service. All duplicate and
+  uncertain-save invoice cases continue to pass.
 
 ## Remaining Release Gates
 
@@ -202,6 +224,8 @@ supports inspecting deliveries and manually retrying failed latest deliveries.
    Test PDF/upload-limit failure without opening browser database access.
 5. Establish real cross-project and revoked-membership file-denial evidence.
    Chrome ERR_BLOCKED_BY_CLIENT on the earlier probe is not server 403/404 proof.
+   Verify the new mutation-access and visibility-owner checks on the approved
+   release; local action tests do not establish production enforcement.
 6. Verify usable database AND photo/PDF backup/recovery; managed project backups
    are not included on this project's current Free plan. Implement and verify the missing durable
    webhook ingestion/workflow execution with confirmed record mappings and
