@@ -372,3 +372,58 @@ test('a trailing slash on the URL does not produce a double slash', () => {
 
   assert.equal(result.configured && result.config.url, 'https://hub.example');
 });
+
+test('Hub requests carry a bounded abort signal', async () => {
+  let signal: AbortSignal | undefined;
+  const client = new HubClient({ url: 'https://hub.example', key: 'test-key' }, {
+    fetchImpl: (async (_url, init) => {
+      signal = init?.signal ?? undefined;
+      return new Response('[]');
+    }) as typeof fetch,
+  });
+  await client.select({ from: 'hub_tasks' });
+  assert.ok(signal instanceof AbortSignal);
+  assert.equal(signal.aborted, false);
+});
+
+test('a stalled Hub request times out without retrying or exposing credentials', async () => {
+  let calls = 0;
+  const client = new HubClient({ url: 'https://hub.example', key: 'private-test-key' }, {
+    timeoutMs: 10,
+    fetchImpl: ((_url, init) => new Promise((_resolve, reject) => {
+      calls += 1;
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+    })) as typeof fetch,
+  });
+  // AbortSignal timers are unref'd. Keep the isolated process alive for this check.
+  const keepAlive = setInterval(() => {}, 100);
+  try {
+    await assert.rejects(client.select({ from: 'hub_tasks' }), (error: unknown) => {
+      assert.ok(error instanceof HubWriteError);
+      assert.equal(error.status, null);
+      assert.equal(error.table, 'hub_tasks');
+      assert.match(error.message, /could not be confirmed/);
+      assert.doesNotMatch(error.message, /private-test-key/);
+      return true;
+    });
+    assert.equal(calls, 1);
+  } finally {
+    clearInterval(keepAlive);
+  }
+});
+
+test('uncertain POST, PATCH and upsert responses are never automatically retried', async () => {
+  for (const kind of ['insert', 'update', 'upsert'] as const) {
+    let calls = 0;
+    const client = new HubClient({ url: 'https://hub.example', key: 'test-key' }, {
+      fetchImpl: (async () => { calls += 1; throw new TypeError('Lost response after saving'); }) as typeof fetch,
+    });
+    const write = kind === 'update'
+      ? client.update({ from: 'hub_tasks', filters: { id: 'eq.task1' }, patch: { status: 'In Progress' } })
+      : kind === 'insert'
+        ? client.insert({ from: 'hub_daily_updates', rows: [{ project_id: 'p1' }] })
+        : client.upsert({ from: 'hub_project_state', rows: [{ project_id: 'p1' }] }, 'project_id');
+    await assert.rejects(write, HubWriteError);
+    assert.equal(calls, 1, `${kind} repeated an uncertain write`);
+  }
+});

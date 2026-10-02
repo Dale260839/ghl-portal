@@ -399,6 +399,12 @@ export class HubOperational {
     },
   ): Promise<DailyUpdate> {
     const { filters: _f, contractorId } = this.tenant(scope, 'submit update');
+    if (!Number.isSafeInteger(input.crewOnsite) || input.crewOnsite < 0) {
+      throw new TypeError('Crew onsite must be a non-negative whole number.');
+    }
+    if (!Number.isFinite(input.hoursWorked) || input.hoursWorked < 0) {
+      throw new TypeError('Hours worked must be a non-negative number.');
+    }
 
     const row_: Record<string, unknown> = {};
     // Only when the column is there (migration 0015). Without it the update is

@@ -70,6 +70,24 @@ test('20 concurrent attempts produce only one external invoice',async()=>{
   await assert.rejects(f.run());
   assert.equal(f.calls(),1);
 });
+
+test('200 concurrent attempts and another retry burst still create exactly one invoice', async () => {
+  const f = fixture();
+  await Promise.allSettled(Array.from({ length: 200 }, () => f.run()));
+  assert.equal(f.calls(), 1);
+  assert.equal(f.row.external_id, 'fake-1');
+  await Promise.allSettled(Array.from({ length: 200 }, () => f.run()));
+  assert.equal(f.calls(), 1);
+});
+
+for (const mode of ['lost-record', 'network', 'lost-claim-response', 'history-unavailable']) {
+  test(`${mode}: a 100-request burst fails closed without duplicate invoices`, async () => {
+    const f = fixture(mode);
+    await Promise.allSettled(Array.from({ length: 100 }, () => f.run()));
+    assert.equal(f.calls(), ['lost-record', 'network'].includes(mode) ? 1 : 0);
+    assert.equal(f.row.external_id, null);
+  });
+}
 for (const mode of ['lost-record','network','reject']) {
   test(`${mode}: retry remains blocked without a second GHL call`,async()=>{
     const f=fixture(mode);

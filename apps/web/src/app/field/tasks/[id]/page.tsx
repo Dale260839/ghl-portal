@@ -4,7 +4,7 @@ import { TASK_STATUSES } from '@buildsuite/contracts';
 
 import { SubmitButton } from '@/components/submit-button';
 import { NoticeForm } from '@/components/notice-form';
-import { PhotoUploader } from '@/components/photo-uploader';
+import { TaskUpdateFields } from '@/components/task-update-fields';
 import { MarkSeenOnOpen } from '@/components/mark-seen-on-open';
 import { ContractorProjectRef } from '@/components/project-code';
 import { Badge, Card, shortDate } from '@/components/ui';
@@ -152,34 +152,7 @@ export default async function FieldTask({ params }: { params: Promise<{ id: stri
           Goes to your PM for review. Nothing here reaches the homeowner directly.
         </p>
         <NoticeForm action={postTaskUpdate} className="mt-3 space-y-3" noticeClassName={NOTICE}>
-          <input type="hidden" name="taskId" value={task.id} />
-          <label className="block text-xs font-medium text-navy-600">
-            What did you do?
-            <textarea name="text" rows={3} className={`${INPUT} mt-1.5`} placeholder="e.g. Ran the kitchen circuits, boxes set, ready for inspection" />
-          </label>
-
-          <div>
-            <div className="text-xs font-medium text-navy-600">Photos</div>
-            <div className="mt-1.5">
-              <PhotoUploader upload={uploadTaskPhoto} fields={{ taskId: task.id }} countFieldName="photoCount" />
-            </div>
-          </div>
-
-          <label className="block text-xs font-medium text-navy-600">
-            Status
-            <select name="status" defaultValue="" className={`${INPUT} mt-1.5`}>
-              <option value="">Leave as {task.status}</option>
-              {TASK_STATUSES.filter((s) => s !== task.status).map((s) => (
-                <option key={s} value={s}>
-                  Set to {s}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <SubmitButton className="w-full rounded-lg bg-navy-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-navy-800">
-            Send update to PM
-          </SubmitButton>
+          <TaskUpdateFields taskId={task.id} status={task.status} upload={uploadTaskPhoto} />
         </NoticeForm>
       </Card>
     </div>

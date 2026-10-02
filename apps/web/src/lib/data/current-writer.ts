@@ -172,5 +172,8 @@ export function currentWriter(): OperationalWriter {
   if (activeSourceKind() === 'fixture') return new FixtureWriter();
 
   const ops = hubOps();
-  return ops === null ? new FixtureWriter() : new HubWriter(ops);
+  if (ops === null) {
+    throw new Error('Project storage is not connected. Nothing was saved; try again later.');
+  }
+  return new HubWriter(ops);
 }

@@ -36,7 +36,7 @@ try {
   await page.getByRole('button', { name: 'Bring it back' }).click();
   assert.equal(await page.getByLabel('Internal notes').inputValue(), 'Private notes for user one');
 
-  const file = { name: 'site.jpg', mimeType: 'image/jpeg', buffer: Buffer.from([1, 2, 3]) };
+  const file = { name: 'site.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64') };
   await page.locator('input[type=file]').last().setInputFiles(file);
   await page.getByText('Retrying…', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: /still uploading/ }).isEnabled(), false);
@@ -45,7 +45,7 @@ try {
   await page.getByRole('button', { name: 'Send update' }).click();
   const posted = JSON.parse(await page.locator('output').innerText());
   assert.equal(posted.projectId, 'p1');
-  assert.equal(posted.photoId, 'test-photo');
+  assert.equal(posted.photoId, 'test-photo-2');
 
   await page.reload();
   await page.getByLabel('Fail all uploads').check();
@@ -57,12 +57,76 @@ try {
   await page.getByRole('button', { name: /still uploading/ }).waitFor();
   assert.equal(await page.getByRole('button', { name: /still uploading/ }).isEnabled(), false);
   await page.getByText('Saved', { exact: true }).waitFor();
+
+  await page.reload();
+  await page.locator('input[type=file]').last().setInputFiles(
+    Array.from({ length: 12 }, (_, index) => ({ ...file, name: `batch-${index}.png` })));
+  await page.getByRole('button', { name: /still uploading/ }).waitFor();
+  assert.equal(await page.getByLabel('Project').isEnabled(), false);
+  await page.getByText('12 photos saved to the job.', { exact: true }).waitFor({ timeout: 15_000 });
+  assert.equal(await page.locator('input[name=photoId]').count(), 12);
+  await page.getByRole('button', { name: 'Send update' }).click();
+  const batch = JSON.parse(await page.locator('output').innerText());
+  assert.equal(batch.projectId, 'p1');
+  assert.equal(new Set(batch.photoIds).size, 12);
+
+  for (const values of [
+    { savedAt: new Date(Date.now() - 86_400_001).toISOString(), values: { projectId: 'p1', internalNotes: 'Expired draft' } },
+    { savedAt: new Date(Date.now() + 3_600_000).toISOString(), values: { projectId: 'p1', internalNotes: 'Future draft' } },
+  ]) {
+    await page.evaluate((draft) => sessionStorage.setItem('bs_field_draft:v2:one', JSON.stringify(draft)), values);
+    await page.reload();
+    assert.equal(await page.getByRole('button', { name: 'Bring it back' }).count(), 0);
+    assert.equal(await page.getByLabel('Internal notes').inputValue(), '');
+  }
+  await page.evaluate(() => sessionStorage.setItem('bs_field_draft:v2:one', '{broken'));
+  await page.reload();
+  assert.equal(await page.getByRole('button', { name: 'Bring it back' }).count(), 0);
+  await page.evaluate(() => sessionStorage.setItem('bs_field_draft:v2:one', JSON.stringify({
+    savedAt: new Date().toISOString(), values: { projectId: 'removed-project', internalNotes: 'Wrong project draft' },
+  })));
+  await page.reload();
+  await page.getByRole('button', { name: 'Bring it back' }).click();
+  assert.equal(await page.getByLabel('Project').inputValue(), 'p1');
+  assert.equal(await page.getByLabel('Internal notes').inputValue(), '');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('bs_field_draft:v2:one')), null);
+
+  await page.getByRole('button', { name: 'Task mode', exact: true }).click();
+  await page.getByLabel('What did you do?').fill('Task photo software test');
+  await page.getByRole('combobox', { name: /Status/ }).selectOption('In Progress');
+  await page.locator('input[type=file]').last().setInputFiles(file);
+  await page.getByText('Retrying\u2026', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: /still uploading/ }).isEnabled(), false);
+  await page.getByText('Saved', { exact: true }).waitFor();
+  assert.equal(await page.locator('input[name=photoId]').count(), 1);
+  await page.getByRole('button', { name: 'Send update to PM', exact: true }).click();
+  await page.getByText('Nothing submitted; try again later', { exact: true }).waitFor();
+  assert.equal(await page.getByLabel('What did you do?').inputValue(), 'Task photo software test');
+  assert.equal(await page.getByRole('combobox', { name: /Status/ }).inputValue(), 'In Progress');
+  assert.equal(await page.locator('input[name=photoId]').count(), 1);
+  await page.getByLabel('Reject task submission').uncheck();
+  await page.getByRole('button', { name: 'Send update to PM', exact: true }).click();
+  await page.getByText('Task update saved', { exact: true }).waitFor();
+  const taskPosted = JSON.parse(await page.locator('output').innerText());
+  assert.equal(taskPosted.taskId, 'task1');
+  assert.deepEqual(taskPosted.photoIds, ['test-photo-2']);
+  assert.equal(taskPosted.photoCount, '1');
+  assert.equal(await page.locator('input[name=photoId]').count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Send update to PM', exact: true }).isEnabled(), true);
+  assert.equal(await page.getByLabel('What did you do?').inputValue(), '');
+  assert.equal(await page.getByRole('combobox', { name: /Status/ }).inputValue(), '');
+  await page.getByLabel('What did you do?').fill('Second update, no new photos');
+  await page.getByRole('button', { name: 'Send update to PM', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('output').textContent.includes('Second update'));
+  const secondTaskPosted = JSON.parse(await page.locator('output').innerText());
+  assert.deepEqual(secondTaskPosted.photoIds, []);
+  assert.equal(secondTaskPosted.photoCount, '0');
   assert.deepEqual(errors, []);
   await mkdir(path.join(repo, '.artifacts'), { recursive: true });
   await page.screenshot({ path: path.join(repo, '.artifacts/field-ui-mobile.png') });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.screenshot({ path: path.join(repo, '.artifacts/field-ui-desktop.png') });
-  console.log('PASS: actual React components block retry submission, preserve project identity, and isolate user drafts.');
+  console.log('PASS: real React retry/submit controls, 12-photo queue, unique photo links, per-user drafts, expired/future/corrupt drafts, removed-project restoration, rejected task submission retention, and task retry gating/reset without repeated photo IDs.');
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));

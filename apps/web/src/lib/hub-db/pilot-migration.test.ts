@@ -72,3 +72,68 @@ test('the database rejects cross-project links and reassignment', async () => {
   await assert.rejects(db.query('update hub_photos set update_id=$1 where id=$2', [next, photo]), /already linked/);
   await assert.rejects(db.query('update hub_photos set project_id=$1 where id=$2', [otherProject, photo]), /same contractor and project/);
 });
+
+test('queued upload burst cannot exceed actor limits or mix tenant counters', async () => {
+  // PGlite serializes queries: this checks the persisted ceiling, not a live
+  // multi-connection PostgreSQL advisory-lock contention benchmark.
+  const tenants = ['00000000-0000-4000-8000-000000000020', '00000000-0000-4000-8000-000000000021'];
+  const actors = ['1', '2', '3', '4'].map((digit) => digit.repeat(64));
+  const results = await Promise.all(tenants.flatMap((tenant) =>
+    actors.flatMap((actor) => Array.from({ length: 100 }, () => claim(actor, 1000, tenant)))));
+  assert.equal(results.filter(Boolean).length, 480);
+  for (const tenant of tenants) {
+    const { rows } = await db.query<{ actor_key: string; uploads: number; bytes: number }>(
+      'select actor_key, uploads, bytes from hub_upload_budgets where contractor_id=$1', [tenant]);
+    assert.equal(rows.length, 5);
+    for (const actor of actors) {
+      const row = rows.find((item) => item.actor_key === actor)!;
+      assert.equal(row.uploads, 60);
+      assert.equal(Number(row.bytes), 60_000);
+    }
+    const total = rows.find((item) => item.actor_key === 'tenant')!;
+    assert.equal(total.uploads, 240);
+    assert.equal(Number(total.bytes), 240_000);
+  }
+});
+
+test('large queued uploads stop at the daily byte ceiling without counting refused attempts', async () => {
+  const tenant = '00000000-0000-4000-8000-000000000022';
+  const actors = ['5', '6', '7', '8'].map((digit) => digit.repeat(64));
+  const results = await Promise.all(actors.flatMap((actor) =>
+    Array.from({ length: 60 }, () => claim(actor, 3_500_000, tenant))));
+  assert.equal(results.filter(Boolean).length, 142);
+  const { rows } = await db.query<{ actor_key: string; uploads: number; bytes: number }>(
+    'select actor_key, uploads, bytes from hub_upload_budgets where contractor_id=$1', [tenant]);
+  const total = rows.find((row) => row.actor_key === 'tenant')!;
+  assert.equal(total.uploads, 142);
+  assert.equal(Number(total.bytes), 497_000_000);
+  assert.equal(rows.filter((row) => row.actor_key !== 'tenant').reduce((sum, row) => sum + row.uploads, 0), 142);
+  assert.equal(await claim('9'.repeat(64), 3_000_000, tenant), true);
+  assert.equal(await claim('9'.repeat(64), 1, tenant), false);
+});
+
+test('empty, oversized and malformed claims never create budget rows', async () => {
+  const tenant = '00000000-0000-4000-8000-000000000023';
+  for (const bytes of [0, -1, 3_500_001]) assert.equal(await claim('a'.repeat(64), bytes, tenant), false);
+  for (const actor of ['', 'a'.repeat(63), 'a'.repeat(65), 'A'.repeat(64), 'g'.repeat(64)]) {
+    assert.equal(await claim(actor, 1, tenant), false);
+  }
+  assert.equal((await db.query('select * from hub_upload_budgets where contractor_id=$1', [tenant])).rows.length, 0);
+});
+
+test('archived and foreign-tenant update links fail, while deleting an update preserves the photo', async () => {
+  const archived = '00000000-0000-4000-8000-000000000024';
+  const foreign = '00000000-0000-4000-8000-000000000025';
+  const photo = '00000000-0000-4000-8000-000000000026';
+  const removable = '00000000-0000-4000-8000-000000000027';
+  await db.query('insert into hub_daily_updates(id,project_id,contractor_id,archived_at) values($1,$2,$3,now())', [archived, project, contractor]);
+  await db.query('insert into hub_daily_updates(id,project_id,contractor_id) values($1,$2,$3)', [foreign, project, otherProject]);
+  for (const target of [archived, foreign]) {
+    await assert.rejects(db.query('insert into hub_photos(id,project_id,contractor_id,update_id) values($1,$2,$3,$4)',
+      [photo, project, contractor, target]), /same contractor and project/);
+  }
+  await db.query('insert into hub_daily_updates(id,project_id,contractor_id) values($1,$2,$3)', [removable, project, contractor]);
+  await db.query('insert into hub_photos(id,project_id,contractor_id,update_id) values($1,$2,$3,$4)', [photo, project, contractor, removable]);
+  await db.query('delete from hub_daily_updates where id=$1', [removable]);
+  assert.equal((await db.query<{ update_id: string | null }>('select update_id from hub_photos where id=$1', [photo])).rows[0]!.update_id, null);
+});

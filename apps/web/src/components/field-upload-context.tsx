@@ -18,9 +18,8 @@ import { countUploads, submitGate, type UploadCounts } from '@/lib/field-upload-
  * So the uploader publishes its state and the button subscribes, and the
  * screens in between do not participate.
  *
- * WITHOUT A PROVIDER, NOTHING CHANGES. The default is "nothing uploading", so
- * the task screen — where the uploader posts its own update and there is no
- * form to hold back — behaves exactly as it did.
+ * Upload-only screens do not need a provider. Both daily and task update forms
+ * use it so neither can submit while photographs are still in flight.
  * ---------------------------------------------------------------------------
  */
 

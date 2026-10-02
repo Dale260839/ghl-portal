@@ -64,6 +64,32 @@ test('field suggestion persists without publication or copying internal notes', 
   assert.equal(second.client_summary, '');
 });
 
+test('daily updates reject invalid crew counts and hours before any database call', async () => {
+  const input = {
+    projectId: 'p1', submittedBy: 'crew', workCompleted: 'test work',
+    internalNotes: 'private', crewOnsite: 0, hoursWorked: 0, weather: '',
+  };
+  for (const patch of [
+    ...[-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1].map((crewOnsite) => ({ crewOnsite })),
+    ...[-1, NaN, Infinity].map((hoursWorked) => ({ hoursWorked })),
+  ]) {
+    const { ops, calls } = recordingOps();
+    await assert.rejects(ops.createUpdate(SCOPE, { ...input, ...patch }), TypeError);
+    assert.deepEqual(calls, []);
+  }
+});
+
+test('daily updates retain fractional hours and zero crew counts', async () => {
+  const { ops, calls } = recordingOps();
+  await ops.createUpdate(SCOPE, {
+    projectId: 'p1', submittedBy: 'crew', workCompleted: 'test work',
+    internalNotes: '', crewOnsite: 0, hoursWorked: 1.5, weather: '',
+  });
+  const row = (calls[0]!.args.rows as Record<string, unknown>[])[0]!;
+  assert.equal(row.crew_onsite, 0);
+  assert.equal(row.hours_worked, 1.5);
+});
+
 test('task status writes remain tenant scoped', async () => {
   const { ops, calls } = recordingOps();
   await ops.setTaskStatus(SCOPE, 'task-1', 'In Progress');

@@ -215,9 +215,7 @@ export function PhotoUploader({
   const saved = items.filter((i) => i.state === 'saved').length;
   const busy = countUploads(items.map((i) => i.state)).inFlight > 0;
 
-  // Tell the form around us what is happening, so its send button can wait for
-  // photos that are seconds away. Without a provider this goes nowhere, which
-  // is what the task screen wants.
+  // Daily and task forms wait for in-flight photos; upload-only screens do not.
   const { report } = useFieldUploads();
   useEffect(() => {
     report(countUploads(items.map((i) => i.state)));
