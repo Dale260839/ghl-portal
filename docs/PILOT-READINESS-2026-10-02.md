@@ -70,10 +70,41 @@ guard were present. Detailed evidence is in the Desktop audit folder.
   takes down the rest of a successfully loaded overview. Mandatory ownership,
   project, overlay and operational reads still fail closed. Actual GHL money
   remains usable when only the optional BuildSuite proposal read fails.
+- The actual webhook route now verifies current Ed25519, legacy RSA and explicit
+  relay HMAC with separate header/key selection. Invalid or blank current
+  signatures never downgrade to a valid legacy/relay signature. Native resource
+  IDs are not treated as delivery IDs, and record creation dates no longer make
+  new updates look stale. `OpportunityStageUpdate` routes to the stage planner.
+- Webhook workflow execution is NOT implemented. The former route returned
+  success after only logging recognized events. It now returns an explicit
+  unavailable response without marking them processed; repeated attempts are
+  not mistaken for completed work. Unknown authenticated event types remain
+  deliberately ignored. This is truthful failure handling, not finished sync.
+- The example environment now documents current/legacy webhook keys, the
+  server-only SSO configuration and the required server credentials for both
+  databases. No live keys, grants, secrets or menu links were changed.
+
+## Webhook Integration Gap
+
+The route has neither a durable queue nor a configured workflow executor.
+Do not enable business-effect ingestion until confirmed tenant/record mappings,
+approved durable idempotency and real delivery tests exist. A console log or
+GET registration response is not execution evidence. There is no migration
+or invented record mapping in this patch.
+
+Current signature and `OpportunityStageUpdate` payload behavior were checked
+against the official [integration guide](https://marketplace.gohighlevel.com/docs/webhook/WebhookIntegrationGuide/)
+and [event specification](https://marketplace.gohighlevel.com/docs/webhook/OpportunityStageUpdate/index.html).
+The integration guide describes retries for non-2xx responses, but a separate
+[retry support article](https://help.gohighlevel.com/support/solutions/articles/155000007071-automated-webhook-retries)
+describes only 429 retries. These descriptions conflict. Do not claim that a
+503 guarantees redelivery or recovery; verify the owning app's actual behavior.
+The [logs dashboard](https://marketplace.gohighlevel.com/docs/webhook/WebhookLogsDashboard/)
+supports inspecting deliveries and manually retrying failed latest deliveries.
 
 ## Verification
 
-- Web: 1,270 tests passed, zero failures.
+- Web: 1,283 tests passed, zero failures.
 - Shared contracts: 40 tests passed, zero failures.
 - Workspace typecheck and optimized production build passed.
 - Production dependency audit: zero reported vulnerabilities.
@@ -95,6 +126,10 @@ guard were present. Detailed evidence is in the Desktop audit folder.
   the fixed source was restored and the full suite passed afterward.
 - Database tests cover quota rollback and photo/update trigger boundaries using
   PGlite. Invoice tests use mocked GHL; no invoices were sent or paid.
+- Thirteen new native-signature/actual-route tests use freshly generated local
+  keys. They cover valid schemes, tampering, wrong algorithm, missing config,
+  downgrade refusal (including a blank current header), successive resource
+  updates, old record dates and repeated unexecuted workflow requests.
 
 ## Remaining Release Gates
 
@@ -113,8 +148,10 @@ guard were present. Detailed evidence is in the Desktop audit folder.
    Test PDF/upload-limit failure without opening browser database access.
 5. Establish real cross-project and revoked-membership file-denial evidence.
    Chrome ERR_BLOCKED_BY_CLIENT on the earlier probe is not server 403/404 proof.
-6. Verify usable backup/recovery and live webhook/stage-sync configuration.
-   GHL remains the owner of stage movement.
+6. Verify usable backup/recovery. Implement and verify the missing durable
+   webhook ingestion/workflow execution with confirmed record mappings and
+   specific approval for any live changes. Verify real retry behavior and
+   stage-sync configuration; GHL remains the owner of stage movement.
 7. Notifications are best effort; a durable outbox/retry mechanism is not
    verified. A GHL message record must not be described as mailbox delivery.
 8. Payments remain draft-only until a GHL gateway is configured. Do not collect

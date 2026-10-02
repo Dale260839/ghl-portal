@@ -1,4 +1,4 @@
-import { createHmac, createVerify, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, createPublicKey, createVerify, timingSafeEqual, verify } from 'node:crypto';
 
 /**
  * Verifying that a webhook really came from GoHighLevel.
@@ -15,17 +15,18 @@ import { createHmac, createVerify, timingSafeEqual } from 'node:crypto';
  * to. Our URL will be public, our workflows move money and publish things to
  * homeowners, and the payload names the project. So:
  *
- *   - No secret configured → **refuse**. Not "allow in development": an
+ *   - No verification key configured → **refuse**. Not "allow in development": an
  *     unverifiable webhook is not a webhook, and a dev-only bypass is one
  *     environment variable away from being a production bypass.
  *   - Signature compared in constant time, and computed over the RAW body.
  *     Re-serialising parsed JSON changes bytes — key order, whitespace, number
  *     formatting — and the signature is over what was sent, not over what we
  *     happened to reconstruct.
- *   - Timestamp outside the tolerance → refuse. A valid signature stays valid
- *     forever otherwise, so a captured request could be replayed indefinitely.
- *   - Event id already seen → refuse. The timestamp window narrows replay to a
- *     few minutes; the id closes it.
+ *   - Relay timestamps are mandatory; native delivery timestamps are checked
+ *     when present. Native record creation dates are not delivery timestamps.
+ *   - An optional seen store can reject repeated deliveries in isolated tests.
+ *     The HTTP route does not use it: processing and durable idempotency must
+ *     be implemented together before business effects can run safely.
  * ---------------------------------------------------------------------------
  *
  * Pure on purpose. The route supplies the clock and the seen-id store, so every
@@ -63,7 +64,7 @@ export type WebhookResult =
 
 /** What we can rely on being present. Everything else stays in `raw`. */
 export interface WebhookEvent {
-  /** GHL's own id for the delivery — the replay key. */
+  /** Delivery replay key, not the resource id in native GHL payloads. */
   id: string;
   type: string;
   locationId: string | null;
@@ -74,15 +75,15 @@ export const DEFAULT_TOLERANCE_SECONDS = 300;
 
 /** Every refusal gets its own message, because they need different fixes. */
 export const REFUSAL_REASON: Record<WebhookRefusal, string> = {
-  not_configured: 'GHL_WEBHOOK_SECRET is not set — refusing to accept unverifiable webhooks',
+  not_configured: 'webhook verification is unconfigured — refusing unverifiable webhooks',
   missing_signature: 'request carried no signature header',
   missing_timestamp: 'request carried no timestamp header',
   bad_timestamp: 'timestamp header is not a unix time',
   stale: 'timestamp is outside the tolerance window — possible replay',
-  replayed: 'this event id has already been processed',
+  replayed: 'this delivery key is already in the supplied seen store',
   bad_signature: 'signature does not match the body',
   malformed_body: 'body is not a JSON object',
-  bad_public_key: 'GHL_WEBHOOK_PUBLIC_KEY is not a usable public key',
+  bad_public_key: 'the configured public key is not usable for this signature algorithm',
 };
 
 function signaturesMatch(a: Buffer, b: Buffer): boolean {
@@ -109,7 +110,7 @@ export interface SeenStore {
 
 // ── GoHighLevel's own signature ─────────────────────────────────────────────
 /**
- * The second accepted scheme, and the reason it exists.
+ * Native signatures, distinct from relay HMAC.
  *
  * Everything above verifies an HMAC over a shared secret. GHL's *native*
  * webhooks do not work that way: they are signed with GHL's own private key and
@@ -117,18 +118,13 @@ export interface SeenStore {
  * checked if something in the middle re-signs with it — an n8n relay or a small
  * Marketplace app.
  *
- * Accepting GHL's signature directly removes that middle. That matters beyond
- * tidiness: the relay would have been n8n, whose account is currently failing
- * 100% of runs on its execution quota, so routing pilot webhooks through it
- * means inheriting a broken dependency on day one, and a webhook that silently
- * stops firing is exactly the failure nobody notices.
- *
- * Both schemes are kept. HMAC stays correct for anything we control end to end;
- * this is for GHL talking to us directly. The scheme is a config choice, not a
- * code change (`readWebhookScheme`).
+ * Current X-GHL-Signature deliveries use Ed25519; legacy X-WH-Signature
+ * deliveries use RSA-SHA256. Relay HMAC remains available only on x-signature.
+ * Header presence selects the algorithm; a failed current signature must not
+ * downgrade to an older header. Live ingestion/execution remains unverified.
  */
 
-/** RSA-SHA256 over the raw body. GHL sends the signature base64-encoded. */
+/** Native signature over the raw body; algorithm is selected separately. */
 export interface GhlWebhookConfig {
   /** GHL's published webhook public key, PEM encoded. */
   publicKey: string;
@@ -165,6 +161,22 @@ export function verifyRsaSignature(
       void error;
       return null; // the key is the problem
     }
+  }
+}
+
+/** Current X-GHL-Signature scheme; never verify an Ed25519 header as RSA/HMAC. */
+export function verifyEd25519Signature(rawBody: string, signature: string, publicKeyPem: string): boolean | null {
+  let key;
+  try {
+    key = createPublicKey(publicKeyPem);
+    if (key.asymmetricKeyType !== 'ed25519') return null;
+  } catch {
+    return null;
+  }
+  try {
+    return verify(null, Buffer.from(rawBody, 'utf8'), key, Buffer.from(signature.trim(), 'base64'));
+  } catch {
+    return false;
   }
 }
 
@@ -212,6 +224,25 @@ export function verifyGhlWebhook(
   now: Date,
   seen?: SeenStore,
 ): WebhookResult {
+  return verifyNativeWebhook(request, config, now, verifyRsaSignature, seen);
+}
+
+export function verifyEd25519Webhook(
+  request: WebhookRequest,
+  config: GhlWebhookConfig,
+  now: Date,
+  seen?: SeenStore,
+): WebhookResult {
+  return verifyNativeWebhook(request, config, now, verifyEd25519Signature, seen);
+}
+
+function verifyNativeWebhook(
+  request: WebhookRequest,
+  config: GhlWebhookConfig,
+  now: Date,
+  checkSignature: (body: string, signature: string, key: string) => boolean | null,
+  seen?: SeenStore,
+): WebhookResult {
   if (config.publicKey.trim() === '') {
     return { ok: false, reason: 'not_configured' };
   }
@@ -219,7 +250,7 @@ export function verifyGhlWebhook(
     return { ok: false, reason: 'missing_signature' };
   }
 
-  const verified = verifyRsaSignature(request.rawBody, request.signature, config.publicKey);
+  const verified = checkSignature(request.rawBody, request.signature, config.publicKey);
   if (verified === null) return { ok: false, reason: 'bad_public_key' };
   if (!verified) return { ok: false, reason: 'bad_signature' };
 
@@ -234,9 +265,16 @@ export function verifyGhlWebhook(
   }
 
   const body = parsed as Record<string, unknown>;
-  const id = firstString(body, ['webhookId', 'id', 'eventId']);
+  // Native `id` identifies the contact/opportunity, not this delivery. Using it
+  // as a replay key would drop the next legitimate update to that same record.
+  const deliveryId = firstString(body, ['webhookId', 'eventId']);
+  if (deliveryId === null && firstString(body, ['id']) === null) {
+    return { ok: false, reason: 'malformed_body' };
+  }
+  const id = deliveryId ??
+    `body:${createHash('sha256').update(request.rawBody).digest('hex')}`;
   const type = firstString(body, ['type', 'event', 'eventType']);
-  if (id === null || type === null) {
+  if (type === null) {
     return { ok: false, reason: 'malformed_body' };
   }
 
@@ -244,7 +282,8 @@ export function verifyGhlWebhook(
   // no timestamp is not refused: GHL decides that payload's shape, not us, and
   // refusing would drop real events. The replay id below is then the only
   // protection, which is why the durable store matters more on this path.
-  const sentAt = bodyTimestampSeconds(body);
+  // dateAdded/createdAt belong to the business record, not webhook delivery.
+  const sentAt = bodyTimestampSeconds({ timestamp: body.timestamp, webhookTimestamp: body.webhookTimestamp });
   if (sentAt !== null) {
     const tolerance = config.toleranceSeconds ?? DEFAULT_TOLERANCE_SECONDS;
     if (Math.abs(Math.floor(now.getTime() / 1000) - sentAt) > tolerance) {
@@ -348,14 +387,10 @@ function firstString(body: Record<string, unknown>, keys: string[]): string | nu
 /**
  * Replay protection, in memory.
  *
- * **A known limitation, and deliberately a small one.** Serverless means several
- * instances, each with their own set, so a replay could land on a cold instance
- * and be accepted. What still holds is the timestamp window: an attacker has the
- * tolerance, not forever.
- *
- * The durable version is a `hub_webhook_deliveries` table with a unique id.
- * Worth adding when webhooks carry something irreversible; not worth blocking
- * the receiver on today, when nothing is wired to them yet.
+ * Test helper, not production idempotency. Serverless instances do not share
+ * this set, and native events can omit a delivery timestamp. Never rely on it
+ * to protect business effects. A future executor needs approved durable
+ * ingestion and effect-level idempotency, marking completion only on success.
  */
 export function createSeenStore(limit = 1000): SeenStore {
   const ids = new Set<string>();
@@ -385,32 +420,39 @@ export function readWebhookConfig(
 /**
  * Which scheme this deployment accepts.
  *
- * GHL's public key wins when both are set. If GHL is signing deliveries itself
- * there is no relay to produce an HMAC, so the shared secret would be dead
- * config, and silently preferring it would refuse every real delivery.
+ * A header-selected scheme uses only its corresponding configuration. Without
+ * a requested scheme, prefer current Ed25519, then legacy RSA, then relay HMAC.
  *
  * Neither configured is still a refusal, unchanged: an unverifiable webhook is
  * not a webhook, and a development bypass is one environment variable away from
  * being a production bypass.
  */
 export type WebhookScheme =
+  | { scheme: 'ghl-ed25519'; config: GhlWebhookConfig }
   | { scheme: 'ghl'; config: GhlWebhookConfig }
   | { scheme: 'hmac'; config: WebhookConfig }
   | { scheme: 'none' };
 
-export function readWebhookScheme(env: NodeJS.ProcessEnv = process.env): WebhookScheme {
+export function readWebhookScheme(
+  env: NodeJS.ProcessEnv = process.env,
+  requested?: Exclude<WebhookScheme['scheme'], 'none'>,
+): WebhookScheme {
+  const currentKey = (env.GHL_WEBHOOK_ED25519_PUBLIC_KEY ?? '').replace(/\\n/g, '\n').trim();
+  if ((requested === undefined || requested === 'ghl-ed25519') && currentKey !== '') {
+    return { scheme: 'ghl-ed25519', config: { publicKey: currentKey } };
+  }
   // Env vars cannot hold newlines cleanly, so an escaped PEM is normalised here
   // rather than making every deployment remember to do it.
   const publicKey = (env.GHL_WEBHOOK_PUBLIC_KEY ?? '').replace(/\\n/g, '\n').trim();
-  if (publicKey !== '') return { scheme: 'ghl', config: { publicKey } };
+  if ((requested === undefined || requested === 'ghl') && publicKey !== '') return { scheme: 'ghl', config: { publicKey } };
 
   const secret = (env.GHL_WEBHOOK_SECRET ?? '').trim();
-  if (secret !== '') return { scheme: 'hmac', config: { secret } };
+  if ((requested === undefined || requested === 'hmac') && secret !== '') return { scheme: 'hmac', config: { secret } };
 
   return { scheme: 'none' };
 }
 
-/** Verify by whichever scheme is configured. One call site, either mode. */
+/** Verify with the selected algorithm; no fallback after signature failure. */
 export function verifyInboundWebhook(
   request: WebhookRequest,
   scheme: WebhookScheme,
@@ -418,6 +460,7 @@ export function verifyInboundWebhook(
   seen?: SeenStore,
 ): WebhookResult {
   if (scheme.scheme === 'none') return { ok: false, reason: 'not_configured' };
+  if (scheme.scheme === 'ghl-ed25519') return verifyEd25519Webhook(request, scheme.config, now, seen);
   if (scheme.scheme === 'ghl') return verifyGhlWebhook(request, scheme.config, now, seen);
   return verifyWebhook(request, scheme.config, now, seen);
 }
