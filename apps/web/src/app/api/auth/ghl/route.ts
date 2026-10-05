@@ -10,7 +10,7 @@ import { currentAgencyToken } from '@/lib/ghl/agency-token';
 import { hasTriedConnecting, markConnectAttempted } from '@/lib/connect-attempt';
 import { getBuildSuiteReader } from '@/lib/buildsuite/projects';
 import { homeFor, setSession, type Role } from '@/lib/session';
-import { decryptGhlIdentity, type GhlIdentity } from '@/lib/auth/ghl-sso';
+import { readGhlIdentity, type GhlIdentity } from '@/lib/auth/ghl-sso';
 
 /**
  * GoHighLevel Custom Menu Link landing (D-011, D-015).
@@ -214,15 +214,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const raw = await request.text();
     if (raw.length > 20_000) return NextResponse.json({ ok: false }, { status: 413 });
     const body = JSON.parse(raw) as Record<string, unknown>;
-    const identity = decryptGhlIdentity(body.encryptedData, {
+    const configuredCompany = process.env.GHL_SSO_COMPANY_ID;
+    const reading = readGhlIdentity(body.encryptedData, {
       secret: process.env.GHL_APP_SHARED_SECRET,
-      companyId: process.env.GHL_SSO_COMPANY_ID,
+      companyId: configuredCompany,
       requestedLocation: typeof body.locationId === 'string' ? body.locationId : undefined,
     });
-    if (identity === null) {
+    if (!reading.ok) {
+      // The operator gets the reason; the browser never does. Without this the
+      // two live failure modes — wrong shared secret, wrong agency binding —
+      // are the same sentence on screen and the same silence in the log.
+      console.warn(
+        `[auth] GHL user context refused: ${reading.reason}` +
+          (reading.sawCompanyId === undefined
+            ? ''
+            : ` (payload agency ${reading.sawCompanyId}, configured ${configuredCompany ?? 'unset'})`),
+      );
       return NextResponse.json({ ok: false, error: 'Could not verify your GoHighLevel identity.' }, { status: 401 });
     }
-    return establishSession(request, identity, true, true);
+    return establishSession(request, reading.identity, true, true);
   } catch {
     return NextResponse.json({ ok: false, error: 'Sign-in request refused.' }, { status: 400 });
   }
