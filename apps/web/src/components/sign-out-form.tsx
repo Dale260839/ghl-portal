@@ -1,10 +1,10 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { signOut } from '@/lib/actions';
 
 export function SignOutForm({ children }: { children: ReactNode }) {
-  return <form action={signOut} onSubmit={() => {
+  // A native POST keeps working when this tab outlives a deployment's action IDs.
+  return <form action="/api/auth/sign-out" method="post" onSubmit={() => {
     try {
       window.localStorage.removeItem('bs_field_draft:update');
       for (const key of Object.keys(window.sessionStorage)) {
