@@ -38,7 +38,7 @@ async function harness(): Promise<{state:State;submitFieldUpdate:(data:FormData)
     absWorkingDir:resolve(root,'../..'),bundle:true,write:false,platform:'node',format:'esm',packages:'external',
     plugins:[{name:'isolated-daily-action',setup(build){
       build.onResolve({filter:/^daily-fixture-state$/},()=>({path:'state',namespace:'daily-fixture'}));
-      build.onResolve({filter:/.*/},args=>args.importer.endsWith('/lib/actions.ts')&&modules[args.path]!==undefined?{path:args.path,namespace:'daily-fixture'}:undefined);
+      build.onResolve({filter:/.*/},args=>args.importer.replace(/\\/g,'/').endsWith('/lib/actions.ts')&&modules[args.path]!==undefined?{path:args.path,namespace:'daily-fixture'}:undefined);
       build.onResolve({filter:/^server-only$/},()=>({path:'empty',namespace:'daily-fixture'}));
       build.onResolve({filter:/^[^./]/},args=>
         args.path.startsWith('node:') || args.path.startsWith('@/') || args.path==='@buildsuite/contracts'

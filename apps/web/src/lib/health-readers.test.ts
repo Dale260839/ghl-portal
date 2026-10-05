@@ -33,7 +33,7 @@ async function harness(): Promise<{
     plugins: [{ name: 'isolated-health-reads', setup(builder) {
       builder.onResolve({ filter: /^health-fixture$/ }, () => ({ path: 'state', namespace: 'health-fixture' }));
       builder.onResolve({ filter: /^server-only$/ }, () => ({ path: 'empty', namespace: 'health-fixture' }));
-      builder.onResolve({ filter: /.*/ }, (args) => args.importer.endsWith('/lib/health.ts') && modules[args.path]
+      builder.onResolve({ filter: /.*/ }, (args) => args.importer.replace(/\\/g,'/').endsWith('/lib/health.ts') && modules[args.path]
         ? { path: args.path, namespace: 'health-fixture' } : undefined);
       builder.onLoad({ filter: /.*/, namespace: 'health-fixture' }, (args) => ({
         contents: args.path === 'state'

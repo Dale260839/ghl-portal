@@ -46,7 +46,12 @@ async function harness(): Promise<{state:State;actions:Record<string,Action>;fix
     absWorkingDir:resolve(root,'../..'),bundle:true,write:false,platform:'node',format:'esm',packages:'external',
     plugins:[{name:'isolated-mutation-access',setup(build){
       build.onResolve({filter:/^access-fixture-state$/},()=>({path:'state',namespace:'access-fixture'}));
-      build.onResolve({filter:/.*/},args=>args.importer.endsWith('/lib/actions.ts')&&modules[args.path]!==undefined?{path:args.path,namespace:'access-fixture'}:undefined);
+      // Normalised because esbuild reports the importer with the platform's
+      // own separators. On Windows it arrives with backslashes, so endsWith()
+      // was false for EVERY import and no stub was ever applied — the real
+      // modules loaded instead, and all 50 tests in this file failed on an
+      // unrelated React error. Green on a Mac the whole time.
+      build.onResolve({filter:/.*/},args=>args.importer.replace(/\\/g,'/').endsWith('/lib/actions.ts')&&modules[args.path]!==undefined?{path:args.path,namespace:'access-fixture'}:undefined);
       build.onResolve({filter:/^server-only$/},()=>({path:'empty',namespace:'access-fixture'}));
       build.onResolve({filter:/^[^./]/},args=>args.path.startsWith('node:')||args.path.startsWith('@/')||args.path==='@buildsuite/contracts'
         ? undefined : {path:pathToFileURL(require.resolve(args.path)).href,external:true});

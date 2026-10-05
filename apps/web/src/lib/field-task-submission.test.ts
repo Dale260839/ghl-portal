@@ -62,7 +62,7 @@ async function harness(): Promise<{
     plugins: [{ name: 'isolated-task-action', setup(build) {
       build.onResolve({ filter: /^task-fixture-state$/ }, () => ({ path: 'state', namespace: 'task-fixture' }));
       build.onResolve({ filter: /.*/ }, (args) =>
-        args.importer.endsWith('/actions/field-tasks.ts') && modules[args.path] !== undefined
+        args.importer.replace(/\\/g,'/').endsWith('/actions/field-tasks.ts') && modules[args.path] !== undefined
           ? { path: args.path, namespace: 'task-fixture' } : undefined);
       build.onLoad({ filter: /.*/, namespace: 'task-fixture' }, (args) => ({
         contents: args.path === 'state' ? stateModule : `import {state} from 'task-fixture-state';\n${modules[args.path]}`,
