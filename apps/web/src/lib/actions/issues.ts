@@ -9,6 +9,8 @@ import { currentDataSource } from '../data/current-source.ts';
 import { clientProjectsFor } from '../client-scope.ts';
 import { hubScopeOfProject } from '../tenant-scope.ts';
 import { fieldProjectsFor } from '../field-scope.ts';
+import { allowClientWrite } from '../upload-limits.ts';
+import { uploadActor } from '../hub-db/upload-budget.ts';
 import {
   getHubOperational,
   HubOperational,
@@ -204,6 +206,8 @@ export async function raiseClientIssue(
 
   const title = String(formData.get('issueTitle') ?? '').trim();
   if (title === '') return { notice: 'Say in a few words what the problem or request is.' };
+  const limit = allowClientWrite(scope.contractorId + ':' + uploadActor(access.session));
+  if (!limit.allowed) return { notice: limit.message };
 
   await ops.createIssue(scope, {
     projectId,

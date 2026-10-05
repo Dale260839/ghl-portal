@@ -189,10 +189,12 @@ export interface UpdateArgs {
 export class HubClient {
   private readonly config: HubConfig;
   private readonly fetchImpl: typeof fetch;
+  private readonly timeoutMs: number;
 
-  constructor(config: HubConfig, options: { fetchImpl?: typeof fetch } = {}) {
+  constructor(config: HubConfig, options: { fetchImpl?: typeof fetch; timeoutMs?: number } = {}) {
     this.config = config;
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.timeoutMs = options.timeoutMs ?? 15_000;
   }
 
   private headers(extra: Record<string, string> = {}): Record<string, string> {
@@ -209,7 +211,13 @@ export class HubClient {
     init: RequestInit,
     table: string,
   ): Promise<unknown> {
-    const response = await this.fetchImpl(url, init);
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, { ...init, signal: AbortSignal.timeout(this.timeoutMs) });
+    } catch {
+      // A timed-out write may have committed. Never retry it automatically.
+      throw new HubWriteError(`${init.method ?? 'GET'} ${table} could not be confirmed`, null, table);
+    }
     if (!response.ok) {
       const body = await response.text();
       // The body carries PostgREST's reason — an RLS refusal reads very

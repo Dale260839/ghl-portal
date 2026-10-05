@@ -5,6 +5,8 @@ import { Fragment, useActionState, useRef, type ReactNode } from 'react';
 /** What an action can hand back to the form that called it. */
 export interface ActionNotice {
   notice?: string;
+  /** A rejected submission must retain its client-side form state. */
+  reset?: boolean;
 }
 
 /**
@@ -42,7 +44,7 @@ export function NoticeForm({
   const last = useRef(state);
   if (last.current !== state) {
     last.current = state;
-    version.current += 1;
+    if (state?.reset !== false) version.current += 1;
   }
   return (
     <form action={formAction} className={className}>

@@ -22,5 +22,13 @@ export default async function GhlAuthPage({
   const raw = params.locationId;
   const locationId = Array.isArray(raw) ? raw[0] : raw;
 
-  return <Connecting locationId={locationId ?? ''} />;
+  const signed = new URLSearchParams();
+  for (const key of ['locationId', 'userId', 'email', 'timestamp', 'signature']) {
+    const value = params[key];
+    if (typeof value === 'string') signed.set(key, value);
+  }
+  const parentOrigins = (process.env.GHL_PARENT_ORIGINS ??
+    'https://app.gohighlevel.com,https://app.allianceforcontractors.com')
+    .split(',').map((origin) => origin.trim()).filter(Boolean);
+  return <Connecting locationId={locationId ?? ''} signedQuery={signed.toString()} parentOrigins={parentOrigins} />;
 }

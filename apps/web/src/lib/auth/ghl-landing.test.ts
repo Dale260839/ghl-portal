@@ -79,6 +79,11 @@ test('a captured link goes stale', () => {
   assert.equal(verifyLanding(legit, { signingSecret: SECRET, now: NOW - 900 }).ok, false);
 });
 
+test('signed landings require a user and an expiry even with a valid signature', () => {
+  assert.equal(verifyLanding(signed({ userId: '' }), { signingSecret: SECRET, now: NOW }).ok, false);
+  assert.equal(verifyLanding(signed({ timestamp: undefined }), { signingSecret: SECRET, now: NOW }).ok, false);
+});
+
 test('with nothing configured, a landing is refused rather than trusted', () => {
   const result = verifyLanding(params, {});
   assert.equal(result.ok, false);
@@ -141,6 +146,13 @@ test('the canonical string is order-stable so both sides agree', () => {
   const b = canonicalString({ timestamp: '1', email: 'e', userId: 'u', locationId: 'l' });
   assert.equal(a, b);
   assert.equal(a, 'locationId=l&userId=u&email=e&timestamp=1');
+});
+
+test('field delimiters cannot collide across signed claims', () => {
+  assert.notEqual(
+    canonicalString({ locationId: 'a', userId: 'b&userId=c' }),
+    canonicalString({ locationId: 'a&userId=b', userId: 'c' }),
+  );
 });
 
 test('a missing field signs as empty rather than being skipped', () => {

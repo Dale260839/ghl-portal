@@ -21,6 +21,10 @@ import {
 } from './auth/sign-in-request.ts';
 import { resolveEmailSender } from './email/sender.ts';
 import { accountForEmail, clearSession, getSession, homeFor, setSession, type Session } from './session';
+import { uploadActor } from './hub-db/upload-budget';
+import { allowClientWrite } from './upload-limits';
+import { fieldProjectsFor } from './field-scope';
+import { isDraftRevision } from './field-draft-state.ts';
 import { demoSignInEnabled } from './demo-accounts';
 
 /** One limiter for the password path, for the life of the process. */
@@ -110,6 +114,7 @@ import { fixturePorts } from './workflows/fixture-ports';
 import { planFieldUpdateSubmitted } from './workflows/wf3-update-submitted';
 import { planFieldUpdateApproved } from './workflows/wf4-update-approved';
 import { currentDataSource } from './data/current-source.ts';
+import { activeSourceKind } from './data/source.ts';
 import { currentWriter } from './data/current-writer.ts';
 import { TASKS } from './data/fixtures';
 import { MESSAGES } from './data/portal-fixtures';
@@ -229,10 +234,11 @@ function reviewScope(session: Session): Promise<TenantScope> {
 }
 
 export async function reviewUpdate(formData: FormData) {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const access = await requireAccess();
+  const session = access.session;
   // §12.1 / §10 — publishing is the contractor's decision and nobody else's.
   assertCan(session.role, 'publish', 'dailyUpdate');
+  if (!access.can('publish', 'dailyUpdate')) throw new Error('not permitted');
 
   const id = String(formData.get('updateId') ?? '');
   const clientSummary = String(formData.get('clientSummary') ?? '');
@@ -299,13 +305,23 @@ export async function reviewUpdate(formData: FormData) {
  * a UI one.
  */
 export async function updateVisibility(formData: FormData) {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const access = await requireAccess();
+  const session = access.session;
   // §9.1 — the switches are clauses of the gate, so who may move them is a
   // security question rather than a UI one.
   assertCan(session.role, 'update', 'visibilitySettings');
 
   const projectId = String(formData.get('projectId') ?? '');
+  const fixture = activeSourceKind() === 'fixture';
+  if (projectId === '' || (!fixture && !isUuid(projectId))) throw new Error('invalid project');
+  if (access.projectIds !== null && !access.projectIds.includes(projectId)) {
+    throw new Error('project not assigned');
+  }
+  const scope = await actionTenantScope(session);
+  // The visibility upsert is keyed by project ID, so prove tenant ownership
+  // before allowing a submitted ID to create or replace the gate's row.
+  const project = await (await currentDataSource(scope)).getProject(scope, projectId);
+  if (project === null) throw new Error('project not found');
 
   // Unchecked boxes are absent from the payload, so read every switch explicitly
   // rather than iterating what was submitted.
@@ -313,18 +329,15 @@ export async function updateVisibility(formData: FormData) {
     VISIBILITY_SWITCHES.map((key) => [key, formData.get(key) === 'on']),
   ) as Record<(typeof VISIBILITY_SWITCHES)[number], boolean>;
 
-  // A live project's switches persist in the Hub — they are clauses of the §9.1
-  // gate and must outlive the request. A fixture id keeps the in-memory path,
-  // and so does a deployment with no Hub connection, where nothing can be saved.
-  const hub = getHubVisibility();
-  if (hub.available && isUuid(projectId)) {
-    const scope = await actionTenantScope(session);
+  if (fixture) {
+    setVisibility(projectId, switches);
+  } else {
+    const hub = getHubVisibility();
+    if (!hub.available) throw new Error('Visibility cannot be saved right now. Nothing was changed.');
     await hub.visibility.setVisibility(scope, projectId, switches, {
       name: session.name,
       role: session.role,
     });
-  } else {
-    setVisibility(projectId, switches);
   }
 
   revalidatePath(`/dashboard/projects/${projectId}`);
@@ -357,6 +370,27 @@ export async function submitFieldUpdate(formData: FormData) {
   const project = await (await currentDataSource(fieldScope)).getProject(fieldScope, projectId);
   if (project === null) throw new Error('project not found');
 
+  const photoIds = [...new Set(formData.getAll('photoId').map(String).map((id) => id.trim()).filter(Boolean))];
+  const media = getHubMedia();
+  if (photoIds.length > 0) {
+    if (!media.available) throw new Error('Photos cannot be checked right now. Nothing was submitted; your draft is kept.');
+    // Read exact references, not only the newest page of project photos.
+    // Batches bound concurrent reads when a saved draft contains many photos.
+    for (let start = 0; start < photoIds.length; start += 8) {
+      let photos;
+      try {
+        photos = await Promise.all(photoIds.slice(start, start + 8).map((id) =>
+          media.media.getById(fieldScope, 'photo', id)));
+      } catch (error) {
+        console.error('[field] photos could not be checked', error);
+        throw new Error('Photos could not be checked. Nothing was submitted; your draft is kept.');
+      }
+      if (photos.some((photo) => photo === null || photo.projectId !== projectId || photo.updateId !== null)) {
+        throw new Error('One of those photos is not available for this update. Remove it from the draft before sending.');
+      }
+    }
+  }
+
   // Goes to the Hub's database when there is one. It used to go to an in-memory
   // array that the read path never consulted, so submitting did nothing
   // visible and anything that worked vanished on restart.
@@ -386,16 +420,12 @@ export async function submitFieldUpdate(formData: FormData) {
   // Failing to link must never lose the update: the update is the record of
   // the day's work, and the photographs are still on the project's Photos page
   // either way.
-  const photoIds = formData.getAll('photoId').map(String).filter((id) => id.trim() !== '');
   let linked = 0;
-  if (photoIds.length > 0) {
-    const media = getHubMedia();
-    if (media.available) {
-      try {
-        linked = await media.media.linkToUpdate(fieldScope, 'photo', photoIds, updateId);
-      } catch (error) {
-        console.error('[field] photos did not link to the update', error);
-      }
+  if (photoIds.length > 0 && media.available) {
+    try {
+      linked = await media.media.linkToUpdate(fieldScope, 'photo', photoIds, updateId, projectId);
+    } catch (error) {
+      console.error('[field] photos did not link to the update', error);
     }
   }
 
@@ -449,16 +479,19 @@ export async function submitFieldUpdate(formData: FormData) {
     submittedBy: session.name,
     workCompleted: String(formData.get('workCompleted') ?? ''),
     blocker,
-    // Was hardcoded to 0, so every submission told the PM there were no
-    // photographs — including the ones with six.
-    photoCount: linked > 0 ? linked : photoIds.length,
+    // Only confirmed links belong to this update. Saved project files are not
+    // evidence of attachment when the second write fails.
+    photoCount: linked,
     clientDecisionNeeded: formData.get('clientDecisionNeeded') === 'on',
   });
 
   revalidatePath('/field');
   revalidatePath('/dashboard/updates');
   revalidatePath('/dashboard');
-  redirect(`/field?submitted=1&pm=${notified.sent ? 'sent' : 'no'}`);
+  const photoResult = linked < photoIds.length ? '&photos=partial' : '';
+  const draftRevision = formData.get('draftRevision');
+  const draftResult = isDraftRevision(draftRevision) ? `&draft=${draftRevision}` : '';
+  redirect(`/field?submitted=1&pm=${notified.sent ? 'sent' : 'no'}${photoResult}${draftResult}`);
 }
 
 /**
@@ -507,8 +540,8 @@ export async function returnToMyAccount() {
  * what the Hub owns.
  */
 export async function markTaskSeen(formData: FormData) {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const access = await requireAccess();
+  const session = access.session;
   assertCan(session.role, 'update', 'task');
 
   const taskId = String(formData.get('taskId') ?? '');
@@ -519,6 +552,9 @@ export async function markTaskSeen(formData: FormData) {
   // source, so on live data "Got it" found nothing and the badge never cleared.
   const scope = await actionTenantScope(session);
   const task = (await (await currentDataSource(scope)).listTasks(scope)).find((t) => t.id === taskId);
+  if (task !== undefined && access.projectIds !== null && !access.projectIds.includes(task.projectId)) {
+    throw new Error('project not assigned');
+  }
 
   // Permission and ownership are separate questions and both have to pass.
   // Without the second, a field user could clear somebody else's ding by
@@ -545,13 +581,21 @@ export async function markTaskSeen(formData: FormData) {
  * sharing the client's.
  */
 export async function sendFieldMessage(formData: FormData) {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const access = await requireAccess();
+  const session = access.session;
   assertCan(session.role, 'create', 'message');
 
   const projectId = String(formData.get('projectId') ?? '');
   const body = String(formData.get('body') ?? '').trim();
   if (projectId === '' || body === '') return;
+  const scope = await actionTenantScope(session);
+  const db = await currentDataSource(scope);
+  const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
+  if (!fieldProjectsFor(access, projects, tasks).some((p) => p.buildsuiteProjectId === projectId)) {
+    throw new Error('project not assigned');
+  }
+  const limit = allowClientWrite(scope.contractorId + ':' + uploadActor(session));
+  if (!limit.allowed) throw new Error(limit.message);
 
   // Written to the Hub where there is one, so the note survives the request and
   // the contractor sees it on their side. Internal, and stored with the field
@@ -560,7 +604,7 @@ export async function sendFieldMessage(formData: FormData) {
   const hub = getHubMessages();
   if (hub.available) {
     await hub.messages.post(
-      await actionTenantScope(session),
+      scope,
       { projectId, body, clientVisible: false },
       { name: session.name, role: 'field' },
     );
@@ -596,8 +640,7 @@ export async function sendFieldMessage(formData: FormData) {
 
 /** The scope and identity every Hub write needs, resolved once. */
 async function hubWriteContext(action: 'update' | 'archive', resource: Resource) {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const session = (await requireAccess()).session;
 
   // Permission first, before anything is read or written. A hidden button is a
   // UI fact; a server action is something anyone can post to.
@@ -710,8 +753,7 @@ export async function restoreArchivedItem(formData: FormData) {
 
 /** Contractor-only, checked here rather than trusted from a hidden button. */
 async function teamContext() {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const session = (await requireAccess()).session;
 
   // Managing who has access is the contractor's alone. Not in the resource
   // matrix because a membership is not project data — it is the account.
@@ -888,8 +930,7 @@ export async function resetMemberPassword(formData: FormData) {
  * accident, so it can only be reached by typing it.
  */
 export async function saveInvoiceDraft(formData: FormData) {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const session = (await requireAccess()).session;
   assertCan(session.role, 'update', 'invoice');
 
   const scope = await actionTenantScope(session);
@@ -1064,6 +1105,11 @@ export async function switchAccount(formData: FormData) {
     email: account.email,
     authProfileIds: [account.authProfileId],
     ghlLocationId: account.locationId,
+    ghlUserId: realIdentity(session).ghlUserId,
+    ghlIdentityVerified: realIdentity(session).ghlIdentityVerified,
+    ghlRole: realIdentity(session).ghlRole,
+    returnTo: realIdentity(session),
+    ghlEmbedded: session.ghlEmbedded,
   });
 
   // Everything reads through the scope, so every surface changes at once.
@@ -1156,8 +1202,7 @@ export async function saveInvoiceTemplate(
   _prev: { saved?: boolean; errors?: Record<string, string>; message?: string } | undefined,
   formData: FormData,
 ): Promise<{ saved?: boolean; errors?: Record<string, string>; message?: string }> {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const session = (await requireAccess()).session;
   // The look of an invoice is part of invoicing, which §12.1 gives to the
   // contractor alone.
   assertCan(session.role, 'update', 'invoice');
@@ -1181,8 +1226,7 @@ export async function saveInvoiceTemplate(
 }
 
 export async function createInvoiceOnRail(formData: FormData) {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const session = (await requireAccess()).session;
   // Issuing an invoice is a contractor act. §12.1 — only they control money.
   assertCan(session.role, 'create', 'invoice');
 
@@ -1325,8 +1369,7 @@ export async function createInvoiceOnRail(formData: FormData) {
 
 /** The Hub's schedule repository, or a clear failure. Shared by the three below. */
 async function scheduleContext() {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const session = (await requireAccess()).session;
 
   const hub = getHubSchedule();
   if (!hub.available) {
@@ -1589,8 +1632,7 @@ export async function archiveScheduleItem(formData: FormData) {
 // ever created a task, so that screen was always empty. See task-assignment.ts.
 
 async function taskContext() {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const session = (await requireAccess()).session;
 
   const hub = getHubOperational();
   if (!hub.available) {
@@ -1732,8 +1774,7 @@ export async function archiveProjectTask(formData: FormData) {
 // contractors, `assertCan` checks the matrix, the query filters on the tenant.
 
 async function milestoneContext() {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const session = (await requireAccess()).session;
 
   const hub = getHubOperational();
   if (!hub.available) {
@@ -1824,8 +1865,8 @@ export async function archiveMilestone(formData: FormData) {
 // project it belonged to, so an uploaded file was unreachable.
 
 async function mediaContext() {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const access = await requireAccess();
+  const session = access.session;
 
   const hub = getHubMedia();
   if (!hub.available) {
@@ -1846,6 +1887,7 @@ async function mediaContext() {
  */
 export async function attachProjectFile(formData: FormData) {
   const { session, scope, media } = await mediaContext();
+  if (session.role !== 'contractor') throw new Error('only a contractor may attach files here');
 
   const kind = String(formData.get('kind') ?? '') as 'document' | 'photo';
   if (kind !== 'document' && kind !== 'photo') throw new Error('kind must be document or photo');
@@ -1853,6 +1895,10 @@ export async function attachProjectFile(formData: FormData) {
 
   const projectId = String(formData.get('projectId') ?? '');
   if (projectId === '') throw new Error('projectId is required');
+  const project = await (await currentDataSource(scope)).getProject(scope, projectId);
+  if (project === null) throw new Error('project not found');
+  const access = await requireAccess();
+  if (access.projectIds !== null && !access.projectIds.includes(projectId)) throw new Error('project not assigned');
 
   const label = String(formData.get('label') ?? '');
   const externalUrl = String(formData.get('externalUrl') ?? '').trim();
@@ -1870,6 +1916,7 @@ export async function attachProjectFile(formData: FormData) {
       filename: file.name,
       contentType: file.type || 'application/octet-stream',
       body: await file.arrayBuffer(),
+      actorId: uploadActor(session),
     });
     storagePath = stored.path;
   }
@@ -1961,8 +2008,7 @@ export async function archiveProjectFile(formData: FormData) {
 // only two whose tables did not exist; 0009 creates them.
 
 async function selectionsContext() {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const session = (await requireAccess()).session;
 
   const hub = getHubSelections();
   if (!hub.available) {
@@ -2133,8 +2179,8 @@ export async function archiveChangeOrder(formData: FormData) {
 // already authorized to read, not by a tenant scope they do not hold.
 
 export async function recordClientDecision(formData: FormData) {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const access = await requireAccess();
+  const session = access.session;
 
   const kind = String(formData.get('kind') ?? '') as 'selection' | 'changeOrder';
   if (kind !== 'selection' && kind !== 'changeOrder') {
@@ -2157,7 +2203,6 @@ export async function recordClientDecision(formData: FormData) {
   // this person may see, so a project id they were not given resolves to
   // nothing and the decision is refused — a homeowner cannot answer on another
   // homeowner's job by editing a hidden field.
-  const access = await requireAccess();
   const db = await currentDataSource();
   const mine = await clientProjectsFor(access, db);
   const project = mine.find((p) => p.buildsuiteProjectId === projectId);

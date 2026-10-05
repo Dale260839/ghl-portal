@@ -162,6 +162,17 @@ export class HubMedia {
     return row === undefined ? null : toItem(row, kind);
   }
 
+  async getByStoragePath(scope: TenantScope, kind: MediaKind, path: string): Promise<MediaItem | null> {
+    const { filters, contractorId } = this.tenant(scope, `${kind} by path`);
+    if (!path.startsWith(`${contractorId}/`)) return null;
+    const [row] = await this.client.select<MediaRow>({
+      from: TABLE[kind],
+      filters: { ...filters, storage_path: `eq.${path}`, archived_at: 'is.null' },
+      limit: 1,
+    });
+    return row === undefined ? null : toItem(row, kind);
+  }
+
   async attach(
     scope: TenantScope,
     kind: MediaKind,
@@ -291,15 +302,29 @@ export class HubMedia {
     kind: MediaKind,
     itemIds: readonly string[],
     updateId: string,
+    projectId: string,
   ): Promise<number> {
     const { filters } = this.tenant(scope, `link ${kind}s to an update`);
     const ids = itemIds.filter((id) => id.trim() !== '');
-    if (ids.length === 0 || updateId.trim() === '') return 0;
+    if (ids.length === 0 || updateId.trim() === '' || projectId.trim() === '') return 0;
     if (!(await columnSupport(this.client, TABLE[kind], UPDATE_LINK))) return 0;
+
+    const [update] = await this.client.select({
+      from: 'hub_daily_updates',
+      filters: { ...filters, id: `eq.${updateId}`, project_id: `eq.${projectId}`, archived_at: 'is.null' },
+      limit: 1,
+    });
+    if (update === undefined) return 0;
 
     const updated = await this.client.update<MediaRow>({
       from: TABLE[kind],
-      filters: { ...filters, id: `in.(${ids.join(',')})` },
+      filters: {
+        ...filters,
+        id: `in.(${ids.join(',')})`,
+        project_id: `eq.${projectId}`,
+        update_id: 'is.null',
+        archived_at: 'is.null',
+      },
       patch: { update_id: updateId },
     });
     return updated.length;

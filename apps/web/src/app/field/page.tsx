@@ -10,6 +10,7 @@ import { currentDataSource } from '@/lib/data/current-source';
 import { getHubSchedule, type ScheduleItem } from '@/lib/hub-db/schedule';
 import { appointmentsForField, splitByTime } from '@/lib/field-schedule';
 import { ClearFieldDraft } from '@/components/field-draft';
+import { fieldDraftKey } from '@/lib/field-draft-key';
 
 /**
  * Field Interface (§12.2). Mobile-first, large tap targets, minimal typing.
@@ -22,9 +23,9 @@ import { ClearFieldDraft } from '@/components/field-draft';
 export default async function FieldToday({
   searchParams,
 }: {
-  searchParams: Promise<{ submitted?: string; pm?: string }>;
+  searchParams: Promise<{ submitted?: string; pm?: string; photos?: string; draft?: string }>;
 }) {
-  const { submitted, pm } = await searchParams;
+  const { submitted, pm, photos, draft } = await searchParams;
   const scope = await requireTenantScope();
   const db = await currentDataSource(scope);
   const [projects, tasks] = await Promise.all([db.listProjects(scope), db.listTasks(scope)]);
@@ -67,7 +68,7 @@ export default async function FieldToday({
       {/* The draft goes only when the update is actually filed. This screen is
           where `submitFieldUpdate` lands on success, which is the first moment
           it is safe to throw away what they wrote. */}
-      {submitted === '1' && <ClearFieldDraft />}
+      {submitted === '1' && <ClearFieldDraft draftKey={fieldDraftKey(access.session, scope)} submittedRevision={draft} />}
 
       {submitted === '1' && (
         <div className="rounded-lg border border-emerald-600/20 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
@@ -77,6 +78,13 @@ export default async function FieldToday({
           {pm === 'sent'
             ? 'They have been emailed.'
             : 'Nobody was emailed — tell them if it is urgent.'}
+        </div>
+      )}
+
+      {submitted === '1' && photos === 'partial' && (
+        <div role="alert" className="rounded-lg border border-amber-600/25 bg-amber-soft px-4 py-3 text-sm text-amber-800">
+          Some photos could not be linked to this update. They remain on the project.
+          Your update is saved; do not resend it. Ask your PM to check the photos.
         </div>
       )}
 

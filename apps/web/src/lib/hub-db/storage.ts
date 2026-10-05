@@ -2,6 +2,7 @@ import 'server-only';
 
 import { readHubConfig } from './client.ts';
 import { assertContractor, type TenantScope } from '../tenancy.ts';
+import { consumeUploadBudget } from './upload-budget.ts';
 
 /**
  * Photos and documents, in the Hub's own Supabase Storage.
@@ -95,9 +96,11 @@ export class HubStorage {
    */
   async upload(
     scope: TenantScope,
-    input: { projectId: string; kind: 'photos' | 'documents'; filename: string; contentType: string; body: ArrayBuffer | Uint8Array },
+    input: { projectId: string; kind: 'photos' | 'documents'; filename: string; contentType: string; body: ArrayBuffer | Uint8Array; actorId: string },
   ): Promise<StoredFile> {
     const contractorId = assertContractor(scope, 'upload');
+    if (!/^[a-zA-Z0-9_-]+$/.test(input.projectId)) throw new HubStorageError('invalid project id', null);
+    await consumeUploadBudget({ url: this.url, key: this.key }, scope, input.actorId, input.body.byteLength);
     const path = storagePath(contractorId, input.projectId, input.kind, input.filename);
 
     const response = await fetch(`${this.url}/storage/v1/object/${BUCKET}/${path}`, {

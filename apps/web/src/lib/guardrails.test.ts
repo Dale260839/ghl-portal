@@ -512,7 +512,7 @@ test('a homeowner is served a file only through the portal’s own gates', () =>
   const route = FILES.find((f) => rel(f.path) === 'app/api/files/route.ts');
   assert.ok(route, 'the file route has moved');
   const text = withoutComments(route.text);
-  const clientBranch = text.match(/session\.role === 'client'[\s\S]*?return NextResponse\.json\(\{ error: 'not found' \}, \{ status: 404 \}\);/);
+  const clientBranch = text.match(/access\.role === 'client'[\s\S]*?return NextResponse\.json\(\{ error: 'not found' \}, \{ status: 404 \}\);/);
   assert.ok(clientBranch, 'the homeowner branch has moved');
   assert.match(clientBranch[0], /photosFor\(project\)/);
   assert.match(clientBranch[0], /documentsFor\(project\)/);
@@ -745,7 +745,11 @@ test('§ the file route holds a crew member to their own projects', () => {
 
   // The rules themselves: assigned projects, and field folders for documents.
   assert.match(text, /fieldProjectsFor\(/);
-  assert.match(text, /isFieldFolder\(/);
+  assert.match(text, /getByStoragePath\(/);
+  assert.match(text, /currentAccess\(/);
+  const policy = FILES.find((f) => rel(f.path) === 'lib/file-access.ts');
+  assert.ok(policy);
+  assert.match(withoutComments(policy.text), /isFieldFolder\(/);
 
   // A refusal is a 404, not a 403. Telling a crew member that a document
   // exists but is not theirs is itself a disclosure.
@@ -898,7 +902,7 @@ test('§ a half-written update is never thrown away before it is filed', () => {
   const today = FILES.find((f) => rel(f.path) === 'app/field/page.tsx');
   const form = FILES.find((f) => rel(f.path) === 'app/field/update/page.tsx');
   assert.ok(today && form);
-  assert.match(today.text, /submitted === '1' && <ClearFieldDraft \/>/);
+  assert.match(today.text, /submitted === '1' && <ClearFieldDraft draftKey=\{fieldDraftKey\(/);
   assert.equal(
     /ClearFieldDraft/.test(form.text),
     false,

@@ -126,6 +126,38 @@ test('a 5xx is retryable', async () => {
   );
 });
 
+test('project count refuses HTTP failures instead of reporting zero projects', async () => {
+  for (const status of [401, 403, 429, 503]) {
+    const { client } = clientWith(json({ message: 'unavailable' }, { status }));
+    await assert.rejects(
+      () => client.count('projects', { auth_profile_id: 'eq.tenant-profile' }),
+      (error: unknown) => error instanceof BuildSuiteReadError && error.status === status,
+    );
+  }
+});
+
+test('project count distinguishes exact zero from a missing or invalid total', async () => {
+  const { client } = clientWith(new Response('[]', { headers: { 'content-range': '*/0' } }));
+  assert.equal(await client.count('projects'), 0);
+  for (const range of [null, '0-0/*', '0-0/-1', '0-0/NaN', '0-0/9007199254740992']) {
+    const headers: Record<string, string> = range === null ? {} : { 'content-range': range };
+    const { client: invalid } = clientWith(new Response('[]', { headers }));
+    await assert.rejects(() => invalid.count('projects'), BuildSuiteReadError);
+  }
+});
+
+test('project count network failure is typed and does not expose credentials', async () => {
+  let calls = 0;
+  const client = new BuildSuiteClient(config, { fetchImpl: (async () => {
+    calls += 1;
+    throw new Error('secret-token-in-transport-error');
+  }) as typeof fetch });
+  await assert.rejects(() => client.count('projects'), (error: unknown) =>
+    error instanceof BuildSuiteReadError && error.status === null && error.retryable &&
+    !error.message.includes('secret-token'));
+  assert.equal(calls, 1);
+});
+
 test('config reports which vars are missing rather than throwing', () => {
   const result = readBuildSuiteConfig({} as NodeJS.ProcessEnv);
   assert.equal(result.configured, false);

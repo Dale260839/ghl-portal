@@ -10,6 +10,7 @@ import { toClientUpdates } from '../client-view.ts';
 import { getHubUpdateFeedback } from '../hub-db/update-feedback.ts';
 import { requireTenantScope } from '../scope.ts';
 import { allowClientWrite } from '../upload-limits.ts';
+import { uploadActor } from '../hub-db/upload-budget.ts';
 
 /**
  * A homeowner answering an update, and a contractor answering back
@@ -101,7 +102,7 @@ export async function commentOnUpdate(formData: FormData): Promise<Result> {
 
   // Keyed on the person, after they are known. A key taken from the form would
   // be the attacker's to choose, which is not a limit at all.
-  const limit = allowClientWrite(found.access.session.email || found.access.session.name);
+  const limit = allowClientWrite(uploadActor(found.access.session));
   if (!limit.allowed) return { ok: false, error: limit.message };
 
   const hub = getHubUpdateFeedback();

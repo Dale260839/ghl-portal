@@ -40,6 +40,12 @@ test('§ an update CAN be sent when a photo has failed', () => {
   assert.equal(failed.summary, '1 photo attached. 1 photo did not upload — retry, or send without.');
 });
 
+test('retry backoff and queued manual retries remain in flight', () => {
+  const counts = countUploads(['saved', 'retrying']);
+  assert.deepEqual(counts, { saved: 1, inFlight: 1, failed: 0 });
+  assert.equal(submitGate(counts).canSubmit, false);
+});
+
 test('§ a failure is never silent', () => {
   // The crew member decides to send without it, rather than finding out
   // afterwards that the photo they took never arrived.

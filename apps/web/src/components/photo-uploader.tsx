@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useFieldUploads, countUploads } from '@/components/field-upload-context';
 import { MAX_UPLOAD_ATTEMPTS, retryDelayMs, shouldRetry } from '@/lib/field-upload-state';
@@ -22,7 +22,7 @@ interface Item {
   key: string;
   name: string;
   preview: string;
-  state: 'shrinking' | 'uploading' | 'saved' | 'failed';
+  state: 'shrinking' | 'uploading' | 'retrying' | 'saved' | 'failed';
   error?: string;
   /** How many times we have tried to send this one. */
   attempts: number;
@@ -30,6 +30,7 @@ interface Item {
   blob?: Blob;
   /** The original, when shrinking is what failed. */
   file: File;
+  formValues: Record<string, string>;
   /**
    * The row this photo became, when the server told us.
    *
@@ -85,8 +86,40 @@ export function PhotoUploader({
   const [items, setItems] = useState<Item[]>([]);
   const root = useRef<HTMLDivElement>(null);
   const queue = useRef(Promise.resolve());
+  const mounted = useRef(true);
+  const hadDraftPhotos = useRef(false);
+  const currentItems = useRef(items);
+  currentItems.current = items;
+  const { report, restoredPhotos, restorePhotos } = useFieldUploads();
+  // Restored references keep their original project just like new uploads.
+  const lockedValues = useMemo(() => items[0]?.formValues ??
+    (restoredPhotos === null ? undefined : { projectId: restoredPhotos.projectId }), [items, restoredPhotos]);
+  const restoredIds = restoredPhotos?.photoIds ?? [];
+  const savedIds = [...new Set([...restoredIds, ...items.flatMap((item) =>
+    item.state === 'saved' && item.photoId !== undefined ? [item.photoId] : [])])];
 
-  useEffect(() => () => items.forEach((i) => URL.revokeObjectURL(i.preview)), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const form = root.current?.closest('form');
+    if (!form || !lockedValues) return;
+    const locked: HTMLSelectElement[] = [];
+    for (const [name, value] of Object.entries(lockedValues)) {
+      const field = Array.from(form.elements).find((e) => e instanceof HTMLSelectElement && e.name === name);
+      if (field instanceof HTMLSelectElement && !field.disabled) {
+        field.value = value;
+        field.disabled = true;
+        locked.push(field);
+      }
+    }
+    return () => locked.forEach((field) => { field.disabled = false; });
+  }, [lockedValues]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      currentItems.current.forEach((i) => URL.revokeObjectURL(i.preview));
+    };
+  }, []);
 
   const patch = (key: string, next: Partial<Item>) =>
     setItems((all) => all.map((i) => (i.key === key ? { ...i, ...next } : i)));
@@ -99,24 +132,20 @@ export function PhotoUploader({
    * site watching a photo that will never send needs to be told, not soothed.
    * The shrunk blob is kept so a retry does not re-do work that succeeded.
    */
-  async function attempt(key: string, file: File, existing: Blob | undefined, attempts: number) {
+  async function attempt(key: string, file: File, existing: Blob | undefined, attempts: number, formValues: Record<string, string>) {
+    if (!mounted.current) return;
     const tries = attempts + 1;
     try {
       patch(key, { state: existing === undefined ? 'shrinking' : 'uploading', attempts: tries });
       const blob = existing ?? (await shrink(file));
+      if (!mounted.current) return;
       patch(key, { state: 'uploading', blob });
 
       const form = new FormData();
       const name = file.name.replace(/\.[^.]+$/, '') + (blob.type === 'image/jpeg' ? '.jpg' : '');
       form.append('file', new File([blob], name || 'photo.jpg', { type: blob.type || file.type }));
       for (const [k, v] of Object.entries(fields)) form.append(k, v);
-      const enclosing = root.current?.closest('form');
-      for (const fieldName of formFields) {
-        const field = enclosing?.elements.namedItem(fieldName);
-        if (field instanceof HTMLSelectElement || field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
-          form.append(fieldName, field.value);
-        }
-      }
+      for (const [k, v] of Object.entries(formValues)) form.append(k, v);
 
       const result = await upload(form);
       if (result.ok) {
@@ -126,11 +155,11 @@ export function PhotoUploader({
         });
         return;
       }
-      await giveUpOrRetry(key, file, blob, tries, result.error);
+      await giveUpOrRetry(key, file, blob, tries, result.error, formValues);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'The photo did not upload. Try again.';
-      await giveUpOrRetry(key, file, existing, tries, message);
+      await giveUpOrRetry(key, file, existing, tries, message, formValues);
     }
   }
 
@@ -140,20 +169,32 @@ export function PhotoUploader({
     blob: Blob | undefined,
     tries: number,
     error: string,
+    formValues: Record<string, string>,
   ) {
     if (!shouldRetry(tries)) {
       patch(key, { state: 'failed', error, attempts: tries });
       return;
     }
-    patch(key, { state: 'failed', error, attempts: tries });
+    patch(key, { state: 'retrying', error, attempts: tries });
     await new Promise((resolve) => setTimeout(resolve, retryDelayMs(tries)));
-    await attempt(key, file, blob, tries);
+    await attempt(key, file, blob, tries, formValues);
   }
 
   function add(files: FileList | null) {
     if (files === null) return;
     for (const file of Array.from(files)) {
       const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      // Keep the job chosen when the photo was added, including across retries.
+      const formValues: Record<string, string> = { ...lockedValues };
+      const enclosing = root.current?.closest('form');
+      for (const fieldName of formFields) {
+        const field = enclosing && Array.from(enclosing.elements).find((e) =>
+          (e instanceof HTMLSelectElement || e instanceof HTMLInputElement || e instanceof HTMLTextAreaElement) &&
+          e.name === fieldName && !(e instanceof HTMLInputElement && e.type === 'hidden'));
+        if (field instanceof HTMLSelectElement || field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+          formValues[fieldName] = field.value;
+        }
+      }
       const item: Item = {
         key,
         name: file.name,
@@ -161,11 +202,12 @@ export function PhotoUploader({
         state: 'shrinking',
         attempts: 0,
         file,
+        formValues,
       };
       setItems((all) => [...all, item]);
 
       // One at a time: a site connection handles a queue better than a burst.
-      queue.current = queue.current.then(() => attempt(key, file, undefined, 0));
+      queue.current = queue.current.then(() => attempt(key, file, undefined, 0, formValues));
     }
   }
 
@@ -173,24 +215,31 @@ export function PhotoUploader({
   function retry(key: string) {
     const item = items.find((i) => i.key === key);
     if (item === undefined) return;
-    queue.current = queue.current.then(() => attempt(key, item.file, item.blob, 0));
+    patch(key, { state: 'retrying', attempts: 0 });
+    queue.current = queue.current.then(() => attempt(key, item.file, item.blob, 0, item.formValues));
   }
 
-  const saved = items.filter((i) => i.state === 'saved').length;
-  const busy = items.some((i) => i.state === 'shrinking' || i.state === 'uploading');
+  const saved = savedIds.length + items.filter((i) => i.state === 'saved' && i.photoId === undefined).length;
+  const busy = countUploads(items.map((i) => i.state)).inFlight > 0;
 
-  // Tell the form around us what is happening, so its send button can wait for
-  // photos that are seconds away. Without a provider this goes nowhere, which
-  // is what the task screen wants.
-  const { report } = useFieldUploads();
+  // Daily and task forms wait for in-flight photos; upload-only screens do not.
   useEffect(() => {
-    report(countUploads(items.map((i) => i.state)));
-  }, [items, report]);
+    report(countUploads([...items.map((i) => i.state), ...restoredIds.map(() => 'saved' as const)]));
+    // Hidden references have committed to the form. Persist them even when
+    // the crew has not typed anything since the upload finished.
+    if (items.length > 0 || restoredPhotos !== null || hadDraftPhotos.current) {
+      root.current?.closest('form')?.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    hadDraftPhotos.current = restoredPhotos !== null;
+  }, [items, restoredPhotos, report]);
   const button =
     'inline-flex min-h-10 cursor-pointer items-center justify-center rounded-lg border border-navy-200 bg-white px-3.5 text-sm font-medium text-navy-800 transition hover:bg-navy-50';
 
   return (
     <div ref={root} className="space-y-2.5">
+      {lockedValues && Object.entries(lockedValues).map(([name, value]) => (
+        <input key={name} type="hidden" name={name} value={value} />
+      ))}
       <div className="flex flex-wrap gap-2">
         <label className={button}>
           Take photo
@@ -223,14 +272,26 @@ export function PhotoUploader({
       {countFieldName !== undefined && <input type="hidden" name={countFieldName} value={saved} />}
 
       {/* One per saved photo. The server reads them all with getAll(). */}
-      {items
-        .filter((i) => i.state === 'saved' && i.photoId !== undefined)
-        .map((i) => (
-          <input key={i.photoId} type="hidden" name="photoId" value={i.photoId} />
-        ))}
+      {savedIds.map((id) => (
+        <input key={id} type="hidden" name="photoId" value={id} />
+      ))}
 
-      {items.length > 0 && (
+      {(items.length > 0 || restoredIds.length > 0) && (
         <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {restoredIds.map((id) => (
+            <li key={`draft-${id}`} className="relative overflow-hidden rounded-lg border border-navy-100 bg-navy-50">
+              {/* The authenticated file route rechecks live project access. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/api/files?kind=photo&id=${encodeURIComponent(id)}`} alt="Saved draft photo" className="aspect-square w-full object-cover" />
+              <span className="absolute inset-x-0 bottom-0 bg-navy-900/70 px-1.5 py-1 text-[11px] font-medium text-white">From draft</span>
+              <button type="button" aria-label="Detach photo from draft" title="Detach photo from draft"
+                className="absolute right-1 top-1 min-h-10 rounded border border-navy-200 bg-white px-2 text-xs font-medium text-navy-800"
+                onClick={() => {
+                  const remaining = restoredIds.filter((savedId) => savedId !== id);
+                  restorePhotos(remaining.length === 0 ? null : { projectId: restoredPhotos!.projectId, photoIds: remaining });
+                }}>Detach</button>
+            </li>
+          ))}
           {items.map((item) => (
             <li key={item.key} className="relative overflow-hidden rounded-lg border border-navy-100 bg-navy-50">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -248,6 +309,8 @@ export function PhotoUploader({
                   ? 'Saved'
                   : item.state === 'failed'
                     ? 'Not saved'
+                    : item.state === 'retrying'
+                      ? 'Retrying…'
                     : item.state === 'uploading'
                       ? 'Uploading…'
                       : 'Preparing…'}

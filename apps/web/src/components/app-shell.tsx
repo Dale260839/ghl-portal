@@ -1,6 +1,6 @@
 import { SubmitButton } from '@/components/submit-button';
 import type { ReactNode } from 'react';
-import { signOut } from '@/lib/actions';
+import { SignOutForm } from './sign-out-form';
 import { PageTransition } from './page-transition';
 import { MobileNav, SidebarNav, type NavItem } from './sidebar-nav';
 
@@ -95,13 +95,13 @@ export function AppShell({
             <div className="ml-auto flex shrink-0 items-center gap-3">
               {headerExtra}
               <span className="hidden text-xs text-navy-400 sm:block">{userName}</span>
-              <form action={signOut}>
+              <SignOutForm>
                 <SubmitButton
                   className="press rounded-full border border-navy-200 bg-white px-3 py-1.5 text-xs font-medium text-navy-600 shadow-[0_1px_2px_rgba(10,31,68,0.06)] transition-colors hover:border-navy-400/40 hover:bg-navy-50"
                 >
                   Sign out
                 </SubmitButton>
-              </form>
+              </SignOutForm>
             </div>
           </header>
 

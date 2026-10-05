@@ -1,0 +1,307 @@
+# Project Hub readiness - 2 October 2026
+
+## Decision
+
+The selected live crew -> PM -> homeowner happy path was exercised successfully
+on the approved Test Project. That is not an unrestricted client-launch signoff.
+Local hardening is tested but is not deployed. No production release or schema
+change was made in this audit. BuildSuite remained read-only throughout.
+
+## Current Release
+
+- Branch: `codex/photo-flow-hardening`, starting from `ec2e9b1`.
+- Latest company main: `4f0b573b9986aed64a45eb2afe7bfa5c241f0d92`.
+  Since the earlier `11b0fce` check, it adds health reporting, month-grouped
+  homeowner photos and project-specific crew message threads, plus removes
+  four redundant project-link headings. This upstream work is now merged into
+  the local hardening branch; nothing was pushed or deployed by this audit.
+- GitHub's Vercel status for `4f0b573` is success:
+  https://vercel.com/allianceforcontractors-2450s-projects/project-hub/HRmMkD7a8kqCgL1VDHNqWWXLwqyM
+- The feature preview still shows Request Sent for the authorized Dale Work
+  account. Approval remains pending. Keep deployment protection enabled.
+- The new handoff's migration/SSO checklist is historical, not proof of current
+  absence. Live schema checks already verified 0019, 0020 and 0021. Do not
+  rerun migrations. SSO is implemented in this branch, not proven live.
+
+## Live Evidence
+
+One synthetic photo and one crew update were submitted on the existing pilot
+task. The PM reviewed the update and released only its test-safe summary and
+the selected synthetic photo. Only Test Project's Show Photos and Show Daily
+Updates were enabled; other settings remained unchanged. Normal contractor
+entry and actual test-homeowner sign-in were used, not minted live sessions.
+
+The actual homeowner saw the released photo (960 x 640) and the published
+summary after reload. The older Approved Internally record/internal QA marker
+was absent. These observations do not replace exhaustive response tests.
+
+The exact 12:34 PM Manila test email was found independently in APS GHL
+Conversations. Its review link targets `/dashboard/updates`. This proves a GHL
+message record exists, not external inbox delivery. No inbox owner needs to
+participate in further local debugging.
+
+Live SQL confirmed a genuine gap: the pilot photo has the correct task_id but
+its update_id is null. The local task-action fix below addresses that gap for
+new submissions; existing production records were not silently repaired.
+
+After the newer upstream deployment, the existing actual test-homeowner
+session was used for a read-only gallery check. `/portal/photos` shows
+October 2026, one photo, and the approved pilot image loads at 960 x 640.
+Screenshot: `live-new-month-gallery.jpg`. This confirms that selected live
+gallery view, not 400-photo capacity or the undeployed update-link fix.
+
+All 23 Hub tables had RLS enabled, the media bucket was private, no browser
+TRUNCATE grants were found, and the service-only budget function and photo
+guard were present. Detailed evidence is in the Desktop audit folder.
+
+## Live Sign-In Configuration
+
+The existing Alliance Work Chrome tab allowed a read-only agency settings
+inspection on 2 October, around 3:45-4:00 PM Manila. No settings were saved.
+
+- Agency Custom Menu Links has an existing `Project Hub` row with URL
+  `https://project-hub-one-vert.vercel.app/auth/ghl?locationId={{location.id}}`.
+- Its open mode is `New Tab`, visibility is `Agency, Account`, and account
+  selection is `All`. The editor displays role visibility `Admin`. This is
+  menu placement, not proof that every sub-account is connected or that every
+  user can access project data. The editor was cancelled without changes.
+- Agency Marketplace > Installed Apps shows `ProjectHub`, Free, Active,
+  installed by Dale Tamargo on 23 September 2026 at 12:10 PM in that UI.
+  Installation is confirmed; its Custom Page module and shared-secret/server
+  pairing were not exposed by this installed-app table and remain unverified.
+- The protected feature preview still displays `Request Sent` for
+  `dale@alliance4contractors.com`. No approval or preview access is proven.
+- A fresh company-main fetch remains `11b0fce`; GitHub reports a successful
+  Vercel status for that commit. The locally hardened code at `236f59e` has not
+  been pushed or deployed by this audit.
+
+The current New Tab URL carries a location claim, not a verified user identity.
+The hardened release deliberately refuses it. Do not promote first and discover
+the replacement is missing. The required cutover is the existing Marketplace
+app's Custom Page/parent-context integration and matching server configuration,
+followed by an actual signed-in iframe test with partitioned cookies. Simply
+changing an ordinary custom menu link to Embedded Page is not proof that the
+Marketplace context provider works or that the correct secret is configured.
+
+The official [HighLevel user-context protocol](https://marketplace.gohighlevel.com/docs/2021-07-28/other/user-context-marketplace-apps/index.html)
+documents requesting encrypted context from the parent Custom Page and
+decrypting it server-side with the app's shared secret. No secret was copied,
+generated or changed in this inspection. Any required live app/module, menu,
+environment or deployment changes still need specific approval under D-003.
+
+Screenshots in the Desktop audit folder: `live-ghl-menu-configuration.jpg` and
+`live-ghl-marketplace-installation.jpg`. Structured findings:
+`release-entry-check.json`. The current access/configuration gap belongs to
+the owning account; Chris specifically is not required for engineering checks.
+
+## Local Fixes
+
+- Task submissions validate saved photo IDs against the authorized task/project
+  before writes, ignore forged photo counts, and link photos to the new update.
+  Link failure preserves the update and reports the partial result honestly.
+- Both task and daily forms wait for uploads/retries. Rejected task submissions
+  retain text, status and saved photo IDs despite React's native form reset.
+  Successful submissions clear them so subsequent updates cannot reuse photos.
+- Negative/non-finite crew counts and hours are rejected before database access;
+  crew counts must also be integers. Zero and non-negative fractional hours work.
+- A detected real data source without Hub storage refuses operational writes
+  instead of reporting an in-memory fixture save. Explicit fixture mode remains
+  available for isolated development; this is not a ban on all fixture reads.
+- Hub requests now have a 15-second timeout. Network failure is reported without
+  credential details. Writes are never automatically retried because an uncertain
+  write may already have committed. This is not a confirmed fix for the live
+  Overview digest below.
+- BuildSuite exact counts now reject failed HTTP/transport reads and missing or
+  invalid totals instead of silently showing zero projects. Confirmed exact
+  zero remains zero. The new regressions failed on the former implementation.
+- Overview reports an optional proposal/team read outage in that section, not
+  as a missing contract or an empty access list. A proposal outage no longer
+  takes down the rest of a successfully loaded overview. Mandatory ownership,
+  project, overlay and operational reads still fail closed. Actual GHL money
+  remains usable when only the optional BuildSuite proposal read fails.
+- The actual webhook route now verifies current Ed25519, legacy RSA and explicit
+  relay HMAC with separate header/key selection. Invalid or blank current
+  signatures never downgrade to a valid legacy/relay signature. Native resource
+  IDs are not treated as delivery IDs, and record creation dates no longer make
+  new updates look stale. `OpportunityStageUpdate` routes to the stage planner.
+- Webhook workflow execution is NOT implemented. The former route returned
+  success after only logging recognized events. It now returns an explicit
+  unavailable response without marking them processed; repeated attempts are
+  not mistaken for completed work. Unknown authenticated event types remain
+  deliberately ignored. This is truthful failure handling, not finished sync.
+- The example environment now documents current/legacy webhook keys, the
+  server-only SSO configuration and the required server credentials for both
+  databases. No live keys, grants, secrets or menu links were changed.
+- Daily draft recovery now includes saved photo IDs, crew/hours, weather and
+  the decision checkbox. Upload completion persists references without needing
+  another typing event, including a photo-only draft. Restoring photos locks
+  the original project; detaching a reference preserves the text and never
+  deletes a stored file. Legacy text-only drafts remain compatible. References
+  use the authenticated file route, not cached storage paths or signed URLs.
+- Daily update submission rechecks every saved reference against its tenant,
+  project and unlinked status before any write, with at most eight concurrent
+  reads. Missing/stale/wrong-project references fail closed. A later link
+  failure preserves the update and displays a partial-filing warning; the PM
+  message counts only confirmed links, not IDs supplied by the form.
+- Successful daily draft cleanup now matches the exact opaque revision sent
+  with that submission. Revisiting an earlier success URL cannot erase a later
+  unsent update. Legacy success URLs without a marker do not clear drafts.
+  Only the marker is returned in the redirect, not private draft content.
+  This is browser cleanup metadata, not server-side submission idempotency.
+- Contractor mutation entry points now use the existing current-access check
+  before trusting a session role. Revoked invited users cannot use a stale
+  contractor cookie for project, team, schedule, task, selection or invoice
+  writes; a role downgrade is applied before PM review/publishing. This keeps
+  the existing permission matrix and read-only grant semantics unchanged.
+  Native GHL sessions without a membership still follow the existing access
+  model; this does not add GHL staff revocation or prove live SSO readiness.
+- Visibility changes now prove ownership through the tenant-scoped project
+  reader before upserting a project-ID-keyed row. Restricted assignments are
+  checked too. Missing live storage, invalid live IDs and failed ownership
+  reads cannot fall back to a fixture save or report success. Explicit fixture
+  development remains supported. A crew task acknowledgement also rechecks
+  current project assignment as well as task ownership.
+- The newly merged health report no longer prints raw database error bodies
+  or treats a failed/cached compatibility probe as proof that a migration did
+  not run. It probes required columns freshly, reports failed checks as failures
+  and distinguishes column readability from full migration verification.
+  OAuth configuration no longer falsely requires a fallback PIT. User-context
+  configuration, unsigned-link refusal and absent durable webhook execution
+  are reported without claiming verified live sign-in or delivery history.
+  This correction is local, not a change to the deployed health page.
+
+Draft recovery is limited to this user's tab-session storage for one day.
+Unsaved file bytes and in-flight upload queues are NOT restored after a reload,
+and closing the tab can discard session storage. This is not full offline mode.
+Operational submission/photo linking are still separate database writes;
+bounded preflight reads do not make those writes transactional.
+
+## Backup Evidence
+
+The actual Hub project's Database > Backups page was read without changing
+settings. It states that the Free plan does not include project backups.
+Screenshot: `live-backup-availability.jpg` in the Desktop audit folder.
+This proves managed backup availability, not the absence of every possible
+external/manual backup. No backup archive or successful restore was verified.
+
+The official [Supabase backup documentation](https://supabase.com/docs/guides/platform/backups)
+also states that database backups exclude Storage object bytes. Restoring the
+database alone would not restore deleted photos or PDFs. Before client launch,
+verify protected database exports plus file copies and a restore to an isolated,
+approved target. Do not restore over production, create a new hosted project,
+upgrade a plan, or transmit production backups elsewhere without specific
+approval. No upgrade, export or restore was performed in this audit.
+
+## Webhook Integration Gap
+
+The route has neither a durable queue nor a configured workflow executor.
+Do not enable business-effect ingestion until confirmed tenant/record mappings,
+approved durable idempotency and real delivery tests exist. A console log or
+GET registration response is not execution evidence. There is no migration
+or invented record mapping in this patch.
+
+Current signature and `OpportunityStageUpdate` payload behavior were checked
+against the official [integration guide](https://marketplace.gohighlevel.com/docs/webhook/WebhookIntegrationGuide/)
+and [event specification](https://marketplace.gohighlevel.com/docs/webhook/OpportunityStageUpdate/index.html).
+The integration guide describes retries for non-2xx responses, but a separate
+[retry support article](https://help.gohighlevel.com/support/solutions/articles/155000007071-automated-webhook-retries)
+describes only 429 retries. These descriptions conflict. Do not claim that a
+503 guarantees redelivery or recovery; verify the owning app's actual behavior.
+The [logs dashboard](https://marketplace.gohighlevel.com/docs/webhook/WebhookLogsDashboard/)
+supports inspecting deliveries and manually retrying failed latest deliveries.
+
+## Verification
+
+- Web: 1,374 tests passed, zero failures after merging latest company main.
+- Shared contracts: 40 tests passed, zero failures.
+- Workspace typecheck and optimized production build passed.
+- Production dependency audit: zero reported vulnerabilities.
+- Real React uploader/task form harness passed automatic/manual retry, a
+  12-photo queue, project locking, draft isolation/expiry, rejected-form
+  preservation, successful reset and no reused photo IDs.
+- Cross-origin GHL Connecting component harness passed handshake, untrusted
+  origin refusal, malformed-context timeout and signed-query preservation.
+  Its backend is mocked, not a live Marketplace sign-in.
+- Local production-build stress: 880/880 expected responses, 16 workers,
+  p95 126 ms. No live credentials or services were configured. This is not
+  Vercel capacity, live Postgres contention or a real authentication test.
+- Local 390 x 844 and 1440 x 900 pages rendered without horizontal overflow;
+  sign-out, unsigned-login refusal, forged origin and revoked access passed.
+- `scripts/test-overview-ui.mjs` renders actual Overview JSX with application
+  CSS and mocked reads/editor at 390/1440 px. Both outage notices are visible
+  without overflow; screenshots are local fixtures, not live product evidence.
+- Reintroducing the former writer fallback made the new regression fail;
+  the fixed source was restored and the full suite passed afterward.
+- Database tests cover quota rollback and photo/update trigger boundaries using
+  PGlite. Invoice tests use mocked GHL; no invoices were sent or paid.
+- Thirteen new native-signature/actual-route tests use freshly generated local
+  keys. They cover valid schemes, tampering, wrong algorithm, missing config,
+  downgrade refusal (including a blank current header), successive resource
+  updates, old record dates and repeated unexecuted workflow requests.
+- Fourteen further draft-state/daily-action tests cover backward compatibility,
+  expiry/corruption, safe reference shapes, meaningful default-value changes,
+  duplicate/stale/wrong-project references, bounded reads and partial linking.
+  The actual daily action is bundled with isolated read/write/notification
+  adapters; this is not live database execution.
+- The real React harness also proves saved photo/all-field restoration after
+  reload, user isolation of references, photo-only recovery, detach without
+  losing text, original-project locking and successful cleanup. The regression
+  failed before the recovery change. Application CSS at 390/1440 px passes
+  overflow/control-containment checks. Screenshot photo responses are mocked,
+  not live file-authorization evidence.
+- Four additional revision tests cover malformed/legacy metadata, exact-match
+  cleanup, preserving a later draft and actual action redirect validation.
+  The React regression reproduced deletion by the former cleanup code; the
+  fixed component preserves new text when an old success landing is revisited,
+  while clearing a matching successful submission normally.
+- Fifty actual-action isolation tests cover stale/revoked sessions at
+  34 mutation entry points, current role downgrade, permitted PM review paths,
+  cross-project visibility, assignment changes, storage/read outages and
+  explicit fixture-mode controls. The new visibility regressions failed before
+  the ownership/failure-handling fix. Adapters are mocked; these are not live
+  production revocation tests. The invoice concurrency harness was updated to
+  supply current access, with an added 100-request revoked-access burst that
+  claims no draft and calls no external invoice service. All duplicate and
+  uncertain-save invoice cases continue to pass.
+- Six new bundled actual-health-report tests use isolated database readers,
+  covering error-text redaction, non-Error failures, outage versus migration
+  absence, same-process recovery, secure-entry/webhook reporting and OAuth
+  without a fallback PIT. These are local checks, not live health execution.
+
+## Remaining Release Gates
+
+1. Authorized owning-account access to the feature release and logs. No need
+   for Chris specifically, no shared password and no disabled protection.
+   A fresh owning-project Logs check still returned Vercel 404 while Dale's
+   Work account was signed in; the loading shell was not actual log access.
+2. Configure and verify the replacement GHL Custom Page iframe and server-side
+   SSO settings from the 1 October cutover document. An API token alone does
+   not authenticate a contractor. Promoting before this test could lock out
+   the existing unsigned-menu entry.
+3. Investigate live Overview digest `3098744270` at 01:49:12 UTC on 2 October.
+   Reload recovered and three bounded rechecks passed; root cause is unproven.
+4. After an explicitly approved release, rerun the selected real-user photo
+   flow and verify task photo update_id and inline review-queue rendering.
+   Test PDF/upload-limit failure without opening browser database access.
+5. Establish real cross-project and revoked-membership file-denial evidence.
+   Chrome ERR_BLOCKED_BY_CLIENT on the earlier probe is not server 403/404 proof.
+   Verify the new mutation-access and visibility-owner checks on the approved
+   release; local action tests do not establish production enforcement.
+6. Verify usable database AND photo/PDF backup/recovery; managed project backups
+   are not included on this project's current Free plan. Implement and verify the missing durable
+   webhook ingestion/workflow execution with confirmed record mappings and
+   specific approval for any live changes. Verify real retry behavior and
+   stage-sync configuration; GHL remains the owner of stage movement.
+7. Notifications are best effort; a durable outbox/retry mechanism is not
+   verified. A GHL message record must not be described as mailbox delivery.
+8. Payments remain draft-only until a GHL gateway is configured. Do not collect
+   test payments or send real invoices as part of readiness testing.
+
+## Next
+
+Keep the tested patch on the feature branch. Obtain only the owning release
+access/configuration needed for the secure GHL entry, then seek specific
+cutover approval. Do not merge to company main, push a deployment, change
+production secrets, repair live data, or rerun migrations to make checks green.
+
+Evidence folder: `C:\Users\Lenovo\Desktop\chris\PROJECT-HUB-READINESS-AUDIT-2026-10-02`.

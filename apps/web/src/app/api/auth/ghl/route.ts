@@ -10,6 +10,7 @@ import { currentAgencyToken } from '@/lib/ghl/agency-token';
 import { hasTriedConnecting, markConnectAttempted } from '@/lib/connect-attempt';
 import { getBuildSuiteReader } from '@/lib/buildsuite/projects';
 import { homeFor, setSession, type Role } from '@/lib/session';
+import { decryptGhlIdentity, type GhlIdentity } from '@/lib/auth/ghl-sso';
 
 /**
  * GoHighLevel Custom Menu Link landing (D-011, D-015).
@@ -18,9 +19,7 @@ import { homeFor, setSession, type Role } from '@/lib/session';
  *
  *   https://api.buildsuite.ai/api/v1/auth/ghl_auth_callback?locationId=IifYfP2B2NUaoDPdsTTa
  *
- * — one parameter. **The tenant is the sub-account, not a person.** Everything
- * the contractor then sees is scoped to that location, which is why a single
- * `locationId` is enough to establish a session.
+ * The sub-account selects the tenant. It does not authenticate the caller.
  *
  * Our menu link is the same shape:
  *
@@ -29,8 +28,8 @@ import { homeFor, setSession, type Role } from '@/lib/session';
  * ---------------------------------------------------------------------------
  * The parameter is a CLAIM, not proof. GHL doesn't sign merge fields, so anyone
  * who learns this address could substitute another agency's location id. Before
- * minting anything we ask GHL — with our own credential — whether that location
- * is real and ours. A location we can't confirm gets no session.
+ * minting anything we require signed user identity or decrypted Marketplace
+ * user context. A location lookup using our own credential is not user proof.
  * ---------------------------------------------------------------------------
  */
 
@@ -97,12 +96,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     },
     {
       signingSecret: process.env.GHL_MENU_LINK_SECRET,
-      // The claim passes this first gate when we hold a credential to check it
-      // with below. Without one, only the explicit development opt-in remains.
+      // Never let possession of the server's API token authenticate a caller.
       allowUnverified:
-        ghlConfig.configured ||
-        (process.env.NODE_ENV !== 'production' &&
-          process.env.GHL_ALLOW_UNVERIFIED_LANDING === 'true'),
+        process.env.NODE_ENV !== 'production' &&
+        process.env.GHL_ALLOW_UNVERIFIED_LANDING === 'true',
     },
   );
 
@@ -203,6 +200,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return reject(request, 'Sign-in from GoHighLevel is not configured yet.');
   }
 
+  return establishSession(request, landing, landing.proof === 'signature');
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  if (request.headers.get('origin') !== request.nextUrl.origin) {
+    return NextResponse.json({ ok: false, error: 'Sign-in request refused.' }, { status: 403 });
+  }
+  if (!request.headers.get('content-type')?.startsWith('application/json')) {
+    return NextResponse.json({ ok: false, error: 'Sign-in request refused.' }, { status: 400 });
+  }
+  try {
+    const raw = await request.text();
+    if (raw.length > 20_000) return NextResponse.json({ ok: false }, { status: 413 });
+    const body = JSON.parse(raw) as Record<string, unknown>;
+    const identity = decryptGhlIdentity(body.encryptedData, {
+      secret: process.env.GHL_APP_SHARED_SECRET,
+      companyId: process.env.GHL_SSO_COMPANY_ID,
+      requestedLocation: typeof body.locationId === 'string' ? body.locationId : undefined,
+    });
+    if (identity === null) {
+      return NextResponse.json({ ok: false, error: 'Could not verify your GoHighLevel identity.' }, { status: 401 });
+    }
+    return establishSession(request, identity, true, true);
+  } catch {
+    return NextResponse.json({ ok: false, error: 'Sign-in request refused.' }, { status: 400 });
+  }
+}
+
+async function establishSession(
+  request: NextRequest,
+  landing: GhlIdentity,
+  verified: boolean,
+  embedded = false,
+): Promise<NextResponse> {
+  const { locationId } = landing;
   // ── Resolve the tenant ────────────────────────────────────────────────────
   const reader = getBuildSuiteReader();
   if (!reader.available) {
@@ -235,10 +267,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   await setSession({
     role,
-    name: landing.email ?? 'GoHighLevel user',
+    name: landing.name ?? landing.email ?? 'GoHighLevel user',
     email: landing.email ?? '',
     authProfileIds,
     ghlLocationId: locationId,
+    ghlUserId: landing.userId,
+    ghlIdentityVerified: verified,
+    ghlRole: landing.ghlRole,
+    ghlEmbedded: embedded,
   });
 
   console.log(

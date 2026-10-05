@@ -11,6 +11,8 @@ import { hubScopeOfProject } from '../tenant-scope.ts';
 import { currentDataSource } from '../data/current-source.ts';
 import { getHubMessages, type HubMessages } from '../hub-db/messages.ts';
 import { notifyHomeowner } from '../notify/homeowner.ts';
+import { allowClientWrite } from '../upload-limits.ts';
+import { uploadActor } from '../hub-db/upload-budget.ts';
 
 /**
  * The message write paths.
@@ -58,8 +60,9 @@ function repository(): HubMessages {
  * a value read.
  */
 export async function postProjectMessage(formData: FormData) {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const access = await requireAccess();
+  const session = access.session;
+  if (access.role !== 'contractor') throw new Error('only a contractor may post here');
   assertCan(session.role, 'create', 'message');
 
   const projectId = String(formData.get('projectId') ?? '');
@@ -68,6 +71,8 @@ export async function postProjectMessage(formData: FormData) {
   if (body.trim() === '') return;
 
   const scope = await actionTenantScope(session);
+  if (access.projectIds !== null && !access.projectIds.includes(projectId)) throw new Error('project not assigned');
+  if (await (await currentDataSource(scope)).getProject(scope, projectId) === null) throw new Error('project not found');
   const release = formData.get('release') !== null;
   await repository().post(
     scope,
@@ -92,8 +97,7 @@ export async function postProjectMessage(formData: FormData) {
  * edit of that record, and the matrix grants it to a contractor alone.
  */
 export async function setMessageVisibility(formData: FormData) {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const session = (await requireAccess()).session;
   assertCan(session.role, 'update', 'message');
 
   const messageId = String(formData.get('messageId') ?? '');
@@ -121,8 +125,7 @@ export async function setMessageVisibility(formData: FormData) {
 
 /** Remove a message from the thread. Archived, never deleted. */
 export async function archiveMessage(formData: FormData) {
-  const session = await getSession();
-  if (session === null) throw new Error('not signed in');
+  const session = (await requireAccess()).session;
   assertCan(session.role, 'archive', 'message');
 
   const messageId = String(formData.get('messageId') ?? '');
@@ -168,6 +171,8 @@ export async function postClientMessage(formData: FormData) {
   if (scope === null) {
     throw new Error('this project is not linked to a contractor, so nothing can be filed under it');
   }
+  const limit = allowClientWrite(scope.contractorId + ':' + uploadActor(access.session));
+  if (!limit.allowed) throw new Error(limit.message);
   await repository().post(
     scope,
     { projectId, body, clientVisible: true },

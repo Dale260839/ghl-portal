@@ -21,9 +21,16 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
   // proposal carries the figure the invoices are actually built from, and this
   // screen was showing the band as though it were the contract.
   const proposalsReader = getProposalsReader();
-  const proposal = proposalsReader.available
-    ? pickCurrentProposal(await proposalsReader.listForProjects(scope, [id]))
-    : null;
+  let proposal: ReturnType<typeof pickCurrentProposal> = null;
+  let proposalUnavailable = false;
+  if (proposalsReader.available) {
+    try {
+      proposal = pickCurrentProposal(await proposalsReader.listForProjects(scope, [id]));
+    } catch (error) {
+      proposalUnavailable = true;
+      console.error('[project-overview] proposal read unavailable', error instanceof Error ? error.name : 'unknown');
+    }
+  }
 
   const [milestones, updates, tasks] = await Promise.all([
     db.listMilestones(scope, id),
@@ -35,10 +42,15 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
   // to see, per project, which crew and homeowners can get in, so a losing
   // bidder can be cut off from here rather than hunted down on the Team list.
   const hubTeam = getHubTeam();
+  let accessUnavailable = !hubTeam.available || scope.contractorId === undefined;
   const access =
     !hubTeam.available || scope.contractorId === undefined
       ? []
-      : (await hubTeam.team.listTeam(scope).catch(() => []))
+      : (await hubTeam.team.listTeam(scope).catch((error) => {
+          accessUnavailable = true;
+          console.error('[project-overview] team read unavailable', error instanceof Error ? error.name : 'unknown');
+          return [];
+        }))
           .filter((m) => !m.revoked && m.projectIds.includes(id));
 
   // The Hub's overlay on this project — edits and archive state. Absent is the
@@ -181,7 +193,11 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
         <div className="space-y-5">
           <Card>
             <CardHeader title="Financials" />
-            {!hasFinancials(project) ? (
+            {proposalUnavailable && !hasFinancials(project) ? (
+              <p role="status" className="px-5 py-5 text-sm text-navy-600">
+                Contract details could not be loaded. Refresh to try again.
+              </p>
+            ) : !hasFinancials(project) ? (
               <div className="px-5 py-5 text-sm text-navy-400">
                 {proposal !== null && proposal.amount !== null ? (
                   <>
@@ -301,7 +317,11 @@ export default async function ProjectOverview({ params }: { params: Promise<{ id
                 </Link>
               }
             />
-            {access.length === 0 ? (
+            {accessUnavailable ? (
+              <p role="status" className="px-5 py-4 text-sm text-navy-600">
+                Project access could not be loaded. Refresh to try again.
+              </p>
+            ) : access.length === 0 ? (
               <p className="px-5 py-4 text-sm text-navy-400">
                 Nobody has been invited to this project yet. Invite crew or the homeowner from Team
                 and tick this project.

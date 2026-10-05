@@ -27,7 +27,7 @@
  * ---------------------------------------------------------------------------
  */
 
-export type UploadState = 'shrinking' | 'uploading' | 'saved' | 'failed';
+export type UploadState = 'shrinking' | 'uploading' | 'retrying' | 'saved' | 'failed';
 
 export interface UploadCounts {
   saved: number;
@@ -38,7 +38,7 @@ export interface UploadCounts {
 export function countUploads(states: readonly UploadState[]): UploadCounts {
   return {
     saved: states.filter((s) => s === 'saved').length,
-    inFlight: states.filter((s) => s === 'shrinking' || s === 'uploading').length,
+    inFlight: states.filter((s) => s === 'shrinking' || s === 'uploading' || s === 'retrying').length,
     failed: states.filter((s) => s === 'failed').length,
   };
 }

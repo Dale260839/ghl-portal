@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { allowUpload } from '../upload-limits.ts';
+import { uploadActor, UploadBudgetError } from '../hub-db/upload-budget.ts';
 
 import { requireAccess } from '../access.ts';
 import { assertCan, ownsTask } from '../permissions.ts';
@@ -34,7 +34,7 @@ import { planFieldUpdateSubmitted } from '../workflows/wf3-update-submitted.ts';
  * ---------------------------------------------------------------------------
  */
 
-type Notice = { notice?: string } | undefined;
+type Notice = { notice?: string; reset?: boolean } | undefined;
 
 async function myTask(taskId: string) {
   const access = await requireAccess();
@@ -56,6 +56,7 @@ function revalidateTask(taskId: string, projectId: string): void {
   revalidatePath(`/field/tasks/${taskId}`);
   revalidatePath(`/dashboard/projects/${projectId}/tasks`);
   revalidatePath(`/dashboard/projects/${projectId}/photos`);
+  revalidatePath(`/dashboard/projects/${projectId}/updates`);
   revalidatePath('/dashboard/updates');
 }
 
@@ -90,11 +91,26 @@ export async function postTaskUpdate(_previous: Notice, formData: FormData): Pro
   assertCan(access.role, 'create', 'dailyUpdate');
 
   const text = String(formData.get('text') ?? '').trim();
-  const photoCount = Math.max(0, Math.floor(Number(formData.get('photoCount') ?? 0)) || 0);
+  const photoIds = [...new Set(formData.getAll('photoId').map(String).map((id) => id.trim()).filter(Boolean))];
+  const media = getHubMedia();
+  if (photoIds.length > 0) {
+    if (!media.available) return { reset: false, notice: 'Photos cannot be checked right now. Your photos remain on the task; try sending the update later.' };
+    try {
+      const photos = await media.media.listForTask(scope, 'photo', task.id);
+      const availableIds = new Set(photos.filter((photo) => photo.projectId === task.projectId && photo.updateId === null).map((photo) => photo.id));
+      if (photoIds.some((id) => !availableIds.has(id))) {
+        return { reset: false, notice: 'One of those photos is not available for this task update. Reload the task before sending.' };
+      }
+    } catch (error) {
+      console.error('[field-task] photos could not be checked', error);
+      return { reset: false, notice: 'Photos could not be checked. Nothing was submitted; try again later.' };
+    }
+  }
+  const photoCount = photoIds.length;
   const postedStatus = String(formData.get('status') ?? '');
   const newStatus = isTaskStatus(postedStatus) && postedStatus !== task.status ? postedStatus : null;
   if (text === '' && photoCount === 0 && newStatus === null) {
-    return { notice: 'Write what you did, add a photo, or change the status first.' };
+    return { reset: false, notice: 'Write what you did, add a photo, or change the status first.' };
   }
 
   const writer = currentWriter();
@@ -114,6 +130,16 @@ export async function postTaskUpdate(_previous: Notice, formData: FormData): Pro
     hoursWorked: 0,
     weather: '',
   });
+
+  let linked = 0;
+  if (photoIds.length > 0 && media.available) {
+    try {
+      linked = await media.media.linkToUpdate(scope, 'photo', photoIds, updateId, task.projectId);
+    } catch (error) {
+      // The update has saved. Keep its photos on the task and report the gap.
+      console.error('[field-task] photos did not link to the update', error);
+    }
+  }
 
   const result = await execute(
     planFieldUpdateSubmitted({
@@ -137,16 +163,20 @@ export async function postTaskUpdate(_previous: Notice, formData: FormData): Pro
     taskName: task.taskName,
     workCompleted: text,
     blocker: '',
-    photoCount,
+    photoCount: linked,
   });
 
   revalidateTask(task.id, task.projectId);
-  const withPhotos = photoCount > 0 ? ` with ${photoCount} photo${photoCount === 1 ? '' : 's'}` : '';
+  const withPhotos = linked > 0 ? ` with ${linked} photo${linked === 1 ? '' : 's'}` : '';
   const withStatus = newStatus !== null ? `, and the status is now ${newStatus}` : '';
+  const unlinked = photoCount - linked;
+  const photoWarning = unlinked > 0
+    ? ` ${unlinked} photo${unlinked === 1 ? ' remains' : 's remain'} on the task but could not be linked to this update. Tell your PM; do not resend the update.`
+    : '';
   return {
     notice: notified.sent
-      ? `Sent to your PM${withPhotos}${withStatus}. They have been emailed.`
-      : `Saved for your PM${withPhotos}${withStatus}. Nobody was emailed — tell them if it is urgent.`,
+      ? `Sent to your PM${withPhotos}${withStatus}. They have been emailed.${photoWarning}`
+      : `Saved for your PM${withPhotos}${withStatus}. Nobody was emailed — tell them if it is urgent.${photoWarning}`,
   };
 }
 
@@ -168,6 +198,7 @@ async function storePhoto(input: {
   taskId?: string | null;
   scope: Awaited<ReturnType<typeof actionTenantScope>>;
   uploadedBy: string;
+  actorId: string;
 }): Promise<UploadResult> {
   const { file } = input;
   if (!(file instanceof File)) return { ok: false, error: 'No photo was received.' };
@@ -175,8 +206,6 @@ async function storePhoto(input: {
   // A cost ceiling, not a security boundary (see `upload-limits.ts`). The
   // realistic case is not an attacker: it is a poor signal, a Retry tapped
   // twenty times, and a storage bill that arrives quietly a month later.
-  const limit = allowUpload(input.uploadedBy);
-  if (!limit.allowed) return { ok: false, error: limit.message };
   const check = acceptablePhoto({ type: file.type, size: file.size });
   if (!check.ok) return { ok: false, error: check.reason };
 
@@ -194,6 +223,7 @@ async function storePhoto(input: {
       filename: file.name || 'photo.jpg',
       contentType: file.type,
       body: await file.arrayBuffer(),
+      actorId: input.actorId,
     });
     const saved = await media.media.attach(
       input.scope,
@@ -209,6 +239,7 @@ async function storePhoto(input: {
     );
     return { ok: true, photoId: saved.id };
   } catch (error) {
+    if (error instanceof UploadBudgetError) return { ok: false, error: error.message };
     console.error('[photos] a field photo did not save', error);
     return { ok: false, error: 'The photo did not save. Check your signal and try again.' };
   }
@@ -232,6 +263,7 @@ export async function uploadTaskPhoto(formData: FormData): Promise<UploadResult>
     taskId: context.task.id,
     scope: context.scope,
     uploadedBy: context.access.session.name,
+    actorId: uploadActor(context.access.session),
   });
   if (result.ok) revalidateTask(context.task.id, context.task.projectId);
   return result;
@@ -260,6 +292,7 @@ export async function uploadFieldPhoto(formData: FormData): Promise<UploadResult
     caption,
     scope,
     uploadedBy: access.session.name,
+    actorId: uploadActor(access.session),
   });
   if (result.ok) {
     revalidatePath('/field/photos');

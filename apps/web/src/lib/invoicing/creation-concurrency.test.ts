@@ -14,7 +14,7 @@ const body = source.split('export async function createInvoiceOnRail(formData: F
   .replace('let template: InvoiceTemplate | null = null', 'let template = null')
   .replace('(err as Error).message', 'err.message');
 const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
-const names = ['getSession','assertCan','actionTenantScope','getHubInvoiceDrafts','currentDataSource',
+const names = ['requireAccess','assertCan','actionTenantScope','getHubInvoiceDrafts','currentDataSource',
   'resolveContractorProfile','getHubInvoiceTemplates','resolveInvoiceRail','mergeLetterhead','dueDaysFor',
   'getBuildSuiteReader','draftFromStored','redirect','revalidatePath','process','randomUUID','getInvoices','loadPaymentHistory','formData'];
 const action = new AsyncFunction(...names, body);
@@ -51,7 +51,10 @@ function fixture(mode = 'ok') {
     return new Response(JSON.stringify({id}));
   }});
   const scope = {contractorId:'contractor-test',locationId:'test',authProfileIds:['test']};
-  const deps = [async()=>({role:'contractor',name:'Test'}),()=>{},async()=>scope,
+  const deps = [async()=>{
+    if(mode==='revoked')throw Error('access revoked');
+    return {session:{role:'contractor',name:'Test'}};
+  },()=>{},async()=>scope,
     ()=>({available:true,drafts}),async()=>({getProject:async()=>({projectCode:'DEMO',clientName:'Test',primaryContactId:'test-contact'})}),
     async()=>null,()=>({available:false}),()=>rail,()=>undefined,()=>5,
     ()=>({available:true,clientEmailForProject:async()=> 'test@example.com'}),draftFromStored,
@@ -70,6 +73,32 @@ test('20 concurrent attempts produce only one external invoice',async()=>{
   await assert.rejects(f.run());
   assert.equal(f.calls(),1);
 });
+
+test('revoked access cannot claim a draft or call GHL during a retry burst',async()=>{
+  const f=fixture('revoked');
+  const results=await Promise.allSettled(Array.from({length:100},()=>f.run()));
+  assert.ok(results.every(r=>r.status==='rejected'&&/access revoked/.test(r.reason.message)));
+  assert.equal(f.calls(),0);assert.equal(f.row.creation_attempt_id,null);
+  assert.equal(f.row.external_id,null);
+});
+
+test('200 concurrent attempts and another retry burst still create exactly one invoice', async () => {
+  const f = fixture();
+  await Promise.allSettled(Array.from({ length: 200 }, () => f.run()));
+  assert.equal(f.calls(), 1);
+  assert.equal(f.row.external_id, 'fake-1');
+  await Promise.allSettled(Array.from({ length: 200 }, () => f.run()));
+  assert.equal(f.calls(), 1);
+});
+
+for (const mode of ['lost-record', 'network', 'lost-claim-response', 'history-unavailable']) {
+  test(`${mode}: a 100-request burst fails closed without duplicate invoices`, async () => {
+    const f = fixture(mode);
+    await Promise.allSettled(Array.from({ length: 100 }, () => f.run()));
+    assert.equal(f.calls(), ['lost-record', 'network'].includes(mode) ? 1 : 0);
+    assert.equal(f.row.external_id, null);
+  });
+}
 for (const mode of ['lost-record','network','reject']) {
   test(`${mode}: retry remains blocked without a second GHL call`,async()=>{
     const f=fixture(mode);
