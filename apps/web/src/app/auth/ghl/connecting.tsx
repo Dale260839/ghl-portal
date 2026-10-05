@@ -3,23 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { readEntry } from '@/lib/auth/entry-mode';
+
 type State =
   | { phase: 'connecting' }
   | { phase: 'failed'; message: string; hint?: string }
   | { phase: 'done' };
-
-/**
- * A merge field GHL never substituted.
- *
- * If the menu link is saved as `?locationId={{location.id}}` and GoHighLevel
- * doesn't interpolate it, the literal braces arrive here. Left to the normal
- * path that surfaces as "this sub-account doesn't exist", which sends someone
- * hunting a permissions problem that isn't there. Naming it precisely is the
- * difference between a two-minute fix and an afternoon.
- */
-function looksUnsubstituted(locationId: string): boolean {
-  return locationId.includes('{{') || locationId.includes('}}');
-}
 
 export function Connecting({ locationId, signedQuery, parentOrigins }: {
   locationId: string;
@@ -30,21 +19,18 @@ export function Connecting({ locationId, signedQuery, parentOrigins }: {
   const [state, setState] = useState<State>({ phase: 'connecting' });
 
   useEffect(() => {
-    if (locationId === '') {
-      setState({
-        phase: 'failed',
-        message: 'This link is missing its sub-account.',
-        hint: 'The Custom Menu Link needs a locationId on the end of the URL.',
-      });
-      return;
-    }
+    const entry = readEntry({
+      locationId,
+      hasSignature: new URLSearchParams(signedQuery).has('signature'),
+      insideFrame: window.parent !== window,
+    });
 
-    if (looksUnsubstituted(locationId)) {
-      setState({
-        phase: 'failed',
-        message: 'GoHighLevel did not fill in the sub-account.',
-        hint: `The link arrived with "${locationId}" instead of a real ID, so the merge field wasn't substituted. Put the sub-account's ID directly in the menu link URL.`,
-      });
+    if (entry.kind === 'blocked') {
+      setState(
+        entry.hint === undefined
+          ? { phase: 'failed', message: entry.message }
+          : { phase: 'failed', message: entry.message, hint: entry.hint },
+      );
       return;
     }
 
@@ -79,14 +65,22 @@ export function Connecting({ locationId, signedQuery, parentOrigins }: {
 
     void (async () => {
       try {
-        const response = window.parent !== window && !new URLSearchParams(signedQuery).has('signature')
-          ? await fetch('/api/auth/ghl?json=1', {
+        let response: Response;
+        if (entry.kind === 'embedded') {
+          // The sub-account is sent only when the URL actually carried one. An
+          // empty string here would be a claim of "no sub-account" rather than
+          // the absence of a claim, and the server treats the two differently.
+          const sent: Record<string, string> = { encryptedData: await encryptedContext() };
+          if (entry.locationId !== null) sent.locationId = entry.locationId;
+          response = await fetch('/api/auth/ghl?json=1', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ encryptedData: await encryptedContext(), locationId }),
+            body: JSON.stringify(sent),
             cache: 'no-store',
-          })
-          : await fetch(`/api/auth/ghl?json=1&${signedQuery}`, { cache: 'no-store' });
+          });
+        } else {
+          response = await fetch(`/api/auth/ghl?json=1&${signedQuery}`, { cache: 'no-store' });
+        }
         const body = (await response.json()) as { ok?: boolean; error?: string; redirectTo?: string };
         if (cancelled) return;
 
