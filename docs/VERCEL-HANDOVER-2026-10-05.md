@@ -9,6 +9,19 @@ Release the pending Project Hub hardening without breaking the current GHL entry
 
 **This is not a completed-production or unrestricted-client-launch signoff.** Most live evidence below was collected on 1-2 October. Local Git state was rechecked on 5 October; the current remote main and live deployment were not re-audited for this handover.
 
+## Latest Verification: 5 October
+
+- Feature snapshot `0ba666430c19cf1fb10bf47167fcfa49b8e01a26` is confirmed on GitHub.
+- GitHub's Vercel deployment record `6853410144` reports `success`, environment `Preview`, and `production_environment: false` for that exact SHA.
+- Preview: https://project-6ad29j8uv-allianceforcontractors-2450s-projects.vercel.app/
+- Deployment details: https://vercel.com/allianceforcontractors-2450s-projects/project-hub/EqW8vLFa5SZcmLFj5WeR4Sfxjg6W
+- Full local rerun on that snapshot: **1,377 web tests and 40 shared-contract tests passed, zero failures**.
+- Opening the new preview's `/auth/crm` route redirects to Vercel login in the Alliance Work browser. The deployed application route and real GHL encrypted-context sign-in remain unverified behind protection.
+- The new `/auth/crm` source is included in this successful preview snapshot. It has not been promoted to production by this work.
+- Later handover-only commits do not change this tested application source; use the exact SHA above when assessing this deployment evidence.
+
+Immediate next step for the engineer with access: open this exact preview, verify its source SHA and existing server configuration, and test the unpublished Marketplace draft against it. Reuse the existing secret and keep protection enabled.
+
 ## 1. Obtain the Actual Pending Source
 
 | Item | Verified local state |
@@ -158,11 +171,11 @@ git diff --check
 
 Use the existing isolated UI/iframe/stress harnesses with their documented fixture setup, not live credentials or production identities. These include `scripts/test-field-ui.mjs`, `scripts/test-ghl-iframe.mjs`, `scripts/test-overview-ui.mjs`, `scripts/test-pilot-pages.mjs` and `scripts/test-pilot-stress.mjs`.
 
-Last recorded checks:
+Recorded checks:
 
 - Full suite before the neutral alias: 1,374 web tests and 40 contract tests passed.
 - After adding the alias: 21 focused authentication tests, web typecheck and optimized build passed.
-- The full suite has not been rerun with the three additional alias tests; rerun it before release.
+- On 5 October, the full suite including the alias was rerun at `0ba6664`: 1,377 web tests and 40 contract tests passed with zero failures.
 - Local fixture stress checks are not proof of live Vercel/database capacity.
 
 ## 7. Live Acceptance Checklist
