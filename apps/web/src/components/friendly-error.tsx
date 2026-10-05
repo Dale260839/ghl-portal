@@ -22,8 +22,8 @@ import {
  * useful and offered nothing to click.
  *
  * Production omits the error message on purpose (it may name tables or keys),
- * so this cannot say precisely what failed. It can say that nothing is lost,
- * offer to try again, and offer the way back. The digest stays visible so the
+ * so this cannot say precisely what failed or whether a save committed. It can
+ * offer recovery and the way back. The digest stays visible so the
  * server log can be matched to what the person saw.
  *
  * ---------------------------------------------------------------------------
@@ -63,7 +63,9 @@ export function FriendlyError({
     void (async () => {
       try {
         const response = await fetch('/api/session', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Session check unavailable');
         const body = (await response.json()) as { role?: unknown };
+        if (body.role !== null && !isRole(body.role)) throw new Error('Invalid session check');
         const role = isRole(body.role) ? body.role : null;
         if (!cancelled) setCheck(checkSessionForArea(allowed, role));
       } catch {
@@ -85,7 +87,7 @@ export function FriendlyError({
     return (
       <Panel title="You are signed out in this browser.">
         <p>
-          Nothing was changed. Your sign-in ended — it lasts eight hours, or you signed out in
+          Your sign-in ended — it lasts eight hours, or you signed out in
           another tab. Contractors: open Project Hub again from the BuildSuite menu in GoHighLevel.
           Field crew and homeowners: sign in again.
         </p>
@@ -102,7 +104,7 @@ export function FriendlyError({
     return (
       <Panel title="This browser is signed in as someone else now.">
         <p>
-          Nothing was changed. Since this page was opened, this browser signed in as{' '}
+          Since this page was opened, this browser signed in as{' '}
           {ROLE_PHRASE[check.role]} — in another tab, or through an invitation or password-reset
           link — and a browser holds one sign-in at a time, so this page can no longer save.
         </p>
@@ -128,9 +130,9 @@ export function FriendlyError({
         <p>Checking what happened…</p>
       ) : (
         <p>
-          {what} could not be loaded or saved just now. Nothing you had already saved is lost. If
-          you were adding something, it was not added; try once more, and if it fails again the Hub
-          database refused the write and the team needs to look at it.
+          {what} could not be loaded or saved just now. If you were saving something,
+          check the current record before submitting it again. If this keeps happening,
+          share the reference below with the support team when one is shown.
         </p>
       )}
       <Actions>
@@ -140,6 +142,13 @@ export function FriendlyError({
           className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-700"
         >
           Try again
+        </button>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="rounded-lg border border-navy-200 px-4 py-2 text-sm font-medium text-navy-700 transition hover:bg-navy-50"
+        >
+          Reload page
         </button>
         <Link
           href={backHref}
