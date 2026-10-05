@@ -1,128 +1,135 @@
-# Turning on auto-login from GoHighLevel
+# Signing in from GoHighLevel
 
-**Goal:** a contractor signed in to GHL clicks a menu item and lands in the
-Project Hub already signed in. No second password.
+**Goal:** a contractor signed in to GHL clicks Project Hub in the sidebar and
+lands on their dashboard. No second password.
 
-Built, tested, and **verified end to end against the live Alliance For
-Contractors sub-account**. What is left is configuration in GHL.
-
----
-
-## How it works
-
-1. A **Custom Menu Link** in GHL points at the Hub with one merge field:
-   `?locationId={{location.id}}`.
-2. The Hub treats that as a **claim** and asks GHL, with our own credential,
-   whether the location is real and reachable by us.
-3. It then finds every BuildSuite profile belonging to that location — the live
-   agency has **two** — and issues a signed session scoped to all of them.
-4. Every screen after that shows only that agency's projects.
-
-**Why step 2 exists.** GHL does not sign menu-link parameters; they are plain
-text in a URL. Without checking, anyone who learned the address could substitute
-another agency's `locationId` and be handed their projects. Verifying is what
-turns a claim into proof.
-
-**Verified on 2026-08-19:** landing on `?locationId=IifYfP2B2NUaoDPdsTTa`
-resolved both admin profiles and rendered that agency's eight active projects —
-and nobody else's.
+**This replaces the Custom Menu Link setup described here until 2026-10-05.**
+That approach no longer works and cannot be made to work — see
+[Why the menu link is gone](#why-the-menu-link-is-gone). If you are reading an
+older copy of this file, every instruction in it about `{{location.id}}` and
+"Open in: New tab" is wrong.
 
 ---
 
-## What to set up
+## How it works now
 
-### 1. Create the Custom Menu Link
+1. A **Marketplace Custom Page** renders the Hub in an iframe inside GHL, at
+   `/auth/crm`.
+2. The page asks the parent frame for user context (`REQUEST_USER_DATA`).
+3. GoHighLevel answers with a payload encrypted under the app's **shared
+   secret** — which only our server holds.
+4. The server decrypts it, checks it belongs to **our agency**, and reads the
+   sub-account from `activeLocation`.
+5. It finds every BuildSuite profile for that sub-account and issues a signed
+   session scoped to them.
 
-**Settings → Custom Menu Links → Add.** At agency level, so it appears in every
-sub-account and new clients need no extra work.
+The sub-account is never taken from the URL. A query parameter is a *claim* —
+anybody can type one. The payload is *proof*, because producing it requires the
+secret.
+
+---
+
+## Why the menu link is gone
+
+Until `ec2e9b1` the Hub accepted a plain `?locationId=…` link, "verified" by
+calling GHL with **our own** credential to confirm the sub-account existed.
+
+That is not authentication of the caller. It confirms the sub-account is real;
+it says nothing about who is asking. Anyone who learned the address could have
+substituted another contractor's `locationId` and been handed their projects —
+and with 149 sub-accounts live, their choice of which.
+
+So production now requires the encrypted user context, or a signed link.
+
+**Measured 2026-10-05:** a Custom Menu Link in **Embedded Page** mode — a real
+iframe, trusted parent origin — was sent `REQUEST_USER_DATA` and never answered
+within 10 seconds. Only a Marketplace **Custom Page** serves user context. The
+menu link was deleted; do not recreate it.
+
+---
+
+## Setting it up
+
+### 1. Server configuration
+
+Three variables, server-only, in the production environment:
+
+| Variable | Where it comes from |
+|---|---|
+| `GHL_APP_SHARED_SECRET` | Marketplace app → **Shared secret** section. *Not* a client key — that is a different credential with a different job. |
+| `GHL_SSO_COMPANY_ID` | The agency id **as the payload reports it** — see the trap below. |
+| `GHL_PARENT_ORIGINS` | Optional. Defaults to `https://app.gohighlevel.com,https://app.allianceforcontractors.com`. Set it only for a different white-label origin. |
+
+**The trap, and it cost an evening.** The agency id is also in
+`hub_ghl_agency.company_id`, but do not transcribe it by eye from anywhere. It
+contains characters that are indistinguishable in many fonts — the live value
+`19WlZc8l7w03KWCJKK2E` has lowercase `l` where a capital `I` is the obvious
+reading. A single wrong character fails every sign-in with a message that does
+not say why. Copy it as text, or read it from the refusal log, which prints
+both the payload's value and the configured one side by side.
+
+### 2. The Custom Page
+
+Marketplace app → **BUILD → Modules → Custom Page**. The live version is
+read-only; create a draft version first or the button stays greyed out.
 
 | Field | Value |
 |---|---|
-| **Name** | Project Hub *(whatever you want on the menu)* |
-| **URL** | `https://<your-domain>/auth/ghl?locationId=<THE SUB-ACCOUNT ID>` |
-| **Open in** | New tab, to start with |
+| **Title** | Project Hub |
+| **Placement** | Left menu navigation |
+| **Visible on** | Both agency & sub-account left navigation menus |
+| **Live URL** | `https://<domain>/auth/crm` |
+| **Testing URL** | the same URL — a stale preview hostname here means testing a build you did not ship |
+| **Allow camera** | On. The field uploader uses `capture="environment"`, which some mobile browsers gate behind the iframe's camera policy. |
+| **Allow microphone** | Off. Nothing uses it. |
 
-**Put the real sub-account ID in the URL — do not use `{{location.id}}`.**
-GoHighLevel does not substitute merge fields in Custom Menu Links; the literal
-braces arrive at our end. That is why BuildSuite's own link is
-`?locationId=IifYfP2B2NUaoDPdsTTa` — a hardcoded ID, not a placeholder.
+**No query string and no merge field.** Custom Pages do not substitute
+`{{location.id}}`, and an uninterpolated one is refused on purpose rather than
+silently ignored.
 
-The consequence: **one menu link per sub-account**, each with its own ID. Fine
-for a handful of clients, and the thing a GHL Marketplace app removes later.
+Publish the draft version. Check **Advanced Settings → Auth** first: the
+**Default client key** must still be the one the existing installs were made
+under, or new installs stop matching the rows in `hub_ghl_oauth`.
 
-The ID is in the URL when you are inside a sub-account:
-`app.gohighlevel.com/v2/location/**IifYfP2B2NUaoDPdsTTa**/dashboard`.
+---
 
-**The tenant is the sub-account, not a person**, so no user id is needed.
+## When it refuses
 
-**On "Open in":** a new tab is simpler. An iframe feels more integrated but adds
-cookie and framing constraints — worth trying only once the new-tab version works.
+The browser always says the same sentence. The reason goes to the server log,
+where only an operator can read it — telling a caller which check failed hands
+them a narrowing game.
 
-### 2. Set two environment variables
+Search the runtime logs for `[auth]`:
 
-On the Vercel project:
+| Log reason | Cause | Fix |
+|---|---|---|
+| `not_configured` | A variable is missing or did not reach this build | Set it, then **redeploy** — env changes do not reach a running build |
+| `malformed_envelope` | Not a HighLevel user context at all | Wrong field sent, or the frame answered with something else |
+| `undecryptable` | **The shared secret is wrong** | Re-copy it from the app's Shared secret section |
+| `wrong_company` | **The agency id is wrong.** The line prints both values | Paste the payload's value into `GHL_SSO_COMPANY_ID` |
+| `unexpected_shape` | Right agency, unrecognised user payload | Needs a code change — raise it |
+| `location_mismatch` | The URL claimed one sub-account, the payload proved another | Remove the parameter from the Custom Page URL |
 
-```
-GHL_API_BASE_URL                 https://services.leadconnectorhq.com
-GHL_API_VERSION                  2021-07-28
-GHL_PRIVATE_INTEGRATION_TOKEN    the sub-account token
-```
+What the contractor sees, and what it means:
 
-**Those three are all auto-login needs.** `GHL_PROJECT_OBJECT_KEY` is separate —
-it unlocks GHL custom objects, and sign-in deliberately does not wait on it.
-
-**Then redeploy.** Environment variables are read at build time, so an existing
-deployment won't pick them up.
-
-### 3. Test it
-
-Sign in to GHL, click the menu item. You should land on the dashboard already
-signed in.
-
-**If it refuses**, the message says which step failed:
-
-| Message | Meaning |
+| On screen | Meaning |
 |---|---|
-| "The link did not identify a sub-account" | The `locationId` merge field is missing or misspelled |
-| "That link doesn't match a sub-account we have access to" | Verification worked and said no. Either the link was tampered with, or our token is scoped elsewhere. |
-| "Couldn't reach GoHighLevel to confirm your account" | GHL was unreachable. **We refuse rather than let people through** — an outage must not become an open door. |
-| "No BuildSuite projects linked to it yet" | The sub-account is real, but no BuildSuite profile points at it, so there is nothing to show |
-| "Sign-in from GoHighLevel is not configured yet" | The three variables above are not set |
+| "Sign-in from GoHighLevel is not configured yet." | Opened top-level, not in a frame, with no signed link |
+| "This link is missing its sub-account." | Top-level with no `locationId` — a Custom Page never produces this |
+| "GoHighLevel did not fill in the sub-account." | An uninterpolated `{{location.id}}` arrived |
+| "Open Project Hub inside the configured GoHighLevel custom page." | The parent origin is not in `GHL_PARENT_ORIGINS` |
+| "GoHighLevel did not respond…" | The frame ignored `REQUEST_USER_DATA` for 10s — almost certainly not a Custom Page |
+| "Could not verify your GoHighLevel identity." | The handshake worked; decryption or the agency check failed. **Read the log.** |
+| "…has no BuildSuite projects linked to it yet" | Authentication fully succeeded. Only the tenant lookup is empty. |
 
 ---
 
-## Two limits worth knowing
+## The other door
 
-**One sub-account for now.** A private integration token is scoped to a single
-sub-account, so verification only covers that one. Serving several means a GHL
-Marketplace app with OAuth — D-013, and worth doing before the second client
-rather than after.
+`GHL_MENU_LINK_SECRET` still exists and still works: a trusted bridge signs
+`locationId`, `userId`, `email` and `timestamp` with HMAC-SHA256, and a signed
+link is accepted top-level, frame or no frame, within 5 minutes of issue.
 
-**A leaked URL still works.** Verification proves the location is real; it cannot
-prove the person holding the browser came from GoHighLevel. Anyone with the full
-link could use it until the setup changes — **and BuildSuite's own callback has
-exactly the same property today**, so this is parity, not a regression. GHL's Marketplace SSO —
-where GHL hands the page encrypted, signed user data — is the fix, and it's the
-same piece of work as multi-tenant tokens. For an internal tool behind a GHL
-login this is a reasonable starting point; it isn't where it should end.
-
----
-
-## What clients get
-
-Homeowners **don't** have GHL logins, so this path isn't theirs. They sign in to
-GHL's native Client Portal, and whether that gives us anything we can verify is
-still unconfirmed — it's the last open question on the auth design, and it needs
-answering before the client portal goes live to real homeowners.
-
----
-
-## What's already true today
-
-- Sessions are signed, tamper-proof, and expire after eight hours
-- Every read is scoped to one contractor, enforced at the data layer
-- Editing the session cookie to change contractor fails the signature check
-- The whole path is tested, including the forged-location case
-
-The demo accounts on the sign-in page keep working alongside this, so nothing
-depends on GHL being configured to show the product.
+Nothing produces those signatures today. GoHighLevel does not sign merge
+fields, so using this means building the bridge. It is the fallback if the
+Custom Page path is ever withdrawn, not a second option to configure now.
