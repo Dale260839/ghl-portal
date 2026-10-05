@@ -200,6 +200,25 @@ the mechanism. Two recent examples worth internalising:
 - `pre-ghl-oauth` is a tag on both remotes marking the state before the
   Marketplace work, as a revert target.
 
+**Every commit must be authored by `home-afk`, or the deployment is blocked.**
+Vercel is on the Hobby plan, which refuses to build a commit whose author is not
+the account's own GitHub user: *"the deployment was blocked because the commit
+author did not have contributing access"*. The local git identity here is
+already `home-afk <272685640+home-afk@users.noreply.github.com>` — leave it
+alone.
+
+**So never merge a pull request with GitHub's green button on this repo.**
+GitHub authors that merge commit as whoever clicked it, and on 5 October that
+blocked production: thirteen commits authored by `home-afk` arrived through
+PR #2, and the one commit GitHub added on top — authored by `dale132414` — was
+refused. Merge locally and push instead.
+
+If a commit is already pushed with the wrong author, `git commit --amend
+--author=…` with `GIT_COMMITTER_NAME`/`EMAIL` set, then force-push with a lease.
+Be aware that **a force-push does not reliably trigger a new Vercel build** — the
+hash changes but the hook may not fire, so the dashboard keeps showing the
+blocked deployment. Push an ordinary commit afterwards to wake it up.
+
 **Another session edits this same working tree.** Fetch before you push, merge
 rather than force, and never `git stash -u` across the repo: it once swept away
 a colleague's uncommitted work.
