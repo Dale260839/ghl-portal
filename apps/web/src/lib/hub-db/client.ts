@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { setTimeout as delay } from 'node:timers/promises';
+
 /**
  * The Hub's own database — the one place this application writes.
  *
@@ -177,6 +179,19 @@ export interface UpdateArgs {
   patch: Record<string, unknown>;
 }
 
+const FUTURE_JWT_READ_DELAYS_MS = [500, 1_000] as const;
+
+function isFutureJwtError(body: string): boolean {
+  try {
+    const error: unknown = JSON.parse(body);
+    return typeof error === 'object' && error !== null &&
+      'code' in error && error.code === 'PGRST303' &&
+      'message' in error && error.message === 'JWT issued at future';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Thin PostgREST client. Insert, update and select only.
  *
@@ -211,15 +226,31 @@ export class HubClient {
     init: RequestInit,
     table: string,
   ): Promise<unknown> {
-    let response: Response;
-    try {
-      response = await this.fetchImpl(url, { ...init, signal: AbortSignal.timeout(this.timeoutMs) });
-    } catch {
-      // A timed-out write may have committed. Never retry it automatically.
-      throw new HubWriteError(`${init.method ?? 'GET'} ${table} could not be confirmed`, null, table);
-    }
-    if (!response.ok) {
-      const body = await response.text();
+    // One deadline covers all attempts, response bodies and backoff waits.
+    const signal = AbortSignal.timeout(this.timeoutMs);
+    for (let attempt = 0; ; attempt += 1) {
+      let response: Response;
+      let body: string;
+      try {
+        response = await this.fetchImpl(url, { ...init, signal });
+        body = await response.text();
+      } catch {
+        // A timed-out write may have committed. Never retry it automatically.
+        throw new HubWriteError(`${init.method ?? 'GET'} ${table} could not be confirmed`, null, table);
+      }
+      if (response.ok) return body === '' ? [] : JSON.parse(body);
+
+      const waitMs = FUTURE_JWT_READ_DELAYS_MS[attempt];
+      if (init.method === 'GET' && response.status === 401 &&
+          waitMs !== undefined && isFutureJwtError(body)) {
+        // Only the observed transient JWT-time rejection is safe to retry here.
+        try {
+          await delay(waitMs, undefined, { signal });
+        } catch {
+          throw new HubWriteError(`GET ${table} could not be confirmed`, null, table);
+        }
+        continue;
+      }
       // The body carries PostgREST's reason — an RLS refusal reads very
       // differently from a bad column, and a caller debugging at 6pm needs the
       // difference rather than "request failed".
@@ -229,8 +260,6 @@ export class HubClient {
         table,
       );
     }
-    const text = await response.text();
-    return text === '' ? [] : JSON.parse(text);
   }
 
   async select<T>({ from, columns, filters = {}, order, limit }: SelectArgs): Promise<T[]> {
