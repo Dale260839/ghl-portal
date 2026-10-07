@@ -4,9 +4,25 @@ Prepared October 7, 2026. This is a separate release from PR #7.
 
 ## Status
 
-Implemented on `codex/shared-login-limits`; not installed in the production database or deployed.
-Do not merge/deploy the application change before migration 0022 is verified.
-The current production release remains 453a17f.
+Implemented on `codex/shared-login-limits`. Migration 0022 was installed and
+verified on the production Hub database on October 7, 2026, before app rollout.
+The app release is pending; the production release at verification remains 453a17f.
+
+### Production Database Verification
+
+- Threshold assertions ran as `service_role` inside a rolled-back transaction:
+  code attempts 1-5 allowed, sixth refused; password attempts 1-10 allowed,
+  eleventh refused. No real account or IP was used.
+- Catalog checks confirmed RLS enabled, and no table privileges (including
+  TRUNCATE) or RPC execution for `anon` or `authenticated`. Service role has
+  the required access.
+- Two real PostgreSQL connections contended on the same synthetic key.
+  Connection 3614221 began at 03:45:40.820708 UTC and held its transaction for
+  12 seconds after three successful claims. Connection 3614222 began at
+  03:45:41.784473 UTC: two additional claims passed, the third was refused
+  with 3,588 seconds remaining. Total accepted claims: five, not six.
+- This concurrency test left one synthetic expiring counter, unrelated to real
+  users. No project, membership, password, invitation or client content changed.
 
 ## What Changes
 
