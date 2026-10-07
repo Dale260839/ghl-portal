@@ -87,6 +87,27 @@ test('the right email and the right code sign a homeowner in', async () => {
   ]);
 });
 
+test('a project code cannot mint a session from a returned staff membership', async () => {
+  for (const role of ['field', 'contractor']) {
+    const base = store().store;
+    const conflicting: ClientAccountStore = {
+      async provisionClientFromSignedProject(input) {
+        const result = await base.provisionClientFromSignedProject(input);
+        assert.ok(result.ok);
+        return { ok: true, membership: { ...result.membership, role } };
+      },
+    };
+    assert.deepEqual(await signInWithProjectCode('owner@example.com', 'BSA-052', deps({ store: conflicting })), { result: 'rejected' });
+  }
+});
+
+test('a role conflict is rejected without exposing the existing account role', async () => {
+  const conflicting: ClientAccountStore = {
+    async provisionClientFromSignedProject() { return { ok: false, reason: 'role-conflict' }; },
+  };
+  assert.deepEqual(await signInWithProjectCode('owner@example.com', 'BSA-052', deps({ store: conflicting })), { result: 'rejected' });
+});
+
 test('the account opened carries ONLY the project the code proved', async () => {
   // The whole scoping story. A code proves one project; if this ever returned
   // more, one code would open jobs its holder never had a code for.

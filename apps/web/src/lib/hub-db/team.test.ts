@@ -538,26 +538,18 @@ test('the update is filtered by the contractor as well as the row id', async () 
   assert.match(url, /contractor_id=eq\.c1/);
 });
 
-test('signing in never changes a role or a password already set', async () => {
+test('a homeowner code cannot modify or open an existing staff membership', async () => {
   // Somebody invited as field crew before this flow existed, who then signs a
   // contract, must not be silently demoted to client — or have the password
   // they chose wiped by a code sign-in.
-  const { team, calls } = fakeTeam([
-    [clientRow({ role: 'field', password_hash: 'scrypt$16384$aa$bb' })],
-    [clientRow({ role: 'field' })],
-  ]);
-
-  await team.provisionClientFromSignedProject({
-    contractorId: 'c1',
-    email: 'owner@example.com',
-    projectId: 'p2',
-    clientName: 'Owner',
-  });
-
-  const patch = calls.find((c) => c.method === 'PATCH')!.body as Record<string, unknown>;
-  assert.equal(patch.role, undefined, 'the role must not be rewritten by a sign-in');
-  assert.equal(patch.password_hash, undefined, 'an existing password must not be wiped');
-  assert.equal(patch.auth_profile_ids, undefined, 'profiles must not be rewritten either');
+  for (const role of ['field', 'contractor']) {
+    const { team, calls } = fakeTeam([[clientRow({ role, password_hash: 'scrypt$16384$aa$bb' })]]);
+    const result = await team.provisionClientFromSignedProject({
+      contractorId: 'c1', email: 'owner@example.com', projectId: 'p2', clientName: 'Owner',
+    });
+    assert.deepEqual(result, { ok: false, reason: 'role-conflict' });
+    assert.equal(calls.some(c => c.method !== 'GET'), false, 'no role, password, activation or assignment changes');
+  }
 });
 
 test('the lookup is scoped to the contractor from the signed proposal', async () => {
@@ -620,6 +612,37 @@ const member = (over: Record<string, unknown> = {}) => ({
   project_ids: ['p-other'], activated_at: '2026-09-01T00:00:00Z', password_hash: 'x',
   last_seen_at: null, revoked_at: null, created_at: '2026-09-01T00:00:00Z',
   full_name: 'Crew', invited_by: 'Marcus', auth_profile_ids: [], ...over,
+});
+
+test('an old revoked or unactivated row cannot mask a valid crew membership', async () => {
+  const password = 'fixture-password-only';
+  const password_hash = hashPassword(password);
+  for (const inactive of [{ revoked_at: '2026-10-01T00:00:00Z' }, { activated_at: null }]) {
+    const live = member({ id: 'live', password_hash });
+    const { team, calls } = fakeTeam([[member({ id: 'old', password_hash, ...inactive }), live], [live]]);
+    const result = await team.authenticate('crew@example.com', password);
+    assert.equal(result.ok, true);
+    if (result.ok) assert.equal(result.membership.id, 'live');
+    assert.equal(calls.filter(c => c.method === 'PATCH').length, 1);
+    assert.match(calls.find(c => c.method === 'PATCH')!.url, /id=eq\.live/);
+  }
+});
+
+test('crew login prioritizes active memberships before applying its lookup limit', async () => {
+  const { team, calls } = fakeTeam([[]]);
+  await team.authenticate('crew@example.com', 'fixture-password-only');
+  const query = new URL(calls[0]!.url).searchParams;
+  assert.equal(query.get('order'), 'revoked_at.desc.nullsfirst,activated_at.asc.nullslast,created_at.desc,id.asc');
+  assert.equal(query.get('limit'), '5');
+});
+
+test('a revoked password alone never opens a different live membership', async () => {
+  const { team, calls } = fakeTeam([[
+    member({ id: 'old', password_hash: hashPassword('old-password'), revoked_at: '2026-10-01T00:00:00Z' }),
+    member({ id: 'live', password_hash: hashPassword('new-password') }),
+  ]]);
+  assert.deepEqual(await team.authenticate('crew@example.com', 'old-password'), { ok: false, reason: 'revoked' });
+  assert.equal(calls.some(c => c.method !== 'GET'), false);
 });
 
 test('the people on a project are read with "contains", under this contractor only', async () => {

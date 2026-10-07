@@ -116,12 +116,11 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
  * They carry REAL BuildSuite profiles and have no password, so on a reachable
  * deployment they are a way into real client records for anyone. Until
  * 2026-09-15 they were radio buttons on the public sign-in page. Now they need
- * `ENABLE_DEMO_SIGNIN=true` — for local development — and are never shown on
- * the page otherwise. The strict comparison is the point: anything but the
- * exact string leaves the door shut.
+ * `ENABLE_DEMO_SIGNIN=true` for local development. Production refuses them
+ * even if that flag is accidentally carried into a deployment.
  */
 export function demoSignInEnabled(): boolean {
-  return process.env.ENABLE_DEMO_SIGNIN === 'true';
+  return process.env.NODE_ENV !== 'production' && process.env.ENABLE_DEMO_SIGNIN === 'true';
 }
 
 export function accountForEmail(email: string): DemoAccount | undefined {

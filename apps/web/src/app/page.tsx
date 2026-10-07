@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
-import { DEMO_ACCOUNTS, getSession, homeFor } from '@/lib/session';
+import { DEMO_ACCOUNTS, homeFor } from '@/lib/session';
+import { currentAccess } from '@/lib/access';
 import { demoSignInEnabled } from '@/lib/demo-accounts';
 import { LoginForm, type DemoChoice } from './login-form';
 
@@ -21,13 +22,17 @@ export default async function SignInPage({
 }: {
   searchParams: Promise<{ error?: string | string[] }>;
 }) {
-  const session = await getSession();
-  if (session !== null) {
-    redirect(homeFor(session.role));
-  }
-
   const raw = (await searchParams).error;
-  const error = (Array.isArray(raw) ? raw[0] : raw)?.trim() ?? '';
+  const requestedError = (Array.isArray(raw) ? raw[0] : raw)?.trim() ?? '';
+  const access = await currentAccess();
+  // A stale cookie must not bounce a revoked member back into a protected area.
+  // An explicit entry error also needs to remain visible instead of looping.
+  if (access.ok && requestedError === '') redirect(homeFor(access.access.role));
+  const error = !access.ok && access.reason === 'revoked'
+    ? 'This account no longer has access. Ask your contractor to restore it.'
+    : requestedError === 'no-profile'
+      ? 'This account is not linked to a contractor workspace. Open Project Hub from GoHighLevel or ask your contractor to check your access.'
+      : requestedError;
 
   // Empty on every deployment that has not set the flag, so no demo identity
   // reaches the page or the browser.

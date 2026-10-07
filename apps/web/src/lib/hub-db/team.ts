@@ -475,6 +475,9 @@ export class HubTeam {
     const rows = await this.client.select<MembershipRow>({
       from: 'hub_memberships',
       filters: { email: `eq.${normalized}` },
+      // Apply priority before the bounded lookup so historical invitations
+      // cannot crowd an active membership out of the password check.
+      order: 'revoked_at.desc.nullsfirst,activated_at.asc.nullslast,created_at.desc,id.asc',
       limit: 5,
     });
 
@@ -487,6 +490,7 @@ export class HubTeam {
       return { ok: false, reason: 'unknown' };
     }
 
+    let refusal: 'unknown' | 'revoked' | 'not-activated' = 'unknown';
     for (const row of rows) {
       if (row.password_hash === null) continue;
       if (!verifyPassword(password, row.password_hash)) continue;
@@ -494,8 +498,16 @@ export class HubTeam {
       // The password was right. Only now does the account state matter, and
       // these reasons are safe to distinguish because the caller has proved
       // they own the account.
-      if (row.revoked_at !== null) return { ok: false, reason: 'revoked' };
-      if (row.activated_at === null) return { ok: false, reason: 'not-activated' };
+      // Re-invitations leave historical rows behind. Only a matching, live
+      // membership may sign in; an older refused row must not mask it.
+      if (row.revoked_at !== null) {
+        if (refusal === 'unknown') refusal = 'revoked';
+        continue;
+      }
+      if (row.activated_at === null) {
+        if (refusal === 'unknown') refusal = 'not-activated';
+        continue;
+      }
 
       await this.client.update({
         from: 'hub_memberships',
@@ -505,7 +517,7 @@ export class HubTeam {
       return { ok: true, membership: toMembership(row) };
     }
 
-    return { ok: false, reason: 'unknown' };
+    return { ok: false, reason: refusal };
   }
 
   /**
@@ -556,7 +568,7 @@ export class HubTeam {
     email: string;
     projectId: string;
     clientName: string;
-  }): Promise<{ ok: true; membership: Membership } | { ok: false; reason: 'revoked' }> {
+  }): Promise<{ ok: true; membership: Membership } | { ok: false; reason: 'revoked' | 'role-conflict' }> {
     const email = input.email.trim().toLowerCase();
     const now = new Date().toISOString();
 
@@ -586,6 +598,9 @@ export class HubTeam {
     }
 
     if (existing !== undefined) {
+      // A signed project proves client access, never ownership of a staff
+      // account. Do not activate or expand that account through this door.
+      if (existing.role !== 'client') return { ok: false, reason: 'role-conflict' };
 
       const projectIds = [...new Set([...(existing.project_ids ?? []), input.projectId])];
       const [updated] = await this.client.update<MembershipRow>({
@@ -600,9 +615,7 @@ export class HubTeam {
           // every homeowner permanently "invited, not yet accepted".
           activated_at: existing.activated_at ?? now,
           last_seen_at: now,
-          // NOT touched: role, full_name, auth_profile_ids, password_hash. A
-          // homeowner who was also invited as field crew before this flow
-          // existed must not be silently demoted by signing a contract.
+          // Preserve the existing client identity and credentials.
         },
       });
       return { ok: true, membership: toMembership(updated ?? existing) };

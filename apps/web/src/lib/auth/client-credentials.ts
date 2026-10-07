@@ -82,7 +82,7 @@ export interface ClientAccountStore {
     email: string;
     projectId: string;
     clientName: string;
-  }): Promise<{ ok: true; membership: ProvisionedClient } | { ok: false; reason: 'revoked' }>;
+  }): Promise<{ ok: true; membership: ProvisionedClient } | { ok: false; reason: 'revoked' | 'role-conflict' }>;
 }
 
 export type ClientCodeOutcome =
@@ -167,7 +167,8 @@ export async function signInWithProjectCode(
     return { result: 'unavailable' };
   }
 
-  if (!opened.ok) return { result: 'revoked' };
+  if (!opened.ok) return { result: opened.reason === 'revoked' ? 'revoked' : 'rejected' };
+  if (opened.membership.role !== 'client') return { result: 'rejected' };
 
   // Only a real sign-in clears the counter. Clearing it on a rejection would
   // mean an attacker's wrong guesses refunded their own budget; clearing it
