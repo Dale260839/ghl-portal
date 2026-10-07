@@ -6,10 +6,10 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getBuildSuiteReader } from './buildsuite/projects.ts';
 import type { ClientLoginReader } from './auth/client-lookup.ts';
-import { clientIpFrom, createRateLimiter, PASSWORD_SIGN_IN_LIMIT } from './auth/rate-limit.ts';
+import { clientIpFrom } from './auth/rate-limit.ts';
+import { serverLoginLimiter } from './auth/shared-login-limit.ts';
 import { unifiedSignIn } from './auth/unified-sign-in.ts';
 import {
-  clientCodeLimiter,
   signInWithProjectCode,
   type SignedProjectReader,
 } from './auth/client-credentials.ts';
@@ -27,8 +27,8 @@ import { fieldProjectsFor } from './field-scope';
 import { isDraftRevision } from './field-draft-state.ts';
 import { demoSignInEnabled } from './demo-accounts';
 
-/** One limiter for the password path, for the life of the process. */
-const passwordSignInLimiter = createRateLimiter(PASSWORD_SIGN_IN_LIMIT);
+const passwordSignInLimiter = serverLoginLimiter('password');
+const clientCodeLimiter = serverLoginLimiter('code');
 import { planReturn, planViewAs, realIdentity, viewAsEnabled } from './view-as';
 import { assertCan, ownsTask } from './permissions';
 import { actionTenantScope, requireTenantScope } from './scope';

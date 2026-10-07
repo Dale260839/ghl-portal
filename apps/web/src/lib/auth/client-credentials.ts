@@ -1,5 +1,5 @@
 import { createRateLimiter, clientCodeKeys, CLIENT_CODE_LIMIT } from './rate-limit.ts';
-import type { RateLimiter } from './rate-limit.ts';
+import type { RateLimiter, SignInAttemptLimiter } from './rate-limit.ts';
 
 /**
  * The homeowner's front door: their email, and their project code as password.
@@ -113,7 +113,7 @@ export type ClientCodeOutcome =
 export interface ClientCodeDeps {
   readonly reader: SignedProjectReader;
   readonly store: ClientAccountStore;
-  readonly limiter: RateLimiter;
+  readonly limiter: SignInAttemptLimiter;
   /** Caller IP. Empty is tolerated — the email key still applies. */
   readonly ip?: string;
   readonly now?: number;
@@ -135,7 +135,12 @@ export async function signInWithProjectCode(
   projectCode: string,
   deps: ClientCodeDeps,
 ): Promise<ClientCodeOutcome> {
-  const decision = deps.limiter.consume(clientCodeKeys(email, deps.ip ?? ''), { now: deps.now });
+  let decision;
+  try {
+    decision = await deps.limiter.consume(clientCodeKeys(email, deps.ip ?? ''), { now: deps.now });
+  } catch {
+    return { result: 'unavailable' };
+  }
   if (!decision.allowed) {
     return { result: 'rate_limited', retryAfterSeconds: decision.retryAfterSeconds };
   }
@@ -170,11 +175,9 @@ export async function signInWithProjectCode(
   if (!opened.ok) return { result: opened.reason === 'revoked' ? 'revoked' : 'rejected' };
   if (opened.membership.role !== 'client') return { result: 'rejected' };
 
-  // Only a real sign-in clears the counter. Clearing it on a rejection would
-  // mean an attacker's wrong guesses refunded their own budget; clearing it
-  // here just stops a homeowner who fumbled the code twice from being locked
-  // out of their next visit an hour later.
-  for (const key of clientCodeKeys(email, deps.ip ?? '')) deps.limiter.reset(key);
+  // Local limiters may refund success. The durable production limiter keeps
+  // all attempts until expiry so success cannot reset a shared IP budget.
+  for (const key of clientCodeKeys(email, deps.ip ?? '')) await deps.limiter.reset(key);
 
   return { result: 'signed-in', membership: opened.membership };
 }

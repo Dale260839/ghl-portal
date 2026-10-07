@@ -1,7 +1,7 @@
 import { normalizeProjectCode, PROJECT_CODE_PATTERN } from '@buildsuite/contracts';
 
 import { clientCodeMessage, type ClientCodeOutcome, type ProvisionedClient } from './client-credentials.ts';
-import { passwordSignInKeys, type RateLimiter } from './rate-limit.ts';
+import { passwordSignInKeys, type SignInAttemptLimiter } from './rate-limit.ts';
 
 /**
  * ONE sign-in for everyone who types credentials (John, 2026-09-15).
@@ -87,7 +87,7 @@ export interface UnifiedSignInDeps {
   /** The homeowner project-code check (it counts its own attempts). */
   readonly code: (email: string, code: string) => Promise<ClientCodeOutcome>;
   /** The password path's limiter. */
-  readonly limiter: RateLimiter;
+  readonly limiter: SignInAttemptLimiter;
   readonly ip?: string;
   /** Demo identities, or null — which is what production must pass. */
   readonly demo: ((email: string) => DemoIdentity | undefined) | null;
@@ -143,7 +143,9 @@ export async function unifiedSignIn(
     // like a code, so it is tried as one — without spending a second attempt,
     // since the code check has already counted this one.
     if (deps.member !== null) {
-      const tried = await deps.member.authenticate(who, secret);
+      let tried;
+      try { tried = await deps.member.authenticate(who, secret); }
+      catch { return { result: 'refused', message: SIGN_IN_UNAVAILABLE }; }
       if (tried.ok) return { result: 'member', membership: tried.membership };
       if (tried.reason !== 'unknown') return memberRefusal(tried.reason);
     }
@@ -152,15 +154,19 @@ export async function unifiedSignIn(
 
   // ── Anything else: the password check ──────────────────────────────────
   const keys = passwordSignInKeys(who, deps.ip ?? '');
-  const decision = deps.limiter.consume(keys, { now: deps.now });
+  let decision;
+  try { decision = await deps.limiter.consume(keys, { now: deps.now }); }
+  catch { return { result: 'refused', message: SIGN_IN_UNAVAILABLE }; }
   if (!decision.allowed) {
     return { result: 'refused', message: clientCodeMessage({ result: 'rate_limited', retryAfterSeconds: decision.retryAfterSeconds }) };
   }
 
   if (deps.member !== null) {
-    const tried = await deps.member.authenticate(who, secret);
+    let tried;
+    try { tried = await deps.member.authenticate(who, secret); }
+    catch { return { result: 'refused', message: SIGN_IN_UNAVAILABLE }; }
     if (tried.ok) {
-      for (const key of keys) deps.limiter.reset(key);
+      for (const key of keys) await deps.limiter.reset(key);
       return { result: 'member', membership: tried.membership };
     }
     if (tried.reason !== 'unknown') return memberRefusal(tried.reason);

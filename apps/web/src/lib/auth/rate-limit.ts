@@ -92,6 +92,12 @@ export interface RateLimiter {
   reset(key: string): void;
 }
 
+/** Production sign-in stores may count atomically in the database. */
+export interface SignInAttemptLimiter {
+  consume(keys: readonly string[], options?: { now?: number }): RateLimitDecision | Promise<RateLimitDecision>;
+  reset(key: string): void | Promise<void>;
+}
+
 const ALLOWED: RateLimitDecision = { allowed: true, retryAfterSeconds: 0 };
 
 export function createRateLimiter(config: RateLimitConfig): RateLimiter {
