@@ -111,8 +111,13 @@ test('a BuildSuite project carries no stage, progress, health or money', async (
   assert.equal(project.provenance, 'buildsuite');
   // No §7 stage: BuildSuite's vocabulary is its own and no mapping is defined.
   assert.equal(project.projectStage, undefined);
+  // The FIELD is verbatim and the LABEL is humanised, and the difference is
+  // the point. BuildSuite's own word is stored exactly as it sent it, because
+  // anything else is a rewrite of somebody's record; it is only capitalised on
+  // the way to a screen. The dashboard used to print the raw token while the
+  // pipeline printed the tidy one — same project, two spellings.
   assert.equal(project.sourceStatus, 'active');
-  assert.equal(stageLabel(project), 'active');
+  assert.equal(stageLabel(project), 'Active');
 
   assert.equal(project.progressPercentage, 0);
   assert.equal(hasOperationalDetail(project), false);

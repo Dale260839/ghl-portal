@@ -340,10 +340,19 @@ export function MobileNav({ nav }: { nav: NavItem[] }) {
             key={`${item.href}::${item.label}`}
             href={portalHref(item.href, search)}
             aria-current={active ? 'page' : undefined}
-            className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition ${
+            // 44px minimum, which it was not: the chips were 30px tall, under
+            // the smallest reliable touch target, on the surface most likely to
+            // be touched.
+            className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition ${
               active ? 'bg-navy-900 text-white' : 'text-navy-600 hover:bg-navy-50'
             }`}
           >
+            {/* The same icon as the sidebar. Desktop navigation was icon-led
+                and mobile carried none, so the two read as different products
+                depending on the width of the window. */}
+            <span className={`shrink-0 ${active ? 'text-amber-accent' : 'text-navy-400'}`}>
+              {item.icon}
+            </span>
             {item.label}
             {item.badge !== undefined && item.badge > 0 && (
               <span className="tabular inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-accent px-1 text-[10px] font-semibold text-white">

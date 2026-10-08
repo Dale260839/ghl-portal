@@ -1,4 +1,5 @@
 import { daysStalled, type Deal, type DealFunnel } from './buildsuite/deals.ts';
+import { humanizeStatus as humanize, lifecycleLabel as stageLabel } from './status-vocabulary.ts';
 
 /**
  * Turning the deal funnel into something a project manager can read.
@@ -47,18 +48,16 @@ export function ageBand(days: number): AgeBand {
 }
 
 /** `general_remodel` → `General remodel`. Snake tokens are not a UI vocabulary. */
-export function humanize(token: string): string {
-  const words = token.replace(/[_-]+/g, ' ').trim();
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
+// One implementation, shared. These used to be defined here and AGAIN, with
+// different behaviour, on `stageLabel(project)` in data/types.ts — the same
+// status rendered `awarded` on the dashboard and `Awarded` on this screen.
+export { humanize, stageLabel };
 
 /**
  * `draft_ready` → `Draft ready`. Applied to unrecognised statuses too, so a
  * value BuildSuite invents still renders as words rather than as a raw token.
  */
-export function stageLabel(stage: string): string {
-  return stage === '' ? 'No status' : humanize(stage);
-}
+
 
 /**
  * Budget bands, of which BuildSuite has **two vocabularies in the same column**.

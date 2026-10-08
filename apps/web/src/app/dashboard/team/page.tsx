@@ -1,4 +1,5 @@
 import { SubmitButton } from '@/components/submit-button';
+import { ConfirmSubmit } from '@/components/confirm-submit';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { getSession } from '@/lib/session';
@@ -163,15 +164,13 @@ export default async function Team() {
                     className="shrink-0"
                   >
                     <input type="hidden" name="membershipId" value={member.id} />
-                    <SubmitButton
-                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                        member.revoked
-                          ? 'border-navy-200 text-navy-700 hover:bg-navy-50'
-                          : 'border-red-200 text-red-700 hover:bg-red-50'
-                      }`}
-                    >
-                      {member.revoked ? 'Restore access' : 'Revoke'}
-                    </SubmitButton>
+                    {member.revoked ? (
+                      <SubmitButton className="rounded-lg border border-navy-200 px-3 py-1.5 text-xs font-medium text-navy-700 transition hover:bg-navy-50">
+                        Restore access
+                      </SubmitButton>
+                    ) : (
+                      <ConfirmSubmit label="Revoke" confirmLabel="Revoke now" reversible />
+                    )}
                   </form>
                 </div>
 

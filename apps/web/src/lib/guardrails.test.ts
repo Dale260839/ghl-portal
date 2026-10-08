@@ -1428,6 +1428,11 @@ test('no form submits through a button that stays live during the round trip', (
       // send while photographs are still uploading — which is more than this
       // rule asks for, not less. Its own test above checks both.
       'components/field-submit.tsx',
+      // Same: disables on `useFormStatus`, and puts a deliberate second click
+      // in front of the submit as well. More than this rule asks for.
+      // `confirm-state.test.ts` holds the arming rules, and the guardrail below
+      // holds the wiring.
+      'components/confirm-submit.tsx',
     ];
     if (handlesItsOwn.includes(path)) continue;
     if (/type="submit"/.test(file.text)) offenders.push(path);
@@ -1729,4 +1734,44 @@ test('§ the shell offers a way past the navigation', () => {
   // Hidden until focused, and reachable when it is — one without the other is
   // either clutter or a link nobody can use.
   assert.match(shell.text, /sr-only focus:not-sr-only/, 'the skip link must reveal itself on focus');
+});
+
+/** Windows reports `lib\foo.ts`; every path written in these tests is posix. */
+const posix = (path: string): string => path.split('\\').join('/');
+
+test('§ the controls that remove a person’s access ask first', () => {
+  // Twelve destructive server actions and no confirmation between them. These
+  // three are the ones that act on a PERSON — the rest archive a record, which
+  // has a screen of its own to recover from. A mis-tap in a list of similar
+  // rows should not be the whole interaction.
+  const DESTRUCTIVE = ['revokeTeamMember', 'removeMemberFromProject'];
+  const screens = ['app/dashboard/team/page.tsx', 'app/dashboard/projects/[id]/people/page.tsx'];
+
+  for (const name of screens) {
+    const file = FILES.find((f) => posix(rel(f.path)) === name);
+    assert.ok(file, `${name} has moved`);
+    const code = withoutComments(file.text);
+
+    // Counted, and counted on the JSX TAG rather than the identifier. Matching
+    // `ConfirmSubmit` anywhere passes on the surviving import line alone — so
+    // deleting the control and leaving the import untouched sailed straight
+    // through the first version of this test. Found by breaking it.
+    const used = (code.match(/<ConfirmSubmit\b/g) ?? []).length;
+    const guarded = DESTRUCTIVE.filter((action) => code.includes(action)).length;
+    assert.ok(
+      used >= guarded,
+      `${name} calls ${guarded} access-removing action(s) behind ${used} confirmation(s)`,
+    );
+  }
+});
+
+test('§ the confirm control never submits on the click that arms it', () => {
+  // A confirmation that fires on the first click looks safe and is not. The
+  // rule lives in confirm-state.ts; this is the wiring that has to honour it.
+  const file = FILES.find((f) => posix(rel(f.path)) === 'components/confirm-submit.tsx');
+  assert.ok(file, 'components/confirm-submit.tsx has moved');
+  const code = withoutComments(file.text);
+  assert.match(code, /clickSubmits\(/, 'the arming decision has been inlined or dropped');
+  assert.match(code, /preventDefault\(\)/, 'the arming click must not reach the form');
+  assert.match(code, /type="submit"/, 'it must degrade to an ordinary submit');
 });

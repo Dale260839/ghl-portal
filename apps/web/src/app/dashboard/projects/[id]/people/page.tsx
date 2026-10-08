@@ -15,6 +15,7 @@ import {
   revokeTeamMember,
 } from '@/lib/actions';
 import { SubmitButton } from '@/components/submit-button';
+import { ConfirmSubmit } from '@/components/confirm-submit';
 import { NotLinkedToContractor } from '@/components/not-linked';
 import { ControlHeader, ControlNote } from '@/components/control';
 import { Badge, Card, CardHeader, shortDate } from '@/components/ui';
@@ -197,9 +198,12 @@ export default async function ProjectPeople({
           {homeowner !== null && (
             <form action={homeowner.revoked ? restoreTeamMember : revokeTeamMember}>
               <input type="hidden" name="membershipId" value={homeowner.id} />
-              <SubmitButton tone={homeowner.revoked ? 'secondary' : 'danger'}>
-                {homeowner.revoked ? 'Restore access' : 'Revoke access'}
-              </SubmitButton>
+              {homeowner.revoked ? (
+                <SubmitButton tone="secondary">Restore access</SubmitButton>
+              ) : (
+                // Restoring is harmless, so only the locking-out direction asks.
+                <ConfirmSubmit label="Revoke access" confirmLabel="Revoke now" reversible />
+              )}
             </form>
           )}
         </div>
@@ -248,13 +252,21 @@ export default async function ProjectPeople({
                     <form action={removeMemberFromProject}>
                       <input type="hidden" name="projectId" value={id} />
                       <input type="hidden" name="membershipId" value={m.id} />
-                      <SubmitButton tone="secondary">Remove from project</SubmitButton>
+                      {/* No restore action for this one — they have to be
+                          invited to the project again — so it says so. */}
+                      <ConfirmSubmit
+                        label="Remove from project"
+                        confirmLabel="Remove now"
+                        reversible={false}
+                      />
                     </form>
                     <form action={m.revoked ? restoreTeamMember : revokeTeamMember}>
                       <input type="hidden" name="membershipId" value={m.id} />
-                      <SubmitButton tone={m.revoked ? 'secondary' : 'danger'}>
-                        {m.revoked ? 'Restore access' : 'Revoke'}
-                      </SubmitButton>
+                      {m.revoked ? (
+                        <SubmitButton tone="secondary">Restore access</SubmitButton>
+                      ) : (
+                        <ConfirmSubmit label="Revoke" confirmLabel="Revoke now" reversible />
+                      )}
                     </form>
                   </div>
                 </li>

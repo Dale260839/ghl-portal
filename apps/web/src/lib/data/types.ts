@@ -1,3 +1,4 @@
+import { humanizeStatus } from '../status-vocabulary.ts';
 import type {
   IssueCategory,
   ManagerApprovalStatus,
@@ -482,7 +483,12 @@ export function punchListProgress(
  * BuildSuite itself recorded. Never invents a mapping between the two.
  */
 export function stageLabel(project: Pick<Project, 'projectStage' | 'sourceStatus'>): string {
-  return project.projectStage ?? project.sourceStatus ?? 'Unknown';
+  // Humanised, which it was not. BuildSuite's own `awarded` printed verbatim
+  // here and as `Awarded` on the pipeline screen, through a different function
+  // of the same name — one project, one word, two spellings. Presentation
+  // only: no vocabulary is mapped onto another.
+  const raw = project.projectStage ?? project.sourceStatus ?? '';
+  return raw.trim() === '' ? 'Unknown' : humanizeStatus(raw);
 }
 
 /**

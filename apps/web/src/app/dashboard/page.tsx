@@ -12,7 +12,7 @@ import {
   isActiveProject,
   stageLabel,
 } from '@/lib/data/types';
-import { Card, currency, shortDate } from '@/components/ui';
+import { Card, LifecycleBadge, currency, shortDate } from '@/components/ui';
 import {
   IconBudget,
   IconChangeOrders,
@@ -297,7 +297,7 @@ export default async function PortfolioDashboard() {
                           </div>
                         </>
                       ) : (
-                        <span className="text-xs text-navy-400">{stageLabel(p)}</span>
+                        <LifecycleBadge status={stageLabel(p)} />
                       )}
                     </div>
 

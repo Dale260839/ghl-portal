@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { isHealthStatus, lifecycleLabel } from '@/lib/status-vocabulary';
+
 export function Card({
   children,
   className = '',
@@ -51,14 +53,21 @@ export function StatTile({
   );
 }
 
+/**
+ * Health earns a colour. Lifecycle does not — see `lib/status-vocabulary.ts`.
+ *
+ * `On Hold` and `Completed` arrive in the same field but are facts about the
+ * project's life, not judgements about the work, so they render neutral. That
+ * was already true by accident; it is true on purpose now, and tested.
+ */
 const HEALTH_TONES: Record<string, string> = {
   'On Track': 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
   'Attention Needed': 'bg-amber-soft text-amber-700 ring-amber-600/20',
   'At Risk': 'bg-red-50 text-red-700 ring-red-600/20',
   Delayed: 'bg-red-50 text-red-700 ring-red-600/20',
-  'On Hold': 'bg-navy-100 text-navy-700 ring-navy-600/20',
-  Completed: 'bg-navy-100 text-navy-700 ring-navy-600/20',
 };
+
+const NEUTRAL_TONE = 'bg-navy-100 text-navy-700 ring-navy-600/20';
 
 export function Badge({
   children,
@@ -84,13 +93,37 @@ export function Badge({
 }
 
 export function HealthBadge({ status }: { status: string }) {
+  const health = isHealthStatus(status);
   return (
     <span
+      // The word carries the meaning; the colour only reinforces it. Colour
+      // alone would leave the two red states — At Risk and Delayed — telling a
+      // colour-blind PM the same thing, and tell a screen reader nothing.
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
-        HEALTH_TONES[status] ?? HEALTH_TONES['On Hold']
+        HEALTH_TONES[status] ?? NEUTRAL_TONE
       }`}
+      title={health ? `Project health: ${status}` : `Project status: ${status}`}
     >
       {status}
+    </span>
+  );
+}
+
+/**
+ * Where a project is in its life — draft, awarded, active.
+ *
+ * Deliberately the quietest thing on the row. It was a bare lowercase word
+ * sitting beside a coloured health pill, which read as one status system
+ * behaving inconsistently rather than two answering different questions.
+ */
+export function LifecycleBadge({ status }: { status: string | null | undefined }) {
+  const label = lifecycleLabel(status);
+  return (
+    <span
+      className="inline-flex items-center rounded-md border border-navy-100 bg-navy-50 px-2 py-0.5 text-xs font-medium text-navy-500"
+      title={`Project status: ${label}`}
+    >
+      {label}
     </span>
   );
 }
