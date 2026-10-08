@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 
 import { SubmitButton } from '@/components/submit-button';
-import { SIDEBAR_COOKIE, isCollapsed } from '@/lib/sidebar-state';
+import { GROUPS_COOKIE, SIDEBAR_COOKIE, isCollapsed, parseFoldedGroups } from '@/lib/sidebar-state';
 import type { ReactNode } from 'react';
 import { SignOutForm } from './sign-out-form';
 import { PageTransition } from './page-transition';
@@ -58,7 +58,9 @@ export async function AppShell({
   // Read here, on the server, so a collapsed sidebar paints collapsed rather
   // than opening for one frame and then shutting. It decides a width and
   // nothing else — see `lib/sidebar-state.ts` on why it is its own cookie.
-  const sidebarCollapsed = isCollapsed((await cookies()).get(SIDEBAR_COOKIE)?.value);
+  const jar = await cookies();
+  const sidebarCollapsed = isCollapsed(jar.get(SIDEBAR_COOKIE)?.value);
+  const foldedGroups = parseFoldedGroups(jar.get(GROUPS_COOKIE)?.value);
 
   return (
     <div className="min-h-dvh bg-navy-50">
@@ -82,6 +84,7 @@ export async function AppShell({
           {...(brandSuffix === undefined ? {} : { brandSuffix })}
           nav={nav}
           defaultCollapsed={sidebarCollapsed}
+          foldedGroups={foldedGroups}
         />
 
         <div className="flex min-w-0 flex-1 flex-col">

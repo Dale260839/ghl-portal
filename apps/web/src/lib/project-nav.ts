@@ -22,35 +22,85 @@
  * Pure — no React — so the rules are testable without a browser.
  */
 
+/**
+ * The five headings the sixteen sections live under.
+ *
+ * Sixteen links in one undifferentiated column is a list you read rather than
+ * a menu you aim at — and it got longer every time a section was added. The
+ * grouping is by **what the contractor is doing**, not by which screen looks
+ * like which: planning the job, running it, the material it produces, the
+ * money, and who may see any of it.
+ *
+ * Declared in display order, and exhaustive — a section names one of these or
+ * it does not compile.
+ */
+export const SECTION_GROUPS = [
+  'Overview',
+  'Work',
+  'Project Information',
+  'Financial',
+  'Access',
+] as const;
+
+export type SectionGroup = (typeof SECTION_GROUPS)[number];
+
 export interface ProjectSection {
   /** The path segment after `/dashboard/projects/<id>/`; `''` is Overview. */
   seg: string;
   label: string;
+  group: SectionGroup;
 }
 
 /**
  * Overview first — it was the first tab, and without it here a contractor
  * inside a project would have no way back to the project's own summary once
  * the tabs were removed. Then the thirteen sections, then People.
+ *
+ * Order within a group is display order. Order of the groups is `SECTION_GROUPS`.
+ *
+ * **Completion sits under Work, not on its own.** It is the end of the job
+ * rather than a separate concern, and a heading carrying one link is a heading
+ * that costs a row and explains nothing.
  */
 export const PROJECT_SECTIONS: readonly ProjectSection[] = [
-  { seg: '', label: 'Overview' },
-  { seg: 'timeline', label: 'Timeline' },
-  { seg: 'schedule', label: 'Schedule' },
-  { seg: 'tasks', label: 'Tasks' },
-  { seg: 'updates', label: 'Daily Updates' },
-  { seg: 'designs', label: 'Designs & Selections' },
-  { seg: 'budget', label: 'Budget' },
-  { seg: 'change-orders', label: 'Change Orders' },
-  { seg: 'documents', label: 'Documents' },
-  { seg: 'photos', label: 'Photos & Videos' },
-  { seg: 'messages', label: 'Messages' },
-  { seg: 'issues', label: 'Issues' },
-  { seg: 'payments', label: 'Payments' },
-  { seg: 'completion', label: 'Completion' },
-  { seg: 'visibility', label: 'Visibility' },
-  { seg: 'people', label: 'People' },
+  { seg: '', label: 'Overview', group: 'Overview' },
+  { seg: 'timeline', label: 'Timeline', group: 'Overview' },
+  { seg: 'schedule', label: 'Schedule', group: 'Overview' },
+  { seg: 'tasks', label: 'Tasks', group: 'Work' },
+  { seg: 'updates', label: 'Daily Updates', group: 'Work' },
+  { seg: 'issues', label: 'Issues', group: 'Work' },
+  { seg: 'completion', label: 'Completion', group: 'Work' },
+  { seg: 'designs', label: 'Designs & Selections', group: 'Project Information' },
+  { seg: 'documents', label: 'Documents', group: 'Project Information' },
+  { seg: 'photos', label: 'Photos & Videos', group: 'Project Information' },
+  { seg: 'messages', label: 'Messages', group: 'Project Information' },
+  { seg: 'budget', label: 'Budget', group: 'Financial' },
+  { seg: 'change-orders', label: 'Change Orders', group: 'Financial' },
+  { seg: 'payments', label: 'Payments', group: 'Financial' },
+  { seg: 'people', label: 'People', group: 'Access' },
+  { seg: 'visibility', label: 'Visibility', group: 'Access' },
 ];
+
+/**
+ * The sections under each heading, in display order, headings included only
+ * when they hold something.
+ */
+export function groupedSections(): readonly (readonly [SectionGroup, readonly ProjectSection[]])[] {
+  return SECTION_GROUPS.map(
+    (group) => [group, PROJECT_SECTIONS.filter((s) => s.group === group)] as const,
+  ).filter(([, sections]) => sections.length > 0);
+}
+
+/** The heading a section lives under, for the breadcrumb and for the fold. */
+export function groupOf(seg: string): SectionGroup | null {
+  return PROJECT_SECTIONS.find((s) => s.seg === seg)?.group ?? null;
+}
+
+/** A section's own name, for a breadcrumb that says where you are. */
+export function sectionLabel(seg: string | null): string | null {
+  if (seg === null) return null;
+  return PROJECT_SECTIONS.find((s) => s.seg === seg)?.label ?? null;
+}
 
 export const PROJECTS_LIST = '/dashboard/projects';
 

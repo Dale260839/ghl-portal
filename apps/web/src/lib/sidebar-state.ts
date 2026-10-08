@@ -49,3 +49,33 @@ export function sidebarCookie(collapsed: boolean): string {
   const value = collapsed ? COLLAPSED : EXPANDED;
   return `${SIDEBAR_COOKIE}=${value}; Path=/; Max-Age=${REMEMBER_SECONDS}; SameSite=Lax`;
 }
+
+/**
+ * Which project-section headings the contractor has folded away.
+ *
+ * Stored as the CLOSED ones, so the default — a cookie that does not exist —
+ * is everything open. Storing the open ones would mean a new heading arrived
+ * folded for everybody who had ever touched the control, which is how a
+ * section ships and nobody finds it.
+ */
+export const GROUPS_COOKIE = 'hub_sidebar_groups';
+
+/** `~` separates them: no group name contains one, and commas need escaping. */
+const SEPARATOR = '~';
+
+export function parseFoldedGroups(value: string | null | undefined): string[] {
+  if (value === undefined || value === null) return [];
+  return [
+    ...new Set(
+      decodeURIComponent(value)
+        .split(SEPARATOR)
+        .map((name) => name.trim())
+        .filter((name) => name !== ''),
+    ),
+  ];
+}
+
+export function foldedGroupsCookie(folded: readonly string[]): string {
+  const value = encodeURIComponent([...new Set(folded)].join(SEPARATOR));
+  return `${GROUPS_COOKIE}=${value}; Path=/; Max-Age=${REMEMBER_SECONDS}; SameSite=Lax`;
+}

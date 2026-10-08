@@ -1,5 +1,6 @@
-import Link from 'next/link';
 import { ContractorProjectCode } from '@/components/project-code';
+import { ProjectBreadcrumb } from '@/components/project-breadcrumb';
+import { contractorCode } from '@/lib/project-codes';
 import { notFound } from 'next/navigation';
 
 import { requireTenantScope } from '@/lib/scope';
@@ -11,8 +12,8 @@ import { HealthBadge } from '@/components/ui';
  * The per-project control workspace.
  *
  * Everything the client sees has a twin here, and a few things only the
- * contractor gets. The header names the project once; the tab strip carries the
- * screens. Each child page is a control surface for one of them — it shows the
+ * contractor gets. A breadcrumb says where you are, the header names the project
+ * once. Each child page is a control surface for one of them — it shows the
  * whole picture, including what is held back from the client, because this is
  * where a PM decides what to release.
  */
@@ -32,12 +33,11 @@ export default async function ProjectWorkspaceLayout({
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/dashboard/projects"
-          className="text-xs font-medium text-navy-400 hover:underline"
-        >
-          ← Projects
-        </Link>
+        {/* Replaces a bare "← Projects". That answered how to get back out and
+            nothing else; a contractor eleven sections deep could not tell from
+            the top of the screen which section they were in, only from which
+            row happened to be lit in the sidebar. */}
+        <ProjectBreadcrumb code={contractorCode(project) ?? 'No project code'} />
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-semibold tracking-tight text-navy-900">
             {project.projectName}
@@ -48,10 +48,6 @@ export default async function ProjectWorkspaceLayout({
           {/* Was the UUID. The contractor's code instead, with the client's
               beside it when they differ (Sing, 2026-09-12). */}
           {project.projectAddress} · <ContractorProjectCode project={project} />
-        </p>
-        <p className="mt-2 max-w-2xl text-xs leading-relaxed text-navy-400">
-          Your control centre for this project. You create and manage every screen here; the client
-          sees only what you release. Fields marked internal never reach them.
         </p>
       </div>
 

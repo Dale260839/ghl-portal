@@ -1,7 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { SIDEBAR_COOKIE, isCollapsed, sidebarCookie } from './sidebar-state.ts';
+import {
+  GROUPS_COOKIE,
+  SIDEBAR_COOKIE,
+  foldedGroupsCookie,
+  isCollapsed,
+  parseFoldedGroups,
+  sidebarCookie,
+} from './sidebar-state.ts';
 
 /**
  * The collapsed-sidebar preference.
@@ -53,4 +60,38 @@ test('§ it is not, and must not become, the session cookie', () => {
   // ever being mistaken for something the server may trust.
   assert.equal(SIDEBAR_COOKIE, 'hub_sidebar');
   assert.doesNotMatch(sidebarCookie(true), /HttpOnly/i);
+});
+
+// ── Folded headings ─────────────────────────────────────────────────────────
+
+test('§ no cookie means every heading is open', () => {
+  // Storing the CLOSED ones is the whole design. Store the open ones and a
+  // heading added later arrives folded for everybody who ever touched the
+  // control — which is how a section ships and nobody finds it.
+  assert.deepEqual(parseFoldedGroups(undefined), []);
+  assert.deepEqual(parseFoldedGroups(null), []);
+  assert.deepEqual(parseFoldedGroups(''), []);
+});
+
+test('§ headings round-trip, including the one with a space in it', () => {
+  // "Project Information" is why this is not comma-separated and why it is
+  // URI-encoded: a cookie value cannot carry whatever it likes.
+  const groups = ['Project Information', 'Financial'];
+  const written = foldedGroupsCookie(groups);
+  const value = written.slice(`${GROUPS_COOKIE}=`.length).split(';')[0]!;
+  assert.deepEqual(parseFoldedGroups(value), groups);
+});
+
+test('a repeated or blank heading is not a heading', () => {
+  assert.deepEqual(parseFoldedGroups('Work~Work~~ Work '), ['Work']);
+  assert.deepEqual(parseFoldedGroups('~~~'), []);
+  assert.deepEqual(parseFoldedGroups(foldedGroupsCookie(['Work', 'Work']).split('=')[1]!.split(';')[0]!), ['Work']);
+});
+
+test('§ it is scoped and remembered like the width beside it', () => {
+  const written = foldedGroupsCookie(['Work']);
+  assert.match(written, /Path=\//);
+  assert.match(written, /SameSite=Lax/);
+  assert.match(written, /Max-Age=31536000/);
+  assert.notEqual(GROUPS_COOKIE, SIDEBAR_COOKIE, 'two preferences, two cookies');
 });

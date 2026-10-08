@@ -30,11 +30,13 @@ export function Sidebar({
   brandSuffix,
   nav,
   defaultCollapsed = false,
+  foldedGroups = [],
 }: {
   brand: string;
   brandSuffix?: string;
   nav: NavItem[];
   defaultCollapsed?: boolean;
+  foldedGroups?: readonly string[];
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
@@ -77,7 +79,7 @@ export function Sidebar({
         )}
       </div>
 
-      <SidebarNav nav={nav} collapsed={collapsed} />
+      <SidebarNav nav={nav} collapsed={collapsed} foldedGroups={foldedGroups} />
 
       {/* At the foot rather than in the header: the brand is already fighting
           for that row at this width, and a control that moves when you use it

@@ -5,7 +5,15 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 import { portalHref } from '@/lib/portal-link';
-import { PROJECT_SECTIONS, activeSection, sectionHref } from '@/lib/project-nav';
+import {
+  activeSection,
+  groupOf,
+  groupedSections,
+  sectionFromPath,
+  sectionHref,
+  type ProjectSection,
+} from '@/lib/project-nav';
+import { foldedGroupsCookie } from '@/lib/sidebar-state';
 import { SECTION_ICONS } from './nav-icons';
 import type { ReactNode } from 'react';
 
@@ -81,10 +89,12 @@ function LinkPending() {
  * is always visible and lit.
  */
 function ProjectSectionLinks({
+  sections,
   pathname,
   open,
   collapsed,
 }: {
+  sections: readonly ProjectSection[];
   pathname: string;
   open: string | null;
   collapsed: boolean;
@@ -94,11 +104,11 @@ function ProjectSectionLinks({
     <ul
       className={
         collapsed
-          ? 'mt-1 mb-1 space-y-0.5 border-t border-white/10 pt-1'
+          ? 'space-y-0.5'
           : 'mt-0.5 mb-1 ml-5 space-y-0.5 border-l border-white/10 pl-2'
       }
     >
-      {PROJECT_SECTIONS.map((section) => {
+      {sections.map((section) => {
         const active = current === section.seg;
         return (
           <li key={section.seg === '' ? 'overview' : section.seg}>
@@ -142,12 +152,34 @@ function ProjectSectionLinks({
   );
 }
 
-export function SidebarNav({ nav, collapsed = false }: { nav: NavItem[]; collapsed?: boolean }) {
+export function SidebarNav({
+  nav,
+  collapsed = false,
+  foldedGroups = [],
+}: {
+  nav: NavItem[];
+  collapsed?: boolean;
+  /** Headings the contractor folded away last time — see `lib/sidebar-state.ts`. */
+  foldedGroups?: readonly string[];
+}) {
   const pathname = usePathname();
   // Keeps the portal on the project being shown — see `lib/portal-link.ts`.
   const search = useSearchParams();
   const inProjects = pathname === '/dashboard/projects' || pathname.startsWith('/dashboard/projects/');
-  const [folded, setFolded] = useState(false);
+  const [folded, setFolded] = useState<readonly string[]>(foldedGroups);
+
+  function toggleGroup(group: string) {
+    const next = folded.includes(group)
+      ? folded.filter((name) => name !== group)
+      : [...folded, group];
+    setFolded(next);
+    document.cookie = foldedGroupsCookie(next);
+  }
+
+  // The heading holding the section you are on never folds. Folding the group
+  // you are standing in hides the lit row and leaves the sidebar saying
+  // nothing about where you are.
+  const openGroup = groupOf(sectionFromPath(pathname) ?? '\u0000');
 
   return (
     <nav className={`flex-1 space-y-0.5 overflow-y-auto ${collapsed ? 'px-2 py-3' : 'p-3'}`}>
@@ -155,13 +187,6 @@ export function SidebarNav({ nav, collapsed = false }: { nav: NavItem[]; collaps
         const active = isActive(pathname, item.href, SECTION_ROOTS);
 
         if (item.projectSections !== undefined) {
-          // Inside a project, always open. Elsewhere, open unless folded.
-          //
-          // Collapsed overrides the fold. The chevron has nowhere to live at
-          // this width, so a folded group would be unreachable — and with no
-          // labels there is no visible parent to explain the gap. It would
-          // read as missing icons rather than a closed drawer.
-          const expanded = collapsed || inProjects || !folded;
           return (
             <div key={`${item.href}::${item.label}`}>
               <div className="flex items-center gap-1">
@@ -192,27 +217,55 @@ export function SidebarNav({ nav, collapsed = false }: { nav: NavItem[]; collaps
                     <LinkPending />
                   )}
                 </Link>
-                {!inProjects && !collapsed && (
-                  <button
-                    type="button"
-                    onClick={() => setFolded((v) => !v)}
-                    aria-expanded={expanded}
-                    aria-label={expanded ? 'Hide project sections' : 'Show project sections'}
-                    className="rounded-md p-2 text-navy-400 transition hover:bg-white/5 hover:text-white"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}>
-                      <path d="m9 18 6-6-6-6" />
-                    </svg>
-                  </button>
-                )}
               </div>
-              {expanded && (
-                <ProjectSectionLinks
-                  pathname={pathname}
-                  open={search.get('open')}
-                  collapsed={collapsed}
-                />
-              )}
+
+              {groupedSections().map(([group, sections]) => {
+                // Collapsed, headings have nowhere to live and the fold control
+                // with them — so a folded group would be unreachable, and with
+                // no labels it would read as missing icons rather than a closed
+                // drawer. Icon mode shows everything, divided by hairlines.
+                const open = collapsed || group === openGroup || !folded.includes(group);
+                return (
+                  <div
+                    key={group}
+                    className={collapsed ? 'mt-1 border-t border-white/10 pt-1' : 'mt-1'}
+                  >
+                    {!collapsed && (
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(group)}
+                        aria-expanded={open}
+                        disabled={group === openGroup}
+                        className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 pl-5 text-[11px] font-semibold tracking-wide text-navy-400 uppercase transition hover:text-navy-200 disabled:cursor-default disabled:hover:text-navy-400"
+                      >
+                        <svg
+                          width="10"
+                          height="10"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                          className={`shrink-0 transition-transform duration-150 ${open ? 'rotate-90' : ''}`}
+                        >
+                          <path d="m9 18 6-6-6-6" />
+                        </svg>
+                        <span className="truncate">{group}</span>
+                      </button>
+                    )}
+                    {open && (
+                      <ProjectSectionLinks
+                        sections={sections}
+                        pathname={pathname}
+                        open={search.get('open')}
+                        collapsed={collapsed}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           );
         }

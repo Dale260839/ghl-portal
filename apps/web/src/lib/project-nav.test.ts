@@ -3,13 +3,17 @@ import test from 'node:test';
 
 import {
   PROJECT_SECTIONS,
+  SECTION_GROUPS,
   activeSection,
   chooserPath,
+  groupOf,
+  groupedSections,
   parseOpenSection,
   projectIdFromPath,
   projectSectionPath,
   sectionFromPath,
   sectionHref,
+  sectionLabel,
 } from './project-nav.ts';
 
 /**
@@ -19,18 +23,25 @@ import {
 
 const ID = '75233730-d76f-41d7-a495-d40cb7a9c912';
 
-test('the sections are the ones asked for, Overview first and People last', () => {
+test('the sections are the ones asked for, Overview first', () => {
   // Overview was a tab; with the tabs gone it has to live in the sidebar, or a
   // contractor inside a project has no way back to its summary. Tasks joined on
   // 2026-09-17, when contractors could first assign work to the crew.
+  //
+  // Compared as a SET since the sections were grouped (2026-10-08). The flat
+  // order was the display order until headings took that job, and pinning it
+  // now would fail on any regrouping while catching nothing: what must not
+  // change is which sixteen exist, and that is asserted here. Display order
+  // within a heading is covered by the grouping tests below.
   assert.deepEqual(
-    PROJECT_SECTIONS.map((s) => s.label),
+    PROJECT_SECTIONS.map((s) => s.label).sort(),
     [
       'Overview', 'Timeline', 'Schedule', 'Tasks', 'Daily Updates', 'Designs & Selections', 'Budget',
       'Change Orders', 'Documents', 'Photos & Videos', 'Messages', 'Issues',
       'Payments', 'Completion', 'Visibility', 'People',
-    ],
+    ].sort(),
   );
+  assert.equal(PROJECT_SECTIONS[0]?.label, 'Overview');
 });
 
 test('a project path yields its project; the list and other screens do not', () => {
@@ -88,4 +99,52 @@ test('every section is a real route under a project', async () => {
   for (const { seg, label } of PROJECT_SECTIONS) {
     assert.ok(existsSync(join(base, seg, 'page.tsx')), `${label} has no page at [id]/${seg}`);
   }
+});
+
+// ── Grouping ────────────────────────────────────────────────────────────────
+
+test('§ every section lands under exactly one heading, and none is orphaned', () => {
+  // Sixteen links in one column is a list you read rather than a menu you aim
+  // at. The grouping only helps if it is total: a section with no heading
+  // would simply vanish from a sidebar that renders by group.
+  const grouped = groupedSections().flatMap(([, sections]) => sections);
+  assert.equal(grouped.length, PROJECT_SECTIONS.length, 'a section is missing from its group');
+  assert.deepEqual(
+    grouped.map((s) => s.seg).sort(),
+    PROJECT_SECTIONS.map((s) => s.seg).sort(),
+  );
+});
+
+test('§ headings are declared in display order and none of them is empty', () => {
+  // An empty heading costs a row and explains nothing — which is why
+  // Completion sits under Work rather than carrying a heading by itself.
+  const order = groupedSections().map(([group]) => group);
+  assert.deepEqual(order, SECTION_GROUPS.filter((g) => order.includes(g)));
+  for (const [group, sections] of groupedSections()) {
+    assert.ok(sections.length > 0, `${group} holds nothing`);
+  }
+});
+
+test('Overview stays first, inside the first heading', () => {
+  // A contractor landing in a project needs the way back to its own summary.
+  const [first, sections] = groupedSections()[0]!;
+  assert.equal(first, 'Overview');
+  assert.equal(sections[0]?.seg, '');
+});
+
+test('§ a section can be traced back to its heading, and an unknown one cannot', () => {
+  // The sidebar refuses to fold the heading you are standing in; that rule is
+  // only as good as this lookup.
+  assert.equal(groupOf('payments'), 'Financial');
+  assert.equal(groupOf(''), 'Overview');
+  assert.equal(groupOf('not-a-section'), null);
+});
+
+test('§ the breadcrumb names the section, and says nothing about one that does not exist', () => {
+  // A breadcrumb that invents a label for an unknown path tells the contractor
+  // they are somewhere they are not.
+  assert.equal(sectionLabel('change-orders'), 'Change Orders');
+  assert.equal(sectionLabel(''), 'Overview');
+  assert.equal(sectionLabel('nonsense'), null);
+  assert.equal(sectionLabel(null), null);
 });

@@ -443,9 +443,15 @@ test('only the contractor hands out work, and only to crew on the project', () =
 });
 
 test('the Tasks section is under every project', () => {
+  // Was a match on the source literal `{ seg: 'tasks', label: 'Tasks' }`, which
+  // broke the moment a `group` field was added beside it — the section was
+  // still there, and the guardrail still failed. A source scan earns its place
+  // where the failure is a new code path somebody writes; this one is a value,
+  // so it is read as a value.
   const nav = FILES.find((f) => rel(f.path) === 'lib/project-nav.ts');
-  assert.ok(nav);
-  assert.match(nav.text, /\{ seg: 'tasks', label: 'Tasks' \}/);
+  assert.ok(nav, 'lib/project-nav.ts has moved');
+  assert.match(nav.text, /seg: 'tasks'/, 'the Tasks section has gone from the project sections');
+  assert.match(nav.text, /label: 'Tasks'/);
 });
 
 test('a crew member acts only on their own task, and files it under that task’s project', () => {
