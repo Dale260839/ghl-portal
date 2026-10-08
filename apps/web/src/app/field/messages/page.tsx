@@ -1,3 +1,4 @@
+import { CONTROL_CLASS } from '@/components/form';
 import { SubmitButton } from '@/components/submit-button';
 import { ContractorProjectRef } from '@/components/project-code';
 import { projectById } from '@/lib/project-codes';
@@ -185,7 +186,7 @@ export default async function FieldMessages({
               // The thread they are reading. Sending to a different project than
               // the one on screen is a mistake nobody means to make.
               defaultValue={selected}
-              className="mt-1.5 min-h-12 w-full rounded-lg border border-navy-200 bg-white px-3 text-sm"
+              className={`mt-1.5 ${CONTROL_CLASS}`}
             >
               {mine.map((p) => (
                 <option key={p.buildsuiteProjectId} value={p.buildsuiteProjectId}>
@@ -205,7 +206,7 @@ export default async function FieldMessages({
               rows={3}
               required
               placeholder="Ask a question, flag a delay, request a decision…"
-              className="mt-1.5 w-full rounded-lg border border-navy-200 px-3 py-2.5 text-sm"
+              className={`mt-1.5 ${CONTROL_CLASS}`}
             />
           </div>
 

@@ -1,3 +1,4 @@
+import { CONTROL_CLASS } from '@/components/form';
 import { SubmitButton } from '@/components/submit-button';
 import { ContractorProjectRef } from '@/components/project-code';
 import { projectById } from '@/lib/project-codes';
@@ -36,7 +37,7 @@ const TONE: Record<string, 'good' | 'warn' | 'neutral'> = {
   Open: 'neutral',
 };
 
-const FIELD = 'w-full rounded-lg border border-navy-200 px-3 py-2.5 text-sm';
+const FIELD = CONTROL_CLASS;
 
 /** What a crew member may move an item to, given where it is now. */
 const NEXT: Record<string, readonly ('Scheduled' | 'Completed')[]> = {

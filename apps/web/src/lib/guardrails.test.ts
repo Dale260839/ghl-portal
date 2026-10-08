@@ -1775,3 +1775,51 @@ test('§ the confirm control never submits on the click that arms it', () => {
   assert.match(code, /preventDefault\(\)/, 'the arming click must not reach the form');
   assert.match(code, /type="submit"/, 'it must degrade to an ordinary submit');
 });
+
+test('§ the crew never meets a control smaller than a thumb', () => {
+  // The field screens are used outdoors, on a phone, by somebody wearing work
+  // gloves. Their inputs were 30px to 42px depending on which file they were
+  // written in; 44px is the smallest reliably hittable target and CONTROL_CLASS
+  // is where that is decided for all of them at once.
+  const form = FILES.find((f) => posix(rel(f.path)) === 'components/form.tsx');
+  assert.ok(form, 'components/form.tsx has moved');
+  // Comments stripped first. The doc comment above the scale explains that
+  // `min-h-11` is 44px, so matching the raw file passed with the floor removed
+  // from the actual class — the prose kept the test green. Found by breaking it.
+  assert.match(withoutComments(form.text), /min-h-11/, 'the control scale has dropped below 44px');
+
+  const offenders: string[] = [];
+  for (const file of FILES) {
+    const path = posix(rel(file.path));
+    if (!path.startsWith('app/field/')) continue;
+    const code = withoutComments(file.text);
+    // A control wearing a hand-written box rather than taking the shared one.
+    //
+    // Matched on `rounded-lg border` inside a plain string className, not on
+    // the padding: a padding list has to be kept in step with Tailwind's scale
+    // and gets it wrong — the first version matched `py-2.5` while meaning
+    // `py-2`, because \b sits between a digit and a dot. What actually matters
+    // is whether the control was styled here or imported from the scale.
+    // `[^>]*` keeps this INSIDE the element's own tag. A character-count window
+    // ran past the closing bracket and matched a button that happened to sit
+    // within 300 characters of an input, which flagged three files that were
+    // already correct.
+    if (/<(input|textarea|select)\b[^>]*className="[^"]*rounded-lg border/.test(code)) {
+      offenders.push(path);
+    }
+  }
+  assert.deepEqual(offenders, [], 'field controls must take their size from CONTROL_CLASS');
+});
+
+test('§ one icon set, one weight', () => {
+  // The sidebar icons were drawn at stroke 2 and the crew's bottom bar at 1.9
+  // and 2.4, so the same product looked hand-drawn in two different hands
+  // depending on which screen you were on.
+  const widths = new Set<string>();
+  for (const name of ['components/nav-icons.tsx', 'components/field-nav.tsx']) {
+    const file = FILES.find((f) => posix(rel(f.path)) === name);
+    assert.ok(file, `${name} has moved`);
+    for (const m of file.text.matchAll(/strokeWidth="([^"]+)"/g)) widths.add(m[1]!);
+  }
+  assert.deepEqual([...widths], ['2'], `icon stroke widths in use: ${[...widths].join(', ')}`);
+});

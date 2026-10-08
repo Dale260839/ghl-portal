@@ -343,3 +343,66 @@ export function PortalEmpty({
     </div>
   );
 }
+
+/**
+ * The top of a top-level screen: where you are, what it is for, what you can do.
+ *
+ * Written out by hand on every page, which is why the sizes drifted — an `h1`
+ * at `text-xl` on one screen and `text-2xl` on the next, a description on some
+ * and not others. The per-project screens already had `ControlHeader`; this is
+ * the same idea for everything above them.
+ *
+ * `description` is deliberately optional. The brief's own rule: do not repeat
+ * an explanation on every page. A screen whose title says it all gets a title.
+ */
+export function PageHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description?: string;
+  /** Secondary first, primary last — the order they are read in. */
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="text-xl font-semibold tracking-tight text-navy-900">{title}</h1>
+        {description !== undefined && (
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-navy-400">{description}</p>
+        )}
+      </div>
+      {actions !== undefined && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+/**
+ * A collection with nothing in it yet.
+ *
+ * Says what is missing, why it is missing, and what to do about it — in that
+ * order. "No projects found" is none of those three: it reports a query result
+ * to somebody who did not run a query.
+ *
+ * The action is optional because some of these are genuinely nobody's to fix
+ * from this screen — a crew member's task list fills up when a PM assigns work,
+ * and offering them a button would be a lie.
+ */
+export function EmptyState({
+  title,
+  body,
+  action,
+}: {
+  title: string;
+  body: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-dashed border-navy-200 px-6 py-12 text-center">
+      <p className="text-sm font-medium text-navy-900">{title}</p>
+      <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-navy-400">{body}</p>
+      {action !== undefined && <div className="mt-5 flex justify-center">{action}</div>}
+    </div>
+  );
+}

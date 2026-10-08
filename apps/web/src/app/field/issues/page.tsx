@@ -1,3 +1,4 @@
+import { CONTROL_CLASS } from '@/components/form';
 import { ISSUE_CATEGORIES } from '@buildsuite/contracts';
 import { ContractorProjectRef } from '@/components/project-code';
 import { projectById } from '@/lib/project-codes';
@@ -43,7 +44,7 @@ const TONE: Record<string, 'good' | 'warn' | 'neutral' | 'bad'> = {
   Open: 'bad',
 };
 
-const FIELD = 'w-full rounded-lg border border-navy-200 px-3 py-2.5 text-sm';
+const FIELD = CONTROL_CLASS;
 
 export default async function FieldIssues() {
   const scope = await requireTenantScope();

@@ -1,3 +1,4 @@
+import { CONTROL_BASE, CONTROL_CLASS } from '@/components/form';
 import { FieldUploadProvider } from '@/components/field-upload-context';
 import { FieldSubmit } from '@/components/field-submit';
 import { FieldDraft } from '@/components/field-draft';
@@ -55,7 +56,7 @@ export default async function FieldUpdate() {
             <select
               id="projectId"
               name="projectId"
-              className="mt-1.5 w-full rounded-lg border border-navy-200 bg-white px-3 py-2.5 text-sm"
+              className={`mt-1.5 ${CONTROL_CLASS}`}
             >
               {assigned.map((p) => (
                 <option key={p.buildsuiteProjectId} value={p.buildsuiteProjectId}>
@@ -74,7 +75,7 @@ export default async function FieldUpdate() {
               name="workCompleted"
               rows={2}
               required
-              className="mt-1.5 w-full rounded-lg border border-navy-200 px-3 py-2.5 text-sm"
+              className={`mt-1.5 ${CONTROL_CLASS}`}
             />
           </div>
 
@@ -97,7 +98,7 @@ export default async function FieldUpdate() {
                 type="number"
                 min={0}
                 defaultValue={2}
-                className="mt-1.5 w-full rounded-lg border border-navy-200 px-3 py-2.5 text-sm"
+                className={`mt-1.5 ${CONTROL_CLASS}`}
               />
             </div>
             <div>
@@ -111,7 +112,7 @@ export default async function FieldUpdate() {
                 min={0}
                 step={0.5}
                 defaultValue={8}
-                className="mt-1.5 w-full rounded-lg border border-navy-200 px-3 py-2.5 text-sm"
+                className={`mt-1.5 ${CONTROL_CLASS}`}
               />
             </div>
             <div>
@@ -122,7 +123,7 @@ export default async function FieldUpdate() {
                 id="weather"
                 name="weather"
                 defaultValue="Clear"
-                className="mt-1.5 w-full rounded-lg border border-navy-200 px-3 py-2.5 text-sm"
+                className={`mt-1.5 ${CONTROL_CLASS}`}
               />
             </div>
           </div>
@@ -135,7 +136,7 @@ export default async function FieldUpdate() {
               id="blocker"
               name="blocker"
               placeholder="Anything stopping work?"
-              className="mt-1.5 w-full rounded-lg border border-navy-200 px-3 py-2.5 text-sm"
+              className={`mt-1.5 ${CONTROL_CLASS}`}
             />
           </div>
 
@@ -160,7 +161,7 @@ export default async function FieldUpdate() {
               id="internalNotes"
               name="internalNotes"
               rows={2}
-              className="mt-2 w-full rounded-lg border border-amber-accent/30 bg-white px-3 py-2.5 text-sm"
+              className={`mt-2 ${CONTROL_BASE} border-amber-accent/30 focus:border-amber-accent`}
             />
           </div>
 
@@ -175,7 +176,7 @@ export default async function FieldUpdate() {
               id="clientSummary"
               name="clientSummary"
               rows={3}
-              className="mt-2 w-full rounded-lg border border-navy-200 bg-white px-3 py-2.5 text-sm"
+              className={`mt-2 ${CONTROL_CLASS}`}
             />
           </div>
 
