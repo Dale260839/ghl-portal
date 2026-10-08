@@ -1,8 +1,12 @@
+import { cookies } from 'next/headers';
+
 import { SubmitButton } from '@/components/submit-button';
+import { SIDEBAR_COOKIE, isCollapsed } from '@/lib/sidebar-state';
 import type { ReactNode } from 'react';
 import { SignOutForm } from './sign-out-form';
 import { PageTransition } from './page-transition';
-import { MobileNav, SidebarNav, type NavItem } from './sidebar-nav';
+import { MobileNav, type NavItem } from './sidebar-nav';
+import { Sidebar } from './sidebar';
 
 /**
  * The shared application shell — left sidebar, context bar, content.
@@ -40,7 +44,7 @@ export interface AppShellProps {
   children: ReactNode;
 }
 
-export function AppShell({
+export async function AppShell({
   brand,
   brandSuffix,
   contextTitle,
@@ -51,30 +55,23 @@ export function AppShell({
   headerExtra,
   children,
 }: AppShellProps) {
+  // Read here, on the server, so a collapsed sidebar paints collapsed rather
+  // than opening for one frame and then shutting. It decides a width and
+  // nothing else — see `lib/sidebar-state.ts` on why it is its own cookie.
+  const sidebarCollapsed = isCollapsed((await cookies()).get(SIDEBAR_COOKIE)?.value);
+
   return (
     <div className="min-h-dvh bg-navy-50">
       {banner}
 
       <div className="flex min-h-dvh">
         {/* Sidebar — hidden on mobile, where the top bar carries navigation. */}
-        <aside className="hidden w-64 shrink-0 flex-col border-r border-navy-800 bg-navy-950 lg:flex">
-          <div className="flex h-16 items-center gap-2.5 border-b border-navy-800 px-5">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-amber-accent text-xs font-bold text-navy-950">
-              {brand.charAt(0)}
-            </div>
-            <span className="text-sm font-semibold tracking-tight text-white">
-              {brand}
-              <span className="align-super text-[0.6em]">™</span>
-            </span>
-            {brandSuffix !== undefined && (
-              <span className="border-l border-navy-800 pl-2.5 text-xs text-navy-200">
-                {brandSuffix}
-              </span>
-            )}
-          </div>
-
-          <SidebarNav nav={nav} />
-        </aside>
+        <Sidebar
+          brand={brand}
+          {...(brandSuffix === undefined ? {} : { brandSuffix })}
+          nav={nav}
+          defaultCollapsed={sidebarCollapsed}
+        />
 
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Context bar */}

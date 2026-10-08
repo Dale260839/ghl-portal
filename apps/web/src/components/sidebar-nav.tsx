@@ -6,6 +6,7 @@ import { useState } from 'react';
 
 import { portalHref } from '@/lib/portal-link';
 import { PROJECT_SECTIONS, activeSection, sectionHref } from '@/lib/project-nav';
+import { SECTION_ICONS } from './nav-icons';
 import type { ReactNode } from 'react';
 
 /**
@@ -79,10 +80,24 @@ function LinkPending() {
  * folds them away; inside a project they stay open, so the section you are on
  * is always visible and lit.
  */
-function ProjectSectionLinks({ pathname, open }: { pathname: string; open: string | null }) {
+function ProjectSectionLinks({
+  pathname,
+  open,
+  collapsed,
+}: {
+  pathname: string;
+  open: string | null;
+  collapsed: boolean;
+}) {
   const current = activeSection(pathname, open);
   return (
-    <ul className="mt-0.5 mb-1 ml-5 space-y-0.5 border-l border-white/10 pl-2">
+    <ul
+      className={
+        collapsed
+          ? 'mt-1 mb-1 space-y-0.5 border-t border-white/10 pt-1'
+          : 'mt-0.5 mb-1 ml-5 space-y-0.5 border-l border-white/10 pl-2'
+      }
+    >
       {PROJECT_SECTIONS.map((section) => {
         const active = current === section.seg;
         return (
@@ -90,14 +105,35 @@ function ProjectSectionLinks({ pathname, open }: { pathname: string; open: strin
             <Link
               href={sectionHref(pathname, section.seg)}
               aria-current={active ? 'page' : undefined}
-              className={`group relative flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors duration-150 ${
+              // The native tooltip is the only label there is once the text is
+              // gone. It is not a substitute for the accessible name below —
+              // `title` is not reliably announced — it is for the mouse.
+              title={collapsed ? section.label : undefined}
+              className={`group relative flex items-center rounded-md text-[13px] transition-colors duration-150 ${
+                collapsed ? 'mx-auto h-9 w-9 justify-center' : 'gap-2 px-2.5 py-1.5'
+              } ${
                 active
                   ? 'bg-white/10 font-medium text-white'
                   : 'text-navy-300 hover:bg-white/5 hover:text-white'
               }`}
             >
-              <span className="flex-1 truncate">{section.label}</span>
-              <LinkPending />
+              <span
+                className={`shrink-0 transition-colors duration-150 ${
+                  active ? 'text-amber-accent' : 'text-navy-400 group-hover:text-navy-200'
+                }`}
+              >
+                {SECTION_ICONS[section.seg]}
+              </span>
+              {/* Never removed, only hidden. A collapsed sidebar is still a
+                  list of named places to a screen reader. */}
+              <span className={collapsed ? 'sr-only' : 'flex-1 truncate'}>{section.label}</span>
+              {collapsed ? (
+                <span className="absolute top-0.5 right-0.5">
+                  <LinkPending />
+                </span>
+              ) : (
+                <LinkPending />
+              )}
             </Link>
           </li>
         );
@@ -106,7 +142,7 @@ function ProjectSectionLinks({ pathname, open }: { pathname: string; open: strin
   );
 }
 
-export function SidebarNav({ nav }: { nav: NavItem[] }) {
+export function SidebarNav({ nav, collapsed = false }: { nav: NavItem[]; collapsed?: boolean }) {
   const pathname = usePathname();
   // Keeps the portal on the project being shown — see `lib/portal-link.ts`.
   const search = useSearchParams();
@@ -114,13 +150,18 @@ export function SidebarNav({ nav }: { nav: NavItem[] }) {
   const [folded, setFolded] = useState(false);
 
   return (
-    <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
+    <nav className={`flex-1 space-y-0.5 overflow-y-auto ${collapsed ? 'px-2 py-3' : 'p-3'}`}>
       {nav.map((item) => {
         const active = isActive(pathname, item.href, SECTION_ROOTS);
 
         if (item.projectSections !== undefined) {
           // Inside a project, always open. Elsewhere, open unless folded.
-          const expanded = inProjects || !folded;
+          //
+          // Collapsed overrides the fold. The chevron has nowhere to live at
+          // this width, so a folded group would be unreachable — and with no
+          // labels there is no visible parent to explain the gap. It would
+          // read as missing icons rather than a closed drawer.
+          const expanded = collapsed || inProjects || !folded;
           return (
             <div key={`${item.href}::${item.label}`}>
               <div className="flex items-center gap-1">
@@ -129,19 +170,29 @@ export function SidebarNav({ nav }: { nav: NavItem[] }) {
                   // The list itself is "active" only on the plain list; inside
                   // a project, or while choosing one, the lit row is below.
                   aria-current={pathname === item.href && search.get('open') === null ? 'page' : undefined}
-                  className={`group relative flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-[background-color,color,transform] duration-150 ${
+                  title={collapsed ? item.label : undefined}
+                  className={`group relative flex min-w-0 flex-1 items-center rounded-lg text-sm font-medium transition-[background-color,color,transform] duration-150 ${
+                    collapsed ? 'h-10 justify-center' : 'gap-3 px-3 py-2.5'
+                  } ${
                     inProjects
                       ? 'bg-white/10 text-white before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-amber-accent'
-                      : 'text-navy-200 hover:translate-x-0.5 hover:bg-white/5 hover:text-white'
+                      : 'text-navy-200 hover:bg-white/5 hover:text-white' +
+                        (collapsed ? '' : ' hover:translate-x-0.5')
                   }`}
                 >
-                  <span className={inProjects ? 'text-amber-accent' : 'text-navy-400 group-hover:text-navy-200'}>
+                  <span className={`shrink-0 ${inProjects ? 'text-amber-accent' : 'text-navy-400 group-hover:text-navy-200'}`}>
                     {item.icon}
                   </span>
-                  <span className="flex-1 truncate">{item.label}</span>
-                  <LinkPending />
+                  <span className={collapsed ? 'sr-only' : 'flex-1 truncate'}>{item.label}</span>
+                  {collapsed ? (
+                    <span className="absolute top-1 right-1">
+                      <LinkPending />
+                    </span>
+                  ) : (
+                    <LinkPending />
+                  )}
                 </Link>
-                {!inProjects && (
+                {!inProjects && !collapsed && (
                   <button
                     type="button"
                     onClick={() => setFolded((v) => !v)}
@@ -155,7 +206,13 @@ export function SidebarNav({ nav }: { nav: NavItem[] }) {
                   </button>
                 )}
               </div>
-              {expanded && <ProjectSectionLinks pathname={pathname} open={search.get('open')} />}
+              {expanded && (
+                <ProjectSectionLinks
+                  pathname={pathname}
+                  open={search.get('open')}
+                  collapsed={collapsed}
+                />
+              )}
             </div>
           );
         }
@@ -165,28 +222,47 @@ export function SidebarNav({ nav }: { nav: NavItem[] }) {
             key={`${item.href}::${item.label}`}
             href={portalHref(item.href, search)}
             aria-current={active ? 'page' : undefined}
-            className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-[background-color,color,transform] duration-150 ${
+            title={collapsed ? item.label : undefined}
+            className={`group relative flex items-center rounded-lg text-sm font-medium transition-[background-color,color,transform] duration-150 ${
+              collapsed ? 'h-10 justify-center' : 'gap-3 px-3 py-2.5'
+            } ${
               active
                 ? 'bg-white/10 text-white before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-amber-accent'
-                : 'text-navy-200 hover:translate-x-0.5 hover:bg-white/5 hover:text-white'
+                : 'text-navy-200 hover:bg-white/5 hover:text-white' +
+                  (collapsed ? '' : ' hover:translate-x-0.5')
             }`}
           >
             <span
-              className={`transition-colors duration-150 ${
+              className={`shrink-0 transition-colors duration-150 ${
                 active ? 'text-amber-accent' : 'text-navy-400 group-hover:text-navy-200'
               }`}
             >
               {item.icon}
             </span>
-            <span className="flex-1 truncate">{item.label}</span>
-            <LinkPending />
+            <span className={collapsed ? 'sr-only' : 'flex-1 truncate'}>{item.label}</span>
+            {/* Opposite corner from the badge, which owns the top right. Both
+                stay inside the row: the nav scrolls, so a negative offset would
+                be clipped or buy a horizontal scrollbar. */}
+            {collapsed ? (
+              <span className="absolute right-0.5 bottom-0.5">
+                <LinkPending />
+              </span>
+            ) : (
+              <LinkPending />
+            )}
             {item.badge !== undefined && item.badge > 0 && (
+              // Collapsed, the count rides on the corner of the icon. It is the
+              // reason the sidebar is a worklist rather than a menu, so it is
+              // the one thing that does NOT get hidden to save width — a
+              // contractor with three updates waiting must still see three.
               <span
-                className={`tabular inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold ${
-                  active ? 'bg-white/20 text-white' : 'bg-amber-accent text-white'
-                }`}
+                className={`tabular inline-flex items-center justify-center rounded-full font-semibold ${
+                  collapsed
+                    ? 'absolute top-0.5 right-0.5 h-4 min-w-4 px-1 text-[10px]'
+                    : 'h-5 min-w-5 px-1.5 text-xs'
+                } ${active ? 'bg-white/20 text-white' : 'bg-amber-accent text-white'}`}
               >
-                {item.badge}
+                {collapsed && item.badge > 9 ? '9+' : item.badge}
               </span>
             )}
           </Link>
