@@ -62,6 +62,17 @@ export async function AppShell({
 
   return (
     <div className="min-h-dvh bg-navy-50">
+      {/* Bypass block (WCAG 2.4.1). The sidebar is up to twenty-four rows deep
+          once a project's sections are open, and a keyboard user met every one
+          of them before reaching the page — on every navigation. Off-screen
+          until focused, then the first thing in the tab order. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-navy-900 focus:px-4 focus:py-2.5 focus:text-sm focus:font-medium focus:text-white"
+      >
+        Skip to main content
+      </a>
+
       {banner}
 
       <div className="flex min-h-dvh">
@@ -104,7 +115,7 @@ export async function AppShell({
 
           <MobileNav nav={nav} />
 
-          <main className="flex-1 px-4 py-7 sm:px-6 lg:px-8">
+          <main id="main-content" tabIndex={-1} className="flex-1 px-4 py-7 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-5xl">
               <PageTransition>{children}</PageTransition>
             </div>

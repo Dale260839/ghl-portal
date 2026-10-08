@@ -112,7 +112,7 @@ export default async function PortalMessages({
               name="body"
               required
               placeholder="Type your message…"
-              className="flex-1 rounded-lg border border-navy-200 px-3.5 py-2.5 text-sm focus:border-navy-600 focus:ring-1 focus:ring-navy-600 focus:outline-none"
+              className="flex-1 rounded-lg border border-navy-200 px-3.5 py-2.5 text-sm focus:border-navy-600"
             />
             <SubmitButton className="rounded-lg bg-navy-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800">
               Send

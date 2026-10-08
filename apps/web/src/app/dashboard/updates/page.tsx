@@ -116,7 +116,7 @@ export default async function ReviewQueue() {
                       name="clientSummary"
                       rows={3}
                       defaultValue={u.clientSummary}
-                      className="mt-1.5 w-full rounded-lg border border-navy-200 px-3 py-2 text-sm text-navy-900 focus:border-navy-600 focus:ring-1 focus:ring-navy-600 focus:outline-none"
+                      className="mt-1.5 w-full rounded-lg border border-navy-200 px-3 py-2 text-sm text-navy-900 focus:border-navy-600"
                     />
                   </div>
 

@@ -107,10 +107,28 @@ body {
 .press { transition: transform 0.12s ease, box-shadow 0.2s ease, background-color 0.2s ease, filter 0.2s ease; }
 .press:active { transform: scale(0.98); }
 
+/* ── Focus ───────────────────────────────────────────────────────────────────
+ * Two rings: amber hugging the control, navy immediately outside it.
+ *
+ * It was amber alone. Measured, amber #f0870f on white is 2.57:1 — under the
+ * 3:1 that WCAG 2.2 (1.4.11) asks of a focus indicator — so on every light
+ * screen in the product, which is nearly all of them, the ring was there and
+ * barely visible. On the navy-950 sidebar the same amber is 7.1:1 and was
+ * always fine, which is why this never looked broken to anyone testing it on
+ * the one dark surface.
+ *
+ * So each surface is carried by the band that contrasts with it: navy-900
+ * against a light page (16.3:1), amber against the dark sidebar (7.1:1).
+ * Neither relies on a colour that disappears into its own background.
+ *
+ * `border-radius: 6px` used to live here and was a bug, not a style: it
+ * reshaped whatever held focus, so a focused pill or card squared itself off
+ * while being used. Outlines follow the element's own radius unaided.
+ */
 :focus-visible {
-  outline: 2px solid var(--color-amber-accent);
+  outline: 2px solid var(--color-navy-900);
   outline-offset: 2px;
-  border-radius: 6px;
+  box-shadow: 0 0 0 2px var(--color-amber-accent);
 }
 
 @media (prefers-reduced-motion: reduce) {

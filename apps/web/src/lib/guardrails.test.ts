@@ -1631,3 +1631,96 @@ test('every navy shade used is defined in the theme', () => {
     `navy shades defined: ${[...defined].join(', ')} — add the missing one to globals.css`,
   );
 });
+
+// ── Focus ───────────────────────────────────────────────────────────────────
+
+/** WCAG relative luminance, so the ring's contrast is measured and not eyeballed. */
+function luminance(hex: string): number {
+  const value = hex.replace('#', '');
+  const linear = [0, 2, 4]
+    .map((i) => parseInt(value.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * linear[0]! + 0.7152 * linear[1]! + 0.0722 * linear[2]!;
+}
+
+function contrast(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi! + 0.05) / (lo! + 0.05);
+}
+
+test('§ the focus ring is visible on BOTH the light pages and the dark sidebar', () => {
+  // It was a single amber ring, which measures 2.57:1 on white — under the 3:1
+  // WCAG 2.2 asks of a focus indicator. It looked fine because the one surface
+  // anybody checked it against was the navy sidebar, where amber is 7.1:1.
+  //
+  // Measured rather than asserted by name: a palette change is exactly how this
+  // comes back, and a test that only checks which variables are mentioned would
+  // sail straight past it.
+  const css = readFileSync(join(SRC, 'app', 'globals.css'), 'utf8');
+  const token = (name: string): string => {
+    const marker = `--color-${name}:`;
+    const at = css.indexOf(marker);
+    assert.ok(at >= 0, `--color-${name} is gone from the theme`);
+    const hex = css.slice(at + marker.length).trim().slice(0, 7);
+    assert.match(hex, /^#[0-9a-fA-F]{6}$/, `--color-${name} is not a six-digit hex`);
+    return hex;
+  };
+
+  const block = css.match(/:focus-visible\s*\{([\s\S]*?)\}/);
+  assert.ok(block, 'the global :focus-visible rule has gone');
+  const rule = block[1]!;
+
+  // The colours the rule ACTUALLY paints, not the two it is expected to. A
+  // check that measured the palette would still pass after somebody simplified
+  // the rule back down to one band, because both colours would remain defined.
+  const bands = [...rule.matchAll(/var\(--color-([a-z0-9-]+)\)/g)].map((m) => token(m[1]!));
+  assert.ok(bands.length > 0, 'the focus rule paints no themed colour at all');
+
+  const onLight = Math.max(...bands.map((c) => contrast(c, '#ffffff')));
+  const onSidebar = Math.max(...bands.map((c) => contrast(c, token('navy-950'))));
+
+  assert.ok(onLight >= 3, `focus ring measures ${onLight.toFixed(2)}:1 on a white page, needs 3:1`);
+  assert.ok(
+    onSidebar >= 3,
+    `focus ring measures ${onSidebar.toFixed(2)}:1 on the navy sidebar, needs 3:1`,
+  );
+
+  // Both bands have to actually be drawn. One of them passing in the abstract
+  // is no use if the rule only paints the other.
+  assert.match(rule, /outline:[^;]*var\(--color-navy-900\)/, 'the outer navy band has gone');
+  assert.match(rule, /box-shadow:[^;]*var\(--color-amber-accent\)/, 'the inner amber band has gone');
+});
+
+test('§ the focus rule rings what is focused without reshaping it', () => {
+  // `border-radius: 6px` lived in this rule and squared off whatever held
+  // focus — a pill, a card — for exactly as long as somebody was using it.
+  // Outlines follow the element's own radius without being told.
+  const css = readFileSync(join(SRC, 'app', 'globals.css'), 'utf8');
+  const rule = css.match(/:focus-visible\s*\{([\s\S]*?)\}/)?.[1] ?? '';
+  assert.doesNotMatch(rule, /border-radius/, 'the focus rule must not restyle the element');
+});
+
+test('§ nothing switches the focus outline off', () => {
+  // Two inputs did, swapping it for a `focus:` ring that fired on mouse clicks
+  // too. One global indicator is the only way this stays consistent across 59
+  // pages, and a single `outline-none` is all it takes to lose it somewhere.
+  const offenders: string[] = [];
+  for (const file of FILES) {
+    const code = withoutComments(file.text);
+    if (/outline-none|outline:\s*none/.test(code)) offenders.push(rel(file.path));
+  }
+  assert.deepEqual([...new Set(offenders)], [], 'these suppress the global focus ring');
+});
+
+test('§ the shell offers a way past the navigation', () => {
+  // WCAG 2.4.1. Open a project and the sidebar is twenty-four rows; without
+  // this a keyboard user meets every one of them before reaching the page, on
+  // every single navigation.
+  const shell = FILES.find((f) => rel(f.path).endsWith('components/app-shell.tsx'));
+  assert.ok(shell, 'app-shell.tsx has moved');
+  assert.match(shell.text, /href="#main-content"/, 'the skip link has gone');
+  assert.match(shell.text, /id="main-content"/, 'the skip link points at nothing');
+  // Hidden until focused, and reachable when it is — one without the other is
+  // either clutter or a link nobody can use.
+  assert.match(shell.text, /sr-only focus:not-sr-only/, 'the skip link must reveal itself on focus');
+});
