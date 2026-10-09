@@ -1,3 +1,4 @@
+import { projectOptions } from '@/lib/option-label';
 import { CONTROL_CLASS } from '@/components/form';
 import { SubmitButton } from '@/components/submit-button';
 import { ContractorProjectRef } from '@/components/project-code';
@@ -188,11 +189,11 @@ export default async function FieldMessages({
               defaultValue={selected}
               className={`mt-1.5 ${CONTROL_CLASS}`}
             >
-              {mine.map((p) => (
-                <option key={p.buildsuiteProjectId} value={p.buildsuiteProjectId}>
-                  {p.projectName}
-                </option>
-              ))}
+              {projectOptions(mine).map((o) => (
+                    <option key={o.value} value={o.value} title={o.full}>
+                      {o.label}
+                    </option>
+                  ))}
             </select>
           </div>
 

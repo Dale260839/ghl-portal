@@ -1,3 +1,4 @@
+import { projectOptions } from '@/lib/option-label';
 import { CONTROL_BASE, CONTROL_CLASS } from '@/components/form';
 import { FieldUploadProvider } from '@/components/field-upload-context';
 import { FieldSubmit } from '@/components/field-submit';
@@ -58,11 +59,11 @@ export default async function FieldUpdate() {
               name="projectId"
               className={`mt-1.5 ${CONTROL_CLASS}`}
             >
-              {assigned.map((p) => (
-                <option key={p.buildsuiteProjectId} value={p.buildsuiteProjectId}>
-                  {p.projectName}
-                </option>
-              ))}
+              {projectOptions(assigned).map((o) => (
+                    <option key={o.value} value={o.value} title={o.full}>
+                      {o.label}
+                    </option>
+                  ))}
             </select>
           </div>
 

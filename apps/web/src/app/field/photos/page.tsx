@@ -1,3 +1,4 @@
+import { projectOptions } from '@/lib/option-label';
 import { requireTenantScope } from '@/lib/scope';
 import { currentDataSource } from '@/lib/data/current-source';
 import { requireAccess } from '@/lib/access';
@@ -84,11 +85,11 @@ export default async function FieldPhotos({
             <label className="block text-xs text-navy-500">
               Project
               <select name="projectId" defaultValue={preselect ?? mine[0]?.buildsuiteProjectId} className={`${FIELD} mt-1 w-full`}>
-                {mine.map((p) => (
-                  <option key={p.buildsuiteProjectId} value={p.buildsuiteProjectId}>
-                    {p.projectName}
-                  </option>
-                ))}
+                {projectOptions(mine).map((o) => (
+                    <option key={o.value} value={o.value} title={o.full}>
+                      {o.label}
+                    </option>
+                  ))}
               </select>
             </label>
             <label className="block text-xs text-navy-500">

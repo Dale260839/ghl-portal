@@ -1901,3 +1901,19 @@ test('§ the crew sees something happen the moment they tap', () => {
     'the bottom bar no longer reports its own pending navigation',
   );
 });
+
+test('§ no crew dropdown renders a raw project name', () => {
+  // A native select popup is drawn by the browser and sizes to its longest
+  // option, so a 59-character project name ran off the side of a phone. The
+  // label is the only lever there is — and shortening it has to go through
+  // `projectOptions`, which keeps two jobs distinguishable. Writing
+  // `{p.projectName}` straight into an option skips that check.
+  const offenders: string[] = [];
+  for (const file of FILES) {
+    const path = posix(rel(file.path));
+    if (!path.startsWith('app/field/')) continue;
+    const code = withoutComments(file.text);
+    if (/<option[^>]*>\s*\{\s*\w+\.projectName\s*\}/.test(code)) offenders.push(path);
+  }
+  assert.deepEqual(offenders, [], 'use projectOptions() so the dropdown fits and stays unambiguous');
+});

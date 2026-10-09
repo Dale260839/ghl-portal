@@ -1,3 +1,4 @@
+import { projectOptions } from '@/lib/option-label';
 import { CONTROL_CLASS } from '@/components/form';
 import { ISSUE_CATEGORIES } from '@buildsuite/contracts';
 import { ContractorProjectRef } from '@/components/project-code';
@@ -109,9 +110,9 @@ export default async function FieldIssues() {
                   Project
                 </label>
                 <select id="projectId" name="projectId" className={`${FIELD} mt-1.5 bg-white`}>
-                  {mine.map((p) => (
-                    <option key={p.buildsuiteProjectId} value={p.buildsuiteProjectId}>
-                      {p.projectName}
+                  {projectOptions(mine).map((o) => (
+                    <option key={o.value} value={o.value} title={o.full}>
+                      {o.label}
                     </option>
                   ))}
                 </select>
