@@ -1823,3 +1823,31 @@ test('§ one icon set, one weight', () => {
   }
   assert.deepEqual([...widths], ['2'], `icon stroke widths in use: ${[...widths].join(', ')}`);
 });
+
+test('§ the header yields on a phone instead of pushing the page sideways', () => {
+  // The action cluster was `shrink-0`. Account switcher, view switcher, user
+  // name and Sign out come to roughly 400px, so on a 320px phone they could
+  // not fit and would not give: the brand was pushed out of the bar and the
+  // whole page gained a horizontal scroll.
+  const shell = FILES.find((f) => posix(rel(f.path)) === 'components/app-shell.tsx');
+  assert.ok(shell, 'components/app-shell.tsx has moved');
+  const cluster = withoutComments(shell.text).match(/<div className="ml-auto[^"]*"/);
+  assert.ok(cluster, 'the header action cluster has moved or been renamed');
+  assert.doesNotMatch(cluster[0], /shrink-0/, 'the header cluster must be able to give');
+  assert.match(cluster[0], /min-w-0/, 'and its children must be allowed to narrow');
+});
+
+test('§ an operator control that sheds its label keeps its name', () => {
+  // Below `sm` both switchers are a glyph and a chevron. They must not vanish
+  // — mid-view the session reads as somebody else and the view switcher is the
+  // way back — so they shrink instead, and an icon-only control needs a name
+  // that is not its own visible text.
+  for (const name of ['components/view-switcher.tsx', 'components/account-switcher.tsx']) {
+    const file = FILES.find((f) => posix(rel(f.path)) === name);
+    assert.ok(file, `${name} has moved`);
+    const code = withoutComments(file.text);
+    assert.match(code, /aria-label=/, `${name} hides its label without naming the button`);
+    assert.match(code, /sm:inline/, `${name} no longer sheds anything on a phone`);
+    assert.doesNotMatch(code, /w-80/, `${name} has a menu wider than a small phone`);
+  }
+});

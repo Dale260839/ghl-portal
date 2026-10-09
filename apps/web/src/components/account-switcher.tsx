@@ -83,15 +83,20 @@ export function AccountSwitcher({ accounts, current }: { accounts: DevAccount[];
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="press inline-flex items-center gap-2 rounded-full border border-amber-accent/40 bg-amber-soft py-1 pr-2.5 pl-1 text-xs font-medium text-amber-800 shadow-[0_1px_2px_rgba(10,31,68,0.06)] transition-colors hover:bg-amber-100"
+        // Below `sm` only the monogram and the chevron remain, so the button
+        // is named here rather than by its own text.
+        aria-label={`Signed in as ${active?.businessName ?? active?.email ?? 'this account'}. Switch account.`}
+        className="press inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-accent/40 bg-amber-soft py-1 pr-2 pl-1 text-xs font-medium text-amber-800 shadow-[0_1px_2px_rgba(10,31,68,0.06)] transition-colors hover:bg-amber-100 sm:gap-2 sm:pr-2.5"
       >
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-accent text-[10px] font-bold text-white">
           {brandCode(active?.businessName ?? active?.email ?? '', 'AF').slice(0, 2)}
         </span>
+        {/* Both the label and the account name go on a phone. The amber
+            monogram is the thing that says "you are not in your own account",
+            and it is the part that survives. */}
         <span className="hidden sm:inline">Switch account</span>
-        <span className="sm:hidden">Account</span>
         {active !== undefined && (
-          <span className="max-w-32 truncate font-normal text-amber-700/80">
+          <span className="hidden max-w-32 truncate font-normal text-amber-700/80 sm:inline">
             · {active.businessName || active.email}
           </span>
         )}
@@ -108,7 +113,7 @@ export function AccountSwitcher({ accounts, current }: { accounts: DevAccount[];
       </button>
 
       {open && (
-        <div className="menu-enter absolute right-0 z-50 mt-1.5 w-80 overflow-hidden rounded-xl border border-navy-200 bg-white shadow-[0_1px_2px_rgba(10,31,68,0.06),0_16px_36px_-16px_rgba(10,31,68,0.35)]">
+        <div className="menu-enter absolute right-0 z-50 mt-1.5 w-[min(20rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-navy-200 bg-white shadow-[0_1px_2px_rgba(10,31,68,0.06),0_16px_36px_-16px_rgba(10,31,68,0.35)]">
           <div className="flex items-start gap-2.5 border-b border-amber-accent/20 bg-amber-soft px-3.5 py-2.5">
             <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-accent/15 text-amber-800">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

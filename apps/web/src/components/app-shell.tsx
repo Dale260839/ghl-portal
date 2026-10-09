@@ -90,8 +90,10 @@ export async function AppShell({
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Context bar */}
           <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-4 border-b border-navy-100 bg-white/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/70 sm:px-6">
-            <div className="min-w-0 lg:hidden">
-              <span className="text-sm font-semibold tracking-tight text-navy-900">{brand}</span>
+            <div className="min-w-0 shrink lg:hidden">
+              <span className="block truncate text-sm font-semibold tracking-tight text-navy-900">
+                {brand}
+              </span>
             </div>
 
             {contextTitle !== undefined && (
@@ -103,7 +105,13 @@ export async function AppShell({
               </div>
             )}
 
-            <div className="ml-auto flex shrink-0 items-center gap-3">
+            {/* `shrink-0` here is what broke the header on a phone. The operator
+                controls, the user name and Sign out come to roughly 400px and
+                could not yield, so on a 320px screen they pushed the brand out
+                of the bar and gave the whole page a horizontal scroll. It
+                yields now, and the controls inside it shed their labels rather
+                than the layout shedding the controls. */}
+            <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
               {headerExtra}
               <span className="hidden text-xs text-navy-400 sm:block">{userName}</span>
               <SignOutForm>

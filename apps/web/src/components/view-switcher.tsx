@@ -102,7 +102,12 @@ export function ViewSwitcher({ current, viewing }: { current: Role; viewing: boo
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className={`press inline-flex items-center gap-2 rounded-full border py-1 pr-2.5 pl-1 text-xs font-medium shadow-[0_1px_2px_rgba(10,31,68,0.06)] transition-colors ${
+        // Named explicitly because below `sm` both label spans are hidden and
+        // the glyph is all that is left. The control must NOT disappear on a
+        // phone: mid-view the session reads as somebody else, and this is the
+        // way back.
+        aria-label={`Viewing as ${ROLE_LABEL[current]}. Change view.`}
+        className={`press inline-flex shrink-0 items-center gap-1.5 rounded-full border py-1 pr-2 pl-1 text-xs font-medium shadow-[0_1px_2px_rgba(10,31,68,0.06)] transition-colors sm:gap-2 sm:pr-2.5 ${
           viewing
             ? 'border-amber-accent/40 bg-amber-soft text-amber-800 hover:bg-amber-100'
             : 'border-navy-200 bg-white text-navy-700 hover:border-navy-400/40 hover:bg-navy-50'
@@ -114,7 +119,10 @@ export function ViewSwitcher({ current, viewing }: { current: Role; viewing: boo
           <RoleGlyph role={current} />
         </span>
         <span className="hidden text-navy-400 sm:inline">Viewing as</span>
-        <span className="font-semibold">{ROLE_LABEL[current]}</span>
+        {/* The role name is the first thing to go. On a phone the tinted glyph
+            beside it already says which view you are in, and the accessible
+            name above says it in words. */}
+        <span className="hidden font-semibold sm:inline">{ROLE_LABEL[current]}</span>
         <svg
           viewBox="0 0 16 16"
           className={`h-3 w-3 text-navy-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
@@ -134,7 +142,7 @@ export function ViewSwitcher({ current, viewing }: { current: Role; viewing: boo
       {open && (
         <div
           role="menu"
-          className="menu-enter absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-xl border border-navy-100 bg-white p-1.5 shadow-[0_1px_2px_rgba(10,31,68,0.06),0_20px_44px_-18px_rgba(10,31,68,0.4)]"
+          className="menu-enter absolute right-0 z-30 mt-2 w-[min(20rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-navy-100 bg-white p-1.5 shadow-[0_1px_2px_rgba(10,31,68,0.06),0_20px_44px_-18px_rgba(10,31,68,0.4)]"
         >
           <div className="px-2.5 pt-2 pb-2.5">
             <div className="text-[11px] font-semibold tracking-[0.12em] text-navy-400 uppercase">
