@@ -96,7 +96,7 @@ export function ViewSwitcher({ current, viewing }: { current: Role; viewing: boo
   }, [open]);
 
   return (
-    <div ref={root} className="relative">
+    <div ref={root} className="static sm:relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -142,7 +142,7 @@ export function ViewSwitcher({ current, viewing }: { current: Role; viewing: boo
       {open && (
         <div
           role="menu"
-          className="menu-enter absolute right-0 z-30 mt-2 w-[min(20rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-navy-100 bg-white p-1.5 shadow-[0_1px_2px_rgba(10,31,68,0.06),0_20px_44px_-18px_rgba(10,31,68,0.4)]"
+          className="menu-enter absolute top-full right-3 left-3 z-30 mt-1 w-auto overflow-hidden sm:top-auto sm:right-0 sm:left-auto sm:mt-2 sm:w-80 rounded-xl border border-navy-100 bg-white p-1.5 shadow-[0_1px_2px_rgba(10,31,68,0.06),0_20px_44px_-18px_rgba(10,31,68,0.4)]"
         >
           <div className="px-2.5 pt-2 pb-2.5">
             <div className="text-[11px] font-semibold tracking-[0.12em] text-navy-400 uppercase">

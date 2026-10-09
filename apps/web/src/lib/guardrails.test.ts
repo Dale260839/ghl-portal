@@ -1848,6 +1848,17 @@ test('§ an operator control that sheds its label keeps its name', () => {
     const code = withoutComments(file.text);
     assert.match(code, /aria-label=/, `${name} hides its label without naming the button`);
     assert.match(code, /sm:inline/, `${name} no longer sheds anything on a phone`);
-    assert.doesNotMatch(code, /w-80/, `${name} has a menu wider than a small phone`);
+
+    // The menu is anchored to the HEADER on a phone, not to the trigger.
+    // Capping its width was not enough: `right-0` pins it to whichever control
+    // opened it, and the account switcher sits mid-header, so a 320px menu
+    // began off the left edge of the screen however narrow it was made.
+    assert.match(code, /left-3/, `${name} still hangs off its trigger on a phone`);
+    assert.match(code, /sm:w-80/, `${name} lost its full width on a real screen`);
+    assert.doesNotMatch(
+      code,
+      /className="[^"]*(?<!sm:)\bw-80\b/,
+      `${name} pins a 320px menu at every width`,
+    );
   }
 });

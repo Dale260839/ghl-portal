@@ -77,7 +77,7 @@ export function AccountSwitcher({ accounts, current }: { accounts: DevAccount[];
         );
 
   return (
-    <div ref={root} className="relative">
+    <div ref={root} className="static sm:relative">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -113,7 +113,7 @@ export function AccountSwitcher({ accounts, current }: { accounts: DevAccount[];
       </button>
 
       {open && (
-        <div className="menu-enter absolute right-0 z-50 mt-1.5 w-[min(20rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-navy-200 bg-white shadow-[0_1px_2px_rgba(10,31,68,0.06),0_16px_36px_-16px_rgba(10,31,68,0.35)]">
+        <div className="menu-enter absolute top-full right-3 left-3 z-50 mt-1 w-auto sm:top-auto sm:right-0 sm:left-auto sm:mt-1.5 sm:w-80 overflow-hidden rounded-xl border border-navy-200 bg-white shadow-[0_1px_2px_rgba(10,31,68,0.06),0_16px_36px_-16px_rgba(10,31,68,0.35)]">
           <div className="flex items-start gap-2.5 border-b border-amber-accent/20 bg-amber-soft px-3.5 py-2.5">
             <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-accent/15 text-amber-800">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

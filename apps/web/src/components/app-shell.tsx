@@ -89,7 +89,7 @@ export async function AppShell({
 
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Context bar */}
-          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-4 border-b border-navy-100 bg-white/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/70 sm:px-6">
+          <header className="relative sticky top-0 z-20 flex h-16 shrink-0 items-center gap-4 border-b border-navy-100 bg-white/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-white/70 sm:px-6">
             <div className="min-w-0 shrink lg:hidden">
               <span className="block truncate text-sm font-semibold tracking-tight text-navy-900">
                 {brand}
