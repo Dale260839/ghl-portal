@@ -128,8 +128,13 @@ export default async function FieldToday({
             return (
               <li key={t.id} className="px-4 py-3.5">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-navy-900">{t.taskName}</div>
+                  {/* `flex-1` so the title column takes what is left and the
+                      pill keeps its own width, rather than the two of them
+                      competing and both losing. */}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm leading-snug font-medium text-navy-900">
+                      {t.taskName}
+                    </div>
                     <div className="mt-0.5 truncate text-xs text-navy-400">
                       {project?.projectName} · {t.assignedTrade}
                     </div>
@@ -147,7 +152,7 @@ export default async function FieldToday({
                   </Badge>
                 </div>
                 {access.can('update', 'task') && ownsTask(access.session, t) && (
-                  <FieldTaskActions taskId={t.id} />
+                  <FieldTaskActions taskId={t.id} status={t.status} />
                 )}
               </li>
             );

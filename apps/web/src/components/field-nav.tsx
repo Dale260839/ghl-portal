@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
 
 /**
@@ -61,6 +61,31 @@ const ICONS: Record<FieldNavItem['icon'], React.ReactNode> = {
   messages: <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5A8.4 8.4 0 0 1 4 11.5a8.5 8.5 0 0 1 17 0z" />,
 };
 
+/**
+ * Answers the tap before the server does.
+ *
+ * Rendered inside the `<Link>`, so `useLinkStatus` reports that link's own
+ * pending navigation — same mechanism the sidebar has used since September.
+ * Without it, tapping the bar did nothing visible for two or three seconds and
+ * a crew member in gloves tapped it again, which is how one navigation becomes
+ * three.
+ *
+ * It marks the destination, not the origin: the bar you are travelling TO
+ * lights up straight away and pulses until it arrives.
+ */
+function TravellingTo({ active }: { active: boolean }) {
+  const { pending } = useLinkStatus();
+  if (!pending && !active) return null;
+  return (
+    <span
+      aria-hidden="true"
+      className={`absolute inset-x-5 top-0 h-0.5 rounded-full bg-navy-900 ${
+        pending ? 'animate-pulse' : ''
+      }`}
+    />
+  );
+}
+
 export function FieldNav({ items }: { items: FieldNavItem[] }) {
   const pathname = usePathname();
 
@@ -103,9 +128,7 @@ export function FieldNav({ items }: { items: FieldNavItem[] }) {
                   )}
                 </span>
                 {item.label}
-                {active && (
-                  <span className="absolute inset-x-5 top-0 h-0.5 rounded-full bg-navy-900" />
-                )}
+                <TravellingTo active={active} />
               </Link>
             </li>
           );

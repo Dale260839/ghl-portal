@@ -69,6 +69,16 @@ const HEALTH_TONES: Record<string, string> = {
 
 const NEUTRAL_TONE = 'bg-navy-100 text-navy-700 ring-navy-600/20';
 
+/**
+ * A status pill.
+ *
+ * `shrink-0 whitespace-nowrap` is the whole of it, and it is load-bearing. As a
+ * flex child beside a title the pill was being squeezed and its text wrapped —
+ * "Ready for Review" became three lines inside a rounded-full shape, which
+ * reads as a smudge rather than a status. A pill that wraps is broken wherever
+ * it appears; a title that wraps is normal. So the title gives and the pill
+ * does not.
+ */
 export function Badge({
   children,
   tone,
@@ -85,7 +95,7 @@ export function Badge({
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${tones[tone ?? 'neutral']}`}
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset ${tones[tone ?? 'neutral']}`}
     >
       {children}
     </span>
@@ -99,7 +109,7 @@ export function HealthBadge({ status }: { status: string }) {
       // The word carries the meaning; the colour only reinforces it. Colour
       // alone would leave the two red states — At Risk and Delayed — telling a
       // colour-blind PM the same thing, and tell a screen reader nothing.
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${
+      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset ${
         HEALTH_TONES[status] ?? NEUTRAL_TONE
       }`}
       title={health ? `Project health: ${status}` : `Project status: ${status}`}
@@ -120,7 +130,7 @@ export function LifecycleBadge({ status }: { status: string | null | undefined }
   const label = lifecycleLabel(status);
   return (
     <span
-      className="inline-flex items-center rounded-md border border-navy-100 bg-navy-50 px-2 py-0.5 text-xs font-medium text-navy-500"
+      className="inline-flex shrink-0 items-center rounded-md border border-navy-100 bg-navy-50 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-navy-500"
       title={`Project status: ${label}`}
     >
       {label}

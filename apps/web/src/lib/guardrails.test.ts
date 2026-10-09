@@ -1862,3 +1862,42 @@ test('§ an operator control that sheds its label keeps its name', () => {
     );
   }
 });
+
+test('§ a status pill never wraps', () => {
+  // Squeezed beside a task title on a phone, "Ready for Review" wrapped to
+  // three lines inside a rounded-full shape and read as a smudge rather than a
+  // status. Every crew status goes through these, so the rule lives in one
+  // place: the title gives, the pill does not.
+  const ui = FILES.find((f) => posix(rel(f.path)) === 'components/ui.tsx');
+  assert.ok(ui, 'components/ui.tsx has moved');
+  const chunks = withoutComments(ui.text).split('export function ');
+
+  for (const name of ['Badge(', 'HealthBadge(', 'LifecycleBadge(']) {
+    // The whole chunk: `split` already ends it where the next export begins.
+    // Cutting at the first `\n}` found the closing brace of the destructured
+    // PARAMETERS and truncated the body before the className ever appeared,
+    // which failed a component that was already correct.
+    const body = chunks.find((c) => c.startsWith(name));
+    assert.ok(body, `${name} has moved or been renamed`);
+    assert.match(body, /whitespace-nowrap/, `${name} can wrap its label`);
+    assert.match(body, /shrink-0/, `${name} can be squeezed by a sibling`);
+  }
+});
+
+test('§ the crew sees something happen the moment they tap', () => {
+  // Ten crew screens had no loading boundary. A tap did nothing visible for
+  // two or three seconds, so a crew member in gloves tapped again — and for a
+  // DYNAMIC route, `<Link>` prefetches only as far as the nearest loading.tsx,
+  // so without one the prefetching Next.js already does was buying nothing.
+  const loading = FILES.find((f) => posix(rel(f.path)) === 'app/field/loading.tsx');
+  assert.ok(loading, 'the crew screens have lost their loading boundary');
+  assert.match(loading.text, /shimmer/, 'the fallback must read as "coming", not as a blank');
+
+  const nav = FILES.find((f) => posix(rel(f.path)) === 'components/field-nav.tsx');
+  assert.ok(nav, 'components/field-nav.tsx has moved');
+  assert.match(
+    withoutComments(nav.text),
+    /useLinkStatus/,
+    'the bottom bar no longer reports its own pending navigation',
+  );
+});

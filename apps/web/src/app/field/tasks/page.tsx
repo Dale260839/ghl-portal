@@ -101,7 +101,7 @@ export default async function FieldTasks() {
                 </div>
 
                 {access.can('update', 'task') && ownsTask(access.session, task) && (
-                  <FieldTaskActions taskId={task.id} />
+                  <FieldTaskActions taskId={task.id} status={task.status} />
                 )}
                 {task.pmNote !== '' && (
                   <div className="mt-3 rounded-md border-l-2 border-navy-900 bg-navy-50 px-3 py-2.5">
