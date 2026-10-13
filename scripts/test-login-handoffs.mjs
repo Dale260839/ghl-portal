@@ -122,5 +122,24 @@ try {
   state.failure = true;
   await assert.rejects(requireAccess, /database unavailable/);
   count++;
+  for (const role of ['field', 'client']) {
+    for (const cookieVersion of [undefined, 0, 1]) {
+      fixture({ session: { role, membershipId: 'fixture-member', credentialVersion: cookieVersion },
+        current: { membership: { ...member(role), credentialVersion: 2 }, grants: {} } });
+      assert.deepEqual(await currentAccess(), { ok: false, reason: 'signed-out' });
+      await assert.rejects(requireAccess, error => error.destination === '/');
+      count++;
+    }
+    fixture({ session: { role, membershipId: 'fixture-member', credentialVersion: 2 },
+      current: { membership: { ...member(role), credentialVersion: 2 }, grants: {} } });
+    assert.equal((await requireAccess()).role, role);
+    count++;
+  }
+  const resetMember = { ...member('field'), credentialVersion: 3 };
+  fixture({ result: { ok: true, membership: resetMember }, current: { membership: resetMember, grants: {} } });
+  assert.equal(await accept(), '/field');
+  assert.equal(state.session.credentialVersion, 3);
+  assert.equal((await requireAccess()).role, 'field');
+  count++;
   console.log(`PASS: ${count} actual invitation-action/access handoff checks. Fixture services only; no live invitations, credentials or records changed.`);
 } finally { delete globalThis.__handoff; }

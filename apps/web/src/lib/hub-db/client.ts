@@ -277,6 +277,16 @@ export class HubClient {
     return rows as T[];
   }
 
+  /** Atomic server-only operations. Uncertain writes are never retried. */
+  async rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
+    if (!['hub_redeem_invitation', 'hub_create_browser_handoff', 'hub_consume_browser_handoff'].includes(name)) {
+      throw new Error('Invalid Hub RPC name');
+    }
+    return await this.request(`${this.config.url}/rest/v1/rpc/${name}`, {
+      method: 'POST', headers: this.headers(), body: JSON.stringify(args),
+    }, name) as T;
+  }
+
   async insert<T>({ from, rows }: WriteArgs): Promise<T[]> {
     if (rows.length === 0) return [];
     const inserted = await this.request(

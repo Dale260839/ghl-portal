@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { getSession } from '@/lib/session';
+import { currentAccess } from '@/lib/access';
 
 /**
  * Which role this browser is signed in as — and nothing else.
@@ -14,9 +14,9 @@ import { getSession } from '@/lib/session';
 export const dynamic = 'force-dynamic';
 
 export async function GET(): Promise<NextResponse> {
-  const session = await getSession();
+  const access = await currentAccess();
   return NextResponse.json(
-    { role: session?.role ?? null },
+    { role: access.ok ? access.access.role : null },
     { headers: { 'Cache-Control': 'no-store' } },
   );
 }

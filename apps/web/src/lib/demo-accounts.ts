@@ -41,6 +41,8 @@ export interface Session {
    * an invited user.
    */
   membershipId?: string;
+  /** Compared with the live membership on every request after a password reset. */
+  credentialVersion?: number;
   /**
    * Demo scaffolding (D-016) — the contractor identity this view was assumed
    * from, so "Back to my account" restores it exactly. Absent on a normal

@@ -61,6 +61,7 @@ export interface AuthenticatedMember {
   fullName: string;
   role: string;
   authProfileIds: string[];
+  credentialVersion?: number;
 }
 
 export interface MemberAuthenticator {

@@ -69,6 +69,7 @@ export interface SignedProjectReader {
 /** The membership fields the caller turns into a session. */
 export interface ProvisionedClient {
   id: string;
+  credentialVersion?: number;
   email: string;
   fullName: string;
   role: string;

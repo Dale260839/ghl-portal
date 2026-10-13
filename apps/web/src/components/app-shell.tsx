@@ -97,7 +97,7 @@ export async function AppShell({
             </div>
 
             {contextTitle !== undefined && (
-              <div className="hidden min-w-0 sm:block">
+              <div className="hidden min-w-0 flex-1 lg:block">
                 <div className="truncate text-sm font-semibold text-navy-900">{contextTitle}</div>
                 {contextSubtitle !== undefined && (
                   <div className="truncate text-xs text-navy-400">{contextSubtitle}</div>
@@ -113,7 +113,7 @@ export async function AppShell({
                 than the layout shedding the controls. */}
             <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
               {headerExtra}
-              <span className="hidden text-xs text-navy-400 sm:block">{userName}</span>
+              <span className="hidden text-xs text-navy-400 xl:block">{userName}</span>
               <SignOutForm>
                 <SubmitButton
                   className="press rounded-full border border-navy-200 bg-white px-3 py-1.5 text-xs font-medium text-navy-600 shadow-[0_1px_2px_rgba(10,31,68,0.06)] transition-colors hover:border-navy-400/40 hover:bg-navy-50"

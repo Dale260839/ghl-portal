@@ -125,7 +125,7 @@ test('the client has no delete method at all', () => {
   // exist cannot be called by mistake in a hurry.
   const surface = Object.getOwnPropertyNames(HubClient.prototype).sort();
 
-  assert.deepEqual(surface, ['constructor', 'headers', 'insert', 'request', 'select', 'update', 'upsert']);
+  assert.deepEqual(surface, ['constructor', 'headers', 'insert', 'request', 'rpc', 'select', 'update', 'upsert']);
   assert.equal(surface.includes('delete'), false);
 });
 

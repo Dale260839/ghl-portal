@@ -2,7 +2,7 @@ import 'server-only';
 
 import { cache } from 'react';
 import { redirect } from 'next/navigation';
-import { getSession } from './session.ts';
+import { requireAccess } from './access.ts';
 import type { Session } from './demo-accounts.ts';
 import { TenancyError, type TenantScope } from './tenancy.ts';
 import { tenantScopeFor } from './tenant-scope.ts';
@@ -39,8 +39,7 @@ import type { Project } from './data/types.ts';
  * the request (D-013).
  */
 export const requireTenantScope: () => Promise<TenantScope> = cache(async () => {
-  const session = await getSession();
-  if (session === null) redirect('/');
+  const { session } = await requireAccess();
 
   const scope = await tenantScopeFor(session);
   if (scope === null) {

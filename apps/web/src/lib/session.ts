@@ -2,7 +2,7 @@ import 'server-only';
 
 import { cookies } from 'next/headers';
 
-import { resolveSessionSecret, sign, verify } from './auth/session-crypto.ts';
+import { resolveSessionSecret, sign, verify, type SignedPayload } from './auth/session-crypto.ts';
 import type { Role, Session } from './demo-accounts.ts';
 
 /**
@@ -30,7 +30,7 @@ export { DEMO_ACCOUNTS, accountForEmail, homeFor } from './demo-accounts.ts';
 const COOKIE = 'bs_session_hub';
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 
-export async function getSession(): Promise<Session | null> {
+export async function getSession(): Promise<(Session & SignedPayload) | null> {
   const raw = (await cookies()).get(COOKIE)?.value;
   const result = verify<Session>(raw, resolveSessionSecret());
   if (!result.valid) return null;
@@ -48,8 +48,13 @@ function isRole(value: unknown): value is Role {
   return value === 'contractor' || value === 'field' || value === 'client';
 }
 
-export async function setSession(session: Session): Promise<void> {
-  const token = sign({ ...session }, resolveSessionSecret(), { ttlSeconds: SESSION_TTL_SECONDS });
+export async function setSession(session: Session, options: { expiresAt?: number } = {}): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  const ttlSeconds = options.expiresAt === undefined ? SESSION_TTL_SECONDS : options.expiresAt - now;
+  if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds < 1 || ttlSeconds > SESSION_TTL_SECONDS) {
+    throw new Error('Invalid session lifetime');
+  }
+  const token = sign({ ...session }, resolveSessionSecret(), { now, ttlSeconds });
   const embedded = process.env.NODE_ENV === 'production' && session.ghlEmbedded === true;
   (await cookies()).set(COOKIE, token, {
     // Signed, so tampering is detectable — but still httpOnly and, in
@@ -60,13 +65,16 @@ export async function setSession(session: Session): Promise<void> {
     sameSite: embedded ? 'none' : 'lax',
     partitioned: embedded,
     path: '/',
-    maxAge: SESSION_TTL_SECONDS,
+    maxAge: ttlSeconds,
   });
 }
 
 export async function clearSession(): Promise<void> {
-  const session = await getSession();
-  const embedded = process.env.NODE_ENV === 'production' && session?.ghlEmbedded === true;
+  const raw = (await cookies()).get(COOKIE)?.value;
+  // Signature-checked metadata only: expiry must not stop deletion of a CHIPS cookie.
+  // This result is never used to authenticate a request.
+  const reading = verify<Session>(raw, resolveSessionSecret(), { now: 0 });
+  const embedded = process.env.NODE_ENV === 'production' && reading.valid && reading.payload.ghlEmbedded === true;
   (await cookies()).set(COOKIE, '', {
     maxAge: 0, path: '/', httpOnly: true,
     secure: process.env.NODE_ENV === 'production',

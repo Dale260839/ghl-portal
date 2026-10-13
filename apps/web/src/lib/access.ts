@@ -91,6 +91,9 @@ export const currentAccess: () => Promise<AccessResult> = cache(async () => {
 
   const current = await hub.team.currentAccess(membershipId);
   if (current === null) return { ok: false, reason: 'revoked' };
+  if ((session.credentialVersion ?? 0) !== (current.membership.credentialVersion ?? 0)) {
+    return { ok: false, reason: 'signed-out' };
+  }
 
   // The ROLE comes from the database too, not from the cookie. Otherwise a
   // stale session would keep a role a contractor had since changed.

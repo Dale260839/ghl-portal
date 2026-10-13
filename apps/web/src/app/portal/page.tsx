@@ -10,6 +10,7 @@ import { hasFinancials, hasOperationalDetail, type Contact, type Project } from 
 import { requireAccess } from '@/lib/access';
 import { clientProjectsFor } from '@/lib/client-scope';
 import { currentDataSource } from '@/lib/data/current-source';
+import { portalCalendarDay, portalDashboardDates } from '@/lib/portal-dashboard';
 
 /**
  * Client Portal. Every value on this page has passed through the §9.1 gate and
@@ -130,7 +131,7 @@ export default async function ClientPortal({
   ]);
   const updates = toClientUpdates(allUpdates, project);
   const milestones = toClientMilestones(allMilestones, project);
-  const upcoming = milestones.filter((m) => m.status !== 'Completed');
+  const { upcoming, latestPublishedDate } = portalDashboardDates(updates, milestones);
 
   return (
     <div className="space-y-6">
@@ -215,20 +216,15 @@ export default async function ClientPortal({
           <div>
             <dt className="text-xs tracking-wide text-navy-400 uppercase">Up next</dt>
             <dd className="mt-1 text-sm font-medium text-navy-900">
-              {/* BuildSuite records no "next milestone", so for a live project
-                  the first released milestone that is not complete is the
-                  honest answer. Only when there is none does it say so. */}
-              {view.nextMilestone !== ''
-                ? view.nextMilestone
-                : upcoming[0] !== undefined
-                  ? `${upcoming[0].milestoneName}${upcoming[0].plannedStart ? `, ${shortDate(upcoming[0].plannedStart)}` : ''}`
+              {upcoming[0] !== undefined
+                  ? `${upcoming[0].milestoneName}${portalCalendarDay(upcoming[0].plannedStart) ? `, ${shortDate(upcoming[0].plannedStart)}` : ''}`
                   : 'Not scheduled yet'}
             </dd>
           </div>
           <div>
-            <dt className="text-xs tracking-wide text-navy-400 uppercase">Last updated</dt>
+            <dt className="text-xs tracking-wide text-navy-400 uppercase">Latest published update</dt>
             <dd className="mt-1 text-sm font-medium text-navy-900">
-              {shortDate(view.lastUpdatedDate)}
+              {latestPublishedDate === null ? 'No published updates yet' : shortDate(latestPublishedDate)}
             </dd>
           </div>
           {view.team !== null && (
@@ -256,13 +252,16 @@ export default async function ClientPortal({
                   <Badge tone={m.status === 'In Progress' ? 'warn' : 'neutral'}>{m.status}</Badge>
                 </div>
                 <div className="mt-0.5 text-xs text-navy-400">
-                  {shortDate(m.plannedStart)} → {shortDate(m.plannedEnd)}
+                  {portalCalendarDay(m.plannedStart) && portalCalendarDay(m.plannedEnd)
+                    ? `${shortDate(m.plannedStart)} → ${shortDate(m.plannedEnd)}`
+                    : portalCalendarDay(m.plannedStart) ? `Starts ${shortDate(m.plannedStart)}`
+                    : portalCalendarDay(m.plannedEnd) ? `Ends ${shortDate(m.plannedEnd)}` : 'Dates not set'}
                 </div>
               </li>
             ))}
             {upcoming.length === 0 && (
               <li className="px-5 py-8 text-center text-sm text-navy-400">
-                Your contractor hasn&apos;t shared the schedule for this project.
+                No upcoming dates have been shared for this project.
               </li>
             )}
           </ol>

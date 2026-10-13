@@ -8,6 +8,8 @@ import { brandCode } from '@/lib/brand';
 
 import { AppShell, type NavItem } from '@/components/app-shell';
 import { ViewSwitcher } from '@/components/view-switcher';
+import { OpenWorkspace } from '@/components/open-workspace';
+import { canOpenWorkspace } from '@/lib/auth/browser-handoff';
 import { AccountSwitcher } from '@/components/account-switcher';
 import { listDevAccounts } from '@/lib/dev-accounts';
 import { viewAsEnabled } from '@/lib/view-as';
@@ -110,6 +112,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       userName={session.name}
       headerExtra={
         <>
+          {canOpenWorkspace(session) && <OpenWorkspace />}
           {/* Development only, and off unless ENABLE_ACCOUNT_SWITCH=true. It
               signs you in as another contractor rather than showing your own
               data through another lens, which is what makes it useful for

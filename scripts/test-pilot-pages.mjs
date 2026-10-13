@@ -44,7 +44,10 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
     await page.screenshot({ path: path.join(artifacts, 'pilot-field-' + viewport.width + '.png'), fullPage: true });
   }
+  const signOutResponse = page.waitForResponse(response => response.url().endsWith('/api/auth/sign-out'));
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  const signedOut = await signOutResponse;
+  assert.equal(signedOut.status(), 303, signedOut.status() === 303 ? 'Signed out' : await signedOut.text());
   await page.getByRole('heading', { name: 'Sign in', exact: true }).waitFor();
 
   await context.addCookies([cookie({

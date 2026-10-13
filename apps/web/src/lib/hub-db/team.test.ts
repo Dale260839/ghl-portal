@@ -200,22 +200,19 @@ test('an obviously invalid email is refused before anything is written', async (
 // ── Redeeming ────────────────────────────────────────────────────────────────
 
 /**
- * The replies `acceptInvite` receives, in call order: the invitation, the
- * membership AS IT IS (read first since 2026-09-15, so a reset keeps the joined
- * date and a revoked member is refused), the membership as written, and the
- * invitation marked spent.
+ * One atomic RPC result. SQL behavior is exercised by credential-redemption.test.ts.
  */
 function acceptResponses(
   invitation: Record<string, unknown> | undefined,
   member: Record<string, unknown> = {},
 ) {
   const row = { id: 'm1', contractor_id: 'c1', email: 'a@b.com', role: 'field', project_ids: [], activated_at: null, password_hash: null, last_seen_at: null, revoked_at: null, created_at: '2026-08-31T00:00:00Z', full_name: null, invited_by: null, ...member };
-  return [
-    invitation === undefined ? [] : [invitation],
-    [row],
-    [{ ...row, activated_at: row.activated_at ?? '2026-08-31T00:00:00Z', password_hash: 'x' }],
-    [],
-  ];
+  if (invitation === undefined) return [{ ok: false, reason: 'invalid' }];
+  if (invitation.revoked_at || row.revoked_at) return [{ ok: false, reason: 'revoked' }];
+  if (invitation.accepted_at) return [{ ok: false, reason: 'already-used' }];
+  return [{ ok: true, membership: { ...row,
+    activated_at: row.activated_at ?? '2026-08-31T00:00:00Z', credential_version: 1,
+  } }];
 }
 
 const validInvitation = {
@@ -227,13 +224,17 @@ const validInvitation = {
 };
 
 test('a valid invitation activates the membership', async () => {
-  const { team } = fakeTeam(acceptResponses(validInvitation));
+  const { team, calls } = fakeTeam(acceptResponses(validInvitation));
   const token = issueInviteToken({ email: 'a@b.com', role: 'field', contractorId: 'c1' }, SECRET);
 
   const result = await team.acceptInvite(token, 'a-long-enough-password');
 
   assert.equal(result.ok, true);
   assert.equal(result.membership.activated, true);
+  assert.equal(result.membership.credentialVersion, 1);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.method, 'POST');
+  assert.match(calls[0]!.url, /\/rpc\/hub_redeem_invitation$/);
 });
 
 test('an invitation works exactly once', async () => {
@@ -754,9 +755,10 @@ test('redeeming a reset keeps the date they first joined', async () => {
 
   const result = await team.acceptInvite(token, 'a-long-enough-password');
   assert.equal(result.ok, true);
-  const patch = calls.find((c) => c.method === 'PATCH' && c.url.includes('hub_memberships'))!.body as Record<string, unknown>;
-  assert.equal(patch.activated_at, joined, 'a reset is not a new arrival');
-  assert.ok(patch.password_hash !== 'old');
+  assert.equal(result.membership.activatedAt, joined, 'a reset is not a new arrival');
+  const body = calls[0]!.body as Record<string, unknown>;
+  assert.match(String(body.p_password_hash), /^scrypt\$16384\$/);
+  assert.equal(calls.length, 1);
 });
 
 test('a still-valid link cannot set a password for a revoked member', async () => {

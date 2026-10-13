@@ -98,6 +98,7 @@ export interface Membership {
   lastSeenAt: string | null;
   invitedBy: string | null;
   createdAt: string;
+  credentialVersion?: number;
 }
 
 interface MembershipRow {
@@ -114,6 +115,7 @@ interface MembershipRow {
   revoked_at: string | null;
   created_at: string;
   invited_by: string | null;
+  credential_version?: number;
 }
 
 function toMembership(row: MembershipRow): Membership {
@@ -132,6 +134,7 @@ function toMembership(row: MembershipRow): Membership {
     lastSeenAt: row.last_seen_at,
     invitedBy: row.invited_by,
     createdAt: row.created_at,
+    credentialVersion: row.credential_version ?? 0,
   };
 }
 
@@ -378,10 +381,8 @@ export class HubTeam {
   /**
    * Redeem an invitation and set a password.
    *
-   * Single use is enforced by the DATABASE row, not by an in-memory set: the
-   * row's `accepted_at` is checked and then written. That survives a restart and
-   * is shared across serverless instances, which the existing client-verify
-   * flow's memory store is not.
+   * Password activation and token consumption share one database transaction.
+   * A failure rolls both back; concurrent requests serialize on the membership.
    */
   async acceptInvite(
     token: string,
@@ -400,60 +401,25 @@ export class HubTeam {
     }
     if (password.length < 10) return { ok: false, reason: 'weak-password' };
 
-    const [invitation] = await this.client.select<{
-      id: string;
-      membership_id: string;
-      accepted_at: string | null;
-      revoked_at: string | null;
-      expires_at: string;
-    }>({
-      from: 'hub_invitations',
-      filters: { token_hash: `eq.${hashToken(token)}` },
-      limit: 1,
+    const result = await this.client.rpc<
+      { ok: true; membership: MembershipRow } |
+      { ok: false; reason: 'invalid' | 'expired' | 'already-used' | 'revoked' }
+    >('hub_redeem_invitation', {
+      p_token_hash: hashToken(token), p_contractor_id: check.payload.contractorId,
+      p_email: check.payload.email, p_password_hash: hashPassword(password),
     });
-
-    // A valid signature whose row is gone means the invitation was withdrawn.
-    if (invitation === undefined) return { ok: false, reason: 'invalid' };
-    if (invitation.revoked_at !== null) return { ok: false, reason: 'revoked' };
-    if (invitation.accepted_at !== null) return { ok: false, reason: 'already-used' };
-    if (new Date(invitation.expires_at) < now) return { ok: false, reason: 'expired' };
-
-    // The same link now serves a PASSWORD RESET as well as a first invitation
-    // (2026-09-15), so the membership is read before it is written:
-    //
-    //   · revoked — refused. A still-valid link must not let somebody the
-    //     contractor has withdrawn choose a new password. Access was already
-    //     refused on their next request; now the password is not changed either.
-    //   · already activated — keep the date they first joined. A reset is not a
-    //     new arrival, and the Team screen's "joined" date should not move.
-    const [current] = await this.client.select<MembershipRow>({
-      from: 'hub_memberships',
-      filters: { id: `eq.${invitation.membership_id}` },
-      limit: 1,
-    });
-    if (current === undefined) return { ok: false, reason: 'invalid' };
-    if (current.revoked_at !== null) return { ok: false, reason: 'revoked' };
-
-    const [membership] = await this.client.update<MembershipRow>({
-      from: 'hub_memberships',
-      filters: { id: `eq.${invitation.membership_id}` },
-      patch: {
-        activated_at: current.activated_at ?? now.toISOString(),
-        password_hash: hashPassword(password),
-        updated_at: now.toISOString(),
-      },
-    });
-
-    // Marked spent AFTER the membership is activated. The other order would burn
-    // the invitation on a failed activation and leave someone locked out with a
-    // link that no longer works.
-    await this.client.update({
-      from: 'hub_invitations',
-      filters: { id: `eq.${invitation.id}` },
-      patch: { accepted_at: now.toISOString() },
-    });
-
-    return { ok: true, membership: toMembership(membership!) };
+    if (result?.ok === false && ['invalid', 'expired', 'already-used', 'revoked'].includes(result.reason)) return result;
+    if (result?.ok !== true || !result.membership ||
+        result.membership.contractor_id !== check.payload.contractorId ||
+        typeof result.membership.email !== 'string' ||
+        result.membership.email.toLowerCase() !== check.payload.email ||
+        result.membership.role !== 'field' || result.membership.revoked_at !== null ||
+        result.membership.activated_at === null ||
+        !Number.isSafeInteger(result.membership.credential_version) ||
+        result.membership.credential_version! < 1) {
+      throw new Error('Invitation redemption could not be confirmed');
+    }
+    return { ok: true, membership: toMembership(result.membership) };
   }
 
   /**

@@ -174,6 +174,7 @@ export async function signIn(
       name: m.fullName === '' ? m.email : m.fullName,
       email: m.email,
       membershipId: m.id,
+      credentialVersion: m.credentialVersion ?? 0,
       // The contractor's profiles for a field member; none for a client, whose
       // access is their projects plus the gate.
       authProfileIds: m.authProfileIds,
@@ -188,6 +189,7 @@ export async function signIn(
       name: m.fullName === '' ? m.email : m.fullName,
       email: m.email,
       membershipId: m.id,
+      credentialVersion: m.credentialVersion ?? 0,
       // EMPTY, and this is the privacy model rather than an oversight: a
       // homeowner reads only the Hub's own tables. No `contactId` either — it
       // would return every project that contact holds, including ones whose
@@ -1053,6 +1055,7 @@ export async function acceptInvitation(formData: FormData) {
     name: result.membership.fullName === '' ? result.membership.email : result.membership.fullName,
     email: result.membership.email,
     membershipId: result.membership.id,
+    credentialVersion: result.membership.credentialVersion ?? 0,
     // The SAME fields `signIn` sets. Leaving these out is what made accepting an
     // invitation land on a TenancyError: the session had no profiles, so the
     // first scoped read refused before any screen could render. Two paths that

@@ -89,6 +89,18 @@ test('POST, PATCH and upsert never retry even this exact JWT rejection', async (
   }
 });
 
+test('atomic RPC writes never retry and reject unsafe function names before any request', async () => {
+  const { client, calls } = fixture([{ status: 401, body: FUTURE }]);
+  await assert.rejects(client.rpc('hub_redeem_invitation', { p_token_hash: 'fixture' }), HubWriteError);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.init.method, 'POST');
+  assert.match(calls[0]!.url, /\/rpc\/hub_redeem_invitation$/);
+  for (const name of ['../hub_memberships', 'other_function', 'hub_/unsafe', 'hub_unknown', 'hub_consume_login_attempt']) {
+    await assert.rejects(client.rpc(name, {}), /Invalid Hub RPC/);
+  }
+  assert.equal(calls.length, 1);
+});
+
 test('network failures are not retried, including after an initial timing rejection', async () => {
   for (const replies of [
     [new TypeError('Network disconnected')],
